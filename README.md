@@ -1,4 +1,4 @@
-# Fortnite TDM for Luanti
+# Luanti eSports
 
 This is a fast-paced hitscan Team Deathmatch base game for Luanti with building and storm mechanics.
 
@@ -12,7 +12,7 @@ This is a fast-paced hitscan Team Deathmatch base game for Luanti with building 
 2. **Start a Local Server**
    To test the game properly:
    - Open Luanti.
-   - Go to the **Start Game** tab and select **Fortnite TDM** from the bottom game list.
+   - Go to the **Start Game** tab and select **Luanti eSports** from the bottom game list.
    - Uncheck "Host Server" to just test in singleplayer to verify you spawn, get items, etc, OR you can launch the game and connect to your own local server with multiple windows.
    - When generating a world, make sure the Mapgen is set to "Singlenode" (this should be the default from `game.conf`).
 
