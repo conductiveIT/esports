@@ -32,6 +32,13 @@ function tdm_storm.randomize_center()
     core.log("action", "[TDM Storm] Randomized center to: " .. core.pos_to_string(tdm_storm.center))
 end
 
+local math_floor = math.floor
+local math_cos = math.cos
+local math_sin = math.sin
+local math_pi = math.pi
+local core_get_node = core.get_node
+local core_set_node = core.set_node
+
 local dtime_accumulator = 0
 
 core.register_globalstep(function(dtime)
@@ -42,7 +49,7 @@ core.register_globalstep(function(dtime)
     if tdm_core.match.state == "active" and not tdm_core.match.is_pve then
         -- Shrink logic
         local shrink_speed = 0.5 -- units per second
-        local min_radius = 30 -- Increased from 10
+        local min_radius = 27 -- Reduced by 10% for a tighter endgame confrontation
         
         if tdm_storm.current_radius > min_radius then
             tdm_storm.current_radius = tdm_storm.current_radius - shrink_speed
@@ -51,12 +58,15 @@ core.register_globalstep(function(dtime)
         -- Damage players outside
         if not tdm_storm.last_cough then tdm_storm.last_cough = {} end
         
+        local current_center = tdm_storm.center
+        local current_radius = tdm_storm.current_radius
+        
         for _, player in ipairs(core.get_connected_players()) do
             local pname = player:get_player_name()
             local pos = player:get_pos()
-            local dist = math.sqrt((pos.x - tdm_storm.center.x)^2 + (pos.z - tdm_storm.center.z)^2)
+            local dist = math.sqrt((pos.x - current_center.x)^2 + (pos.z - current_center.z)^2)
             
-            if dist > tdm_storm.current_radius then
+            if dist > current_radius then
                 -- Player is outside the storm
                 if not tdm_core.is_spectator(pname) and player:get_hp() > 0 then
                     player:set_hp(player:get_hp() - 2)
@@ -73,19 +83,19 @@ core.register_globalstep(function(dtime)
         end
         
         -- Visualize storm bounds by placing gas nodes
-        local steps = math.floor(tdm_storm.current_radius * math.pi * 2)
-        local step_size = 2 -- how often to place a column
+        local steps = math_floor(current_radius * math_pi * 2)
+        local step_size = 2 -- RESTORED: Continuous ring for better visual impact
         for i = 0, steps, step_size do
-            local angle = (i / steps) * math.pi * 2
-            local px = math.floor(tdm_storm.center.x + math.cos(angle) * tdm_storm.current_radius + 0.5)
-            local pz = math.floor(tdm_storm.center.z + math.sin(angle) * tdm_storm.current_radius + 0.5)
+            local angle = (i / steps) * math_pi * 2
+            local px = math_floor(current_center.x + math_cos(angle) * current_radius + 0.5)
+            local pz = math_floor(current_center.z + math_sin(angle) * current_radius + 0.5)
             
             -- Place a vertical column of gas
             for py = -2, 15 do
                 local rpos = {x=px, y=py, z=pz}
-                local node = core.get_node(rpos)
+                local node = core_get_node(rpos)
                 if node.name == "air" then
-                    core.set_node(rpos, {name="tdm_storm:gas"})
+                    core_set_node(rpos, {name="tdm_storm:gas"})
                 end
             end
         end

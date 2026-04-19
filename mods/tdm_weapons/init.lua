@@ -88,7 +88,7 @@ tdm_weapons.shoot_raycast = function(player, damage, range, spread)
                     maxexptime = 1,
                     minsize = 1,
                     maxsize = 2,
-                    texture = "core_particle_red.png", -- fallback texture
+                    texture = "tdm_muzzle_flash.png^[colorize:#FF0000:200", 
                 })
                 -- Play hit sound
                 core.sound_play("tdm_hit", {pos = hit_pos, max_hear_distance = 16})
@@ -112,13 +112,26 @@ tdm_weapons.shoot_raycast = function(player, damage, range, spread)
                 maxexptime = 1,
                 minsize = 1,
                 maxsize = 2,
-                texture = "core_particle_white.png", -- fallback
+                texture = "tdm_muzzle_flash.png^[colorize:#FFFFFF:200",
             })
 
             -- Node damage logic for player-built structures
             local node_pos = pointed_thing.under
             local node = core.get_node(node_pos)
-            if core.get_item_group(node.name, "player_built") > 0 then
+            
+            -- DEBUG: Report what we hit
+            
+            if node.name == "tdm_loot:box" or core.get_item_group(node.name, "loot_box") > 0 then
+                -- Force destruction
+                core.remove_node(node_pos)
+                core.sound_play("tdm_break_crate", {pos = node_pos, max_hear_distance = 16})
+                
+                -- Try to trigger loot drop logic
+                local n_def = core.registered_nodes[node.name]
+                if n_def and n_def.on_punch then
+                    n_def.on_punch(node_pos, node, player)
+                end
+            elseif core.get_item_group(node.name, "player_built") > 0 then
                 local meta = core.get_meta(node_pos)
                 local hp = meta:get_int("hp")
                 if hp == 0 then hp = 50 end
@@ -146,14 +159,11 @@ tdm_weapons.shoot_raycast = function(player, damage, range, spread)
     })
 
     -- Tracer line
-    local dist = math.sqrt((hit_pos.x-pos.x)^2 + (hit_pos.y-pos.y)^2 + (hit_pos.z-pos.z)^2)
+    if not hit_pos then hit_pos = end_pos end
+    local dist = vector.distance(pos, hit_pos)
     local step = 0.5 -- Higher density for a smooth line
     for d = 1.0, dist, step do -- Start closer to gun
-        local tpos = {
-            x = pos.x + dir.x * d,
-            y = pos.y + dir.y * d,
-            z = pos.z + dir.z * d
-        }
+        local tpos = vector.add(pos, vector.multiply(dir, d))
         core.add_particle({
             pos = tpos,
             velocity = {x=0, y=0, z=0},
@@ -175,6 +185,9 @@ tdm_weapons.register_gun = function(name, def)
         inventory_image = "tdm_weapons_" .. name .. ".png",
         range = 0, -- Disable default melee reach behavior
         on_use = function(itemstack, user, pointed_thing)
+            if tdm_weapons.handle_interaction(user, pointed_thing) then
+                return itemstack
+            end
             local p_name = user:get_player_name()
             local cd = tdm_weapons.cooldowns[p_name] or 0
             
@@ -192,6 +205,32 @@ tdm_weapons.register_gun = function(name, def)
     })
 end
 
+-- HELPER: Allow interacting with crates/items while wielding weapons
+function tdm_weapons.handle_interaction(user, pointed_thing)
+    if pointed_thing.type == "node" then
+        local pos = pointed_thing.under
+        local node = core.get_node(pos)
+        if node.name == "tdm_loot:box" then
+            local n_def = core.registered_nodes[node.name]
+            if n_def and n_def.on_punch then
+                n_def.on_punch(pos, node, user)
+            end
+            return true
+        end
+    elseif pointed_thing.type == "object" then
+        local obj = pointed_thing.ref
+        local ent = obj:get_luaentity()
+        -- Direct pickup for dropped items
+        if ent and ent.name == "__builtin:item" then
+            if core.registered_on_item_pickups[1] then
+                core.registered_on_item_pickups[1](ItemStack(ent.itemstring), user, pointed_thing)
+                return true
+            end
+        end
+    end
+    return false
+end
+
 -- Wait, Minetest usually relies on image files to not error out completely, 
 -- but we can use colorization on a dummy transparent or white texture if we don't have images.
 -- For now, we will create simple colored squares for textures using texturing modifiers.
@@ -202,6 +241,9 @@ core.register_tool("tdm_weapons:assault_rifle", {
     wield_image = "tdm_weapons_assault_rifle_wield.png",
     wield_scale = {x=1.5, y=1.5, z=1.5},
     on_use = function(itemstack, user, pointed_thing)
+        if tdm_weapons.handle_interaction(user, pointed_thing) then
+            return itemstack
+        end
         local p_name = user:get_player_name()
         local cd = tdm_weapons.cooldowns[p_name] or 0
         local inv = user:get_inventory()
@@ -247,6 +289,9 @@ core.register_tool("tdm_weapons:shotgun", {
     wield_image = "tdm_weapons_shotgun_wield.png",
     wield_scale = {x=1.5, y=1.5, z=1.5},
     on_use = function(itemstack, user, pointed_thing)
+        if tdm_weapons.handle_interaction(user, pointed_thing) then
+            return itemstack
+        end
         local p_name = user:get_player_name()
         local cd = tdm_weapons.cooldowns[p_name] or 0
         local inv = user:get_inventory()
@@ -264,8 +309,9 @@ core.register_tool("tdm_weapons:shotgun", {
             
             if count > 0 then
                 for i = 1, 8 do
-                    -- Shotgun deals 2.5 per pellet (20 total per blast)
-                    tdm_weapons.shoot_raycast(user, 2.5, 30, 0.2)
+                    -- Shotgun deals 4.2 per pellet (33.6 total per blast)
+                    -- 3 hits = 100.8 damage (Lethal for 100 HP players)
+                    tdm_weapons.shoot_raycast(user, 4.2, 30, 0.2)
                 end
                 tdm_weapons.cooldowns[p_name] = 1.0
                 
@@ -293,14 +339,17 @@ core.register_craftitem("tdm_weapons:health_pack", {
     inventory_image = "tdm_weapons_health_pack.png",
     stack_max = 5,
     on_use = function(itemstack, user, pointed_thing)
+        if tdm_weapons.handle_interaction(user, pointed_thing) then
+            return itemstack
+        end
         local hp = user:get_hp()
-        if hp >= 20 then
+        if hp >= 100 then
             core.chat_send_player(user:get_player_name(), "Health is already full!")
             return itemstack
         end
         
-        -- Restore 4 HP (20% of 20 max)
-        user:set_hp(math.min(20, hp + 4))
+        -- Restore 20 HP (20% of 100 max)
+        user:set_hp(math.min(100, hp + 20))
         
         -- Sound effect
         core.sound_play("tdm_heal", {pos = user:get_pos(), gain = 1.0, max_hear_distance = 16})
@@ -353,7 +402,17 @@ core.register_on_item_pickup(function(itemstack, picker, pointed_thing)
 
     if item_name == "tdm_weapons:assault_rifle" or item_name == "tdm_weapons:shotgun" then
         if inv:contains_item("main", item_name) then
-            return itemstack -- Don't pick up duplicate weapons
+            -- Convert duplicate to ammo
+            local ammo_name = (item_name == "tdm_weapons:assault_rifle") and "tdm_weapons:rifle_ammo" or "tdm_weapons:shotgun_ammo"
+            local count = (item_name == "tdm_weapons:assault_rifle") and 20 or 8
+            inv:add_item("ammo", ammo_name .. " " .. count)
+            
+            if pointed_thing and pointed_thing.ref then
+                pointed_thing.ref:remove()
+                core.sound_play("tdm_pickup", {pos = picker:get_pos(), gain = 0.5})
+            end
+            tdm_core.hud.update_ammo(picker)
+            return ItemStack("") -- Successfully scavenged
         end
     end
     

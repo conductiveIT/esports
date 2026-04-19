@@ -3,8 +3,11 @@ tdm_core.match.state = "waiting" -- waiting, active, over
 tdm_core.match.timer = 0
 tdm_core.match.match_duration = 300
 tdm_core.match.active_teams = {red = nil, blue = nil}
+tdm_core.match.player_stats = {} -- [name] = {kills=0, deaths=0}
+tdm_core.match.last_attacker = {} -- [victim] = {name=killer, time=os.time()}
 tdm_core.match.friendly_fire = true
 tdm_core.match.is_debug = false
+tdm_core.match.player_sides = {} -- [name] = "red" or "blue" (Temporary overrides)
 
 
 
@@ -26,9 +29,10 @@ core.register_globalstep(function(dtime)
                 local p_pos = p:get_pos()
                 local show_name = false
                 
-                -- Loop to see if ANYONE is near this player
+                -- Loop to see if any combatant is near this player
                 for _, other in ipairs(all_players) do
-                    if other:get_player_name() ~= pname then
+                    local other_name = other:get_player_name()
+                    if other_name ~= pname and not tdm_core.is_spectator(other_name) then
                         if vector.distance(p_pos, other:get_pos()) < 15 then
                             show_name = true
                             break
@@ -38,7 +42,8 @@ core.register_globalstep(function(dtime)
                 
                 -- Apply team color and alpha
                 local team = tdm_core.teams.get_player_team(pname)
-                local a = show_name and 255 or 0
+                local is_alive = p:get_hp() > 0
+                local a = (show_name and is_alive) and 255 or 0
                 local r, g, b = 200, 200, 200
                 if team == "red" then r, g, b = 255, 50, 50
                 elseif team == "blue" then r, g, b = 50, 50, 255 end
@@ -87,7 +92,12 @@ core.register_globalstep(function(dtime)
             tdm_core.match.state = "active"
             tdm_core.match.timer = tdm_core.match.match_duration
             for _, p in ipairs(players) do
-                p:set_physics_override({speed = 1, jump = 1})
+                local pname = p:get_player_name()
+                local is_participant = tdm_core.match.get_player_match_side(pname) ~= nil
+                
+                if is_participant or core.check_player_privs(pname, {server = true}) then
+                     p:set_physics_override({speed = 1, jump = 1})
+                end
                 tdm_core.hud.hide_intro(p)
             end
             core.chat_send_all("MATCH STARTED!")
@@ -98,49 +108,145 @@ core.register_globalstep(function(dtime)
         
         local mins = math.floor(tdm_core.match.timer / 60)
         local secs = tdm_core.match.timer % 60
-        tdm_core.hud.update_timer(string.format("Time Remaining: %02d:%02d", mins, secs))
+        local is_critical = tdm_core.match.timer < 30
+        tdm_core.hud.update_timer(string.format("Time Remaining: %02d:%02d", mins, secs), is_critical)
         
         if tdm_core.match.timer <= 0 then
             tdm_core.match.state = "over"
-            tdm_core.match.timer = 10
+            tdm_core.match.timer = 0 -- Reset for safety watchdog
             
-            local red_team = tdm_core.match.active_teams.red
-            local blue_team = tdm_core.match.active_teams.blue
-            local winner_name = "Tie"
+            local r_name = tdm_core.match.active_teams.red
+            local b_name = tdm_core.match.active_teams.blue
+            local winner_name = "Match Draw"
+            local win_color = "white"
+            local win_team_id = nil
             
             if tdm_core.teams.scores.red > tdm_core.teams.scores.blue then
-                winner_name = red_team or "Red"
-                if tdm_league and red_team and blue_team and not tdm_core.match.is_pve then
-                    tdm_league.teams[red_team].wins = tdm_league.teams[red_team].wins + 1
-                    tdm_league.teams[blue_team].losses = tdm_league.teams[blue_team].losses + 1
+                winner_name = (r_name or "Red Team") .. " Victory"
+                win_color = "red"
+                win_team_id = r_name
+                if tdm_league and r_name and b_name and not tdm_core.match.is_pve then
+                    tdm_league.teams[r_name].wins = tdm_league.teams[r_name].wins + 1
+                    tdm_league.teams[b_name].losses = tdm_league.teams[b_name].losses + 1
                     tdm_league.save()
                 end
             elseif tdm_core.teams.scores.blue > tdm_core.teams.scores.red then
-                winner_name = blue_team or "Blue"
-                if tdm_league and red_team and blue_team and not tdm_core.match.is_pve then
-                    tdm_league.teams[blue_team].wins = tdm_league.teams[blue_team].wins + 1
-                    tdm_league.teams[red_team].losses = tdm_league.teams[red_team].losses + 1
+                winner_name = (b_name or "Blue Team") .. " Victory"
+                win_color = "blue"
+                win_team_id = b_name
+                if tdm_league and r_name and b_name and not tdm_core.match.is_pve then
+                    tdm_league.teams[b_name].wins = tdm_league.teams[b_name].wins + 1
+                    tdm_league.teams[r_name].losses = tdm_league.teams[r_name].losses + 1
                     tdm_league.save()
                 end
             end
             
-            core.chat_send_all("Match Over! Winner: " .. winner_name)
-            tdm_core.hud.update_timer("Winner: " .. winner_name)
+            -- GATHER SCOREBOARD DATA & MVP
+            local red_list = {}
+            local blue_list = {}
+            local mvp = {name = "No One", kills = 0}
+            
+            for _, p in ipairs(core.get_connected_players()) do
+                local pname = p:get_player_name()
+                local stats = tdm_core.match.player_stats[pname] or {kills=0, deaths=0}
+                local p_team = tdm_core.teams.get_player_team(pname)
+                
+                if p_team == "red" then 
+                    table.insert(red_list, {name=pname, k=stats.kills, d=stats.deaths})
+                elseif p_team == "blue" then
+                    table.insert(blue_list, {name=pname, k=stats.kills, d=stats.deaths})
+                end
+                
+                -- Determine MVP (Humans only)
+                if stats.kills > mvp.kills and not tdm_core.is_spectator(pname) then
+                    mvp = {name=pname, kills=stats.kills}
+                end
+                
+                -- Freeze players for Outro
+                p:set_physics_override({speed = 0, jump = 0})
+            end
+            
+            -- SORT BY KILLS
+            local sort_fn = function(a, b) return a.k > b.k end
+            table.sort(red_list, sort_fn)
+            table.sort(blue_list, sort_fn)
+            
+            -- PERSIST OUTRO HUD
+            local outro_data = {
+                title = winner_name:upper(),
+                color = win_color,
+                mvp = mvp.name,
+                mvp_kills = mvp.kills,
+                win_team = win_team_id,
+                red_team = r_name,
+                blue_team = b_name,
+                red_roster = red_list,
+                blue_roster = blue_list
+            }
+            
+            for _, player in ipairs(core.get_connected_players()) do
+                tdm_core.hud.show_outro(player, outro_data)
+            end
+            
+            core.chat_send_all(">> MATCH OVER! " .. winner_name:upper())
             
             -- Clear all PVE bots when match ends
             if tdm_core.match.is_pve then
                 tdm_core.bots.clear_all()
             end
+
+            -- Immediately clear participants to lock back to lobby
+            tdm_core.match.active_teams = {red = nil, blue = nil}
+            tdm_core.match.player_sides = {}
         end
         
     elseif tdm_core.match.state == "over" then
         tdm_core.match.timer = tdm_core.match.timer - 1
-        if tdm_core.match.timer <= 0 then
+        -- Safety Reset: Automatically return to lobby after 2 minutes of idle viewing
+        if tdm_core.match.timer <= -120 then
             tdm_core.match.state = "waiting"
             tdm_core.match.active_teams = {red = nil, blue = nil}
-            core.chat_send_all("Returning to lobby.")
+            
+            for _, player in ipairs(core.get_connected_players()) do
+                tdm_core.hud.hide_outro(player)
+                tdm_core.lobby.show(player)
+                -- Ensure lobby physics are reset (Frozen until match starts)
+                if not core.check_player_privs(player:get_player_name(), {server=true}) then
+                    player:set_physics_override({speed = 0, jump = 0, gravity = 1})
+                end
+            end
+            
+            core.chat_send_all("Idle timeout: Returning to lobby.")
         end
     end
+end)
+
+core.register_on_punchplayer(function(player, hitter, time_from_last_punch, tool_capabilities, dir, damage)
+    if not player or not hitter then return end
+    local victim = player:get_player_name()
+    local attacker = hitter:get_player_name()
+    local is_bot = false
+    
+    if not attacker then
+        local ent = hitter:get_luaentity()
+        if ent and ent.name == "tdm_core:bot" then
+            attacker = "Sentry"
+            is_bot = true
+        end
+    end
+    
+    if not victim or not attacker or victim == attacker then return end
+    
+    local item = hitter:get_wielded_item():get_name()
+    local weapon = "pickaxe"
+    if item:find("rifle") then weapon = "rifle"
+    elseif item:find("shotgun") then weapon = "shotgun" end
+    
+    tdm_core.match.last_attacker[victim] = {
+        name = attacker,
+        time = os.time(),
+        weapon = weapon
+    }
 end)
 
 core.register_on_dieplayer(function(player, reason)
@@ -158,16 +264,95 @@ core.register_on_dieplayer(function(player, reason)
 
     -- Broadcast kill message
     local victim = player:get_player_name()
-    if reason.type == "punch" and reason.puncher and reason.puncher:is_player() then
-        local killer = reason.puncher:get_player_name()
-        core.chat_send_all(">> " .. victim .. " was eliminated by " .. killer .. "!")
+    tdm_core.match.add_death(victim)
+    
+    local killer_name = nil
+    local k_team = nil
+    local weapon = "skull"
+    
+    if reason.puncher then
+        if reason.puncher:is_player() then
+            killer_name = reason.puncher:get_player_name()
+            local item = reason.puncher:get_wielded_item():get_name()
+            if item:find("rifle") then weapon = "rifle"
+            elseif item:find("shotgun") then weapon = "shotgun"
+            elseif item:find("pickaxe") then weapon = "pickaxe" end
+        else
+            local ent = reason.puncher:get_luaentity()
+            if ent and ent.name == "tdm_core:bot" then
+                killer_name = "Sentry"
+                weapon = "rifle"
+            end
+        end
+    elseif tdm_core.match.last_attacker[victim] then
+        local last = tdm_core.match.last_attacker[victim]
+        local now = os.time()
+        if now - last.time <= 10 then
+            killer_name = last.name
+            weapon = last.weapon or "skull"
+        end
+    end
+    
+    if killer_name then
+        k_team = tdm_core.match.get_player_match_side(killer_name)
+    end
+    
+    local v_team = tdm_core.match.get_player_match_side(victim)
+    tdm_core.hud.add_kill_event(killer_name or "Environment", k_team, victim, v_team, weapon)
+
+    if killer_name then
+        tdm_core.match.add_kill(killer_name)
+        core.chat_send_all(">> " .. victim .. " was eliminated by " .. killer_name .. "!")
     else
         core.chat_send_all(">> " .. victim .. " was eliminated!")
     end
     
-    -- Hide player model immediately on death
+    -- Clear attacker state
+    tdm_core.match.last_attacker[victim] = nil
+    
+    -- Hide player model immediately on death and revert skin
     player:set_properties({visual_size = {x=0, y=0, z=0}})
+    tdm_core.skins.apply(player, nil)
 end)
+
+-- Helper stats functions
+function tdm_core.match.add_kill(name)
+    if not tdm_core.match.player_stats[name] then
+        tdm_core.match.player_stats[name] = {kills = 0, deaths = 0}
+    end
+    tdm_core.match.player_stats[name].kills = tdm_core.match.player_stats[name].kills + 1
+    
+    -- Force HUD update for active viewers
+    if tdm_core.hud.update_scoreboard then
+        tdm_core.hud.update_scoreboard()
+    end
+    
+    -- Persist to league
+    if tdm_league and tdm_league.player_stats then
+        if not tdm_league.player_stats[name] then tdm_league.player_stats[name] = {kills=0, deaths=0} end
+        tdm_league.player_stats[name].kills = tdm_league.player_stats[name].kills + 1
+        tdm_league.save()
+    end
+end
+
+function tdm_core.match.add_death(name)
+    if not tdm_core.match.player_stats[name] then
+        tdm_core.match.player_stats[name] = {kills = 0, deaths = 0}
+    end
+    tdm_core.match.player_stats[name].deaths = tdm_core.match.player_stats[name].deaths + 1
+    
+    -- Force HUD update for active viewers
+    if tdm_core.hud.update_scoreboard then
+        tdm_core.hud.update_scoreboard()
+    end
+    
+    -- Persist to league
+    if tdm_league and tdm_league.player_stats then
+        if not tdm_league.player_stats[name] then tdm_league.player_stats[name] = {kills=0, deaths=0} end
+        tdm_league.player_stats[name].deaths = tdm_league.player_stats[name].deaths + 1
+        tdm_league.save()
+    end
+end
 
 
 -- Helper to find a safe ground position within the storm and on the island
@@ -193,19 +378,43 @@ function tdm_core.get_safe_spawn_pos(pname)
             target_z = target_z * scale
         end
         
-        -- Anti-Camp: Check for nearby enemies
+        -- Anti-Camp: Check for nearby hostiles (Players and Bots)
         local enemy_nearby = false
-        if my_team then
-            for _, alt_p in ipairs(core.get_connected_players()) do
-                local other_name = alt_p:get_player_name()
-                local other_team = tdm_core.teams.get_player_team(other_name)
-                if other_team and other_team ~= my_team and not tdm_core.is_spectator(other_name) then
-                    local other_pos = alt_p:get_pos()
-                    local d = vector.distance({x=target_x, y=0, z=target_z}, {x=other_pos.x, y=0, z=other_pos.z})
-                    if d < 15 then
-                        enemy_nearby = true
-                        break
-                    end
+        
+        -- Check Player positions
+        for _, alt_p in ipairs(core.get_connected_players()) do
+            local other_name = alt_p:get_player_name()
+            local other_team = tdm_core.teams.get_player_team(other_name)
+            local is_enemy = false
+            
+            if pname then
+                -- I am a player: Enemies are players on other teams
+                if my_team and other_team and other_team ~= my_team then is_enemy = true end
+            else
+                -- I am a bot: All active players are enemies
+                is_enemy = true
+            end
+            
+            if is_enemy and not tdm_core.is_spectator(other_name) then
+                local other_pos = alt_p:get_pos()
+                local d = vector.distance({x=target_x, y=0, z=target_z}, {x=other_pos.x, y=0, z=other_pos.z})
+                if d < 30 then
+                    enemy_nearby = true
+                    break
+                end
+            end
+        end
+        
+        -- Check Bot positions (using object scan)
+        if not enemy_nearby then
+            local nearby_objects = core.get_objects_inside_radius({x=target_x, y=0, z=target_z}, 30)
+            for _, obj in ipairs(nearby_objects) do
+                local ent = obj:get_luaentity()
+                if ent and ent.name == "tdm_core:bot" then
+                    -- If I am a player, bots are always enemies
+                    -- If I am a bot, I should also spread out from other bots
+                    enemy_nearby = true
+                    break
                 end
             end
         end
@@ -215,7 +424,7 @@ function tdm_core.get_safe_spawn_pos(pname)
             for y = 30, -20, -1 do
                 local node = core.get_node_or_nil({x=target_x, y=y, z=target_z})
                 if node and node.name ~= "air" and node.name ~= "ignore" and node.name ~= "tdm_storm:gas" then
-                    return {x=target_x, y=y + 1.5, z=target_z}
+                    return {x=target_x, y=y + 0.5, z=target_z}
                 end
             end
         end
@@ -239,9 +448,29 @@ function tdm_core.reset_player(player, provide_weapons)
         tdm_weapons.cooldowns[pname] = 0
     end
     
-    -- Reset HP and Physics
-    player:set_hp(20)
-    player:set_properties({visual_size = {x=1, y=1, z=1}}) -- Restore model size if it was hidden
+    -- Reset HP and Physics (Combat Mode)
+    player:set_properties({
+        hp_max = 100,
+        visual_size = {x=1, y=1, z=1}, -- Restore model size
+        eye_height = 1.625,
+        interact_distance = 10, -- Combat reach
+    })
+    player:set_hp(100)
+    player:set_physics_override({
+        speed = 1.2, -- Combat Speed
+        jump = 1.1,
+        gravity = 1.0
+    })
+    player:set_armor_groups({fleshy = 100})
+    
+    -- Revoke survival-breaking privileges (flight etc)
+    local privs = core.get_player_privs(pname)
+    if privs.fly or privs.noclip or privs.fast then
+        privs.fly = nil
+        privs.noclip = nil
+        privs.fast = nil
+        core.set_player_privs(pname, privs)
+    end
     
     -- Give Utility Kit
     inv:add_item("main", "tdm_weapons:pickaxe")
@@ -259,29 +488,115 @@ function tdm_core.reset_player(player, provide_weapons)
     -- Update HUD
     tdm_core.hud.update_ammo(player)
     tdm_core.teams.update_nametag(player)
+    
+    -- Apply team skin automatically
+    local side = tdm_core.match.get_player_match_side(pname)
+    if side == "red" then
+        tdm_core.skins.apply(player, "#ff0000")
+    elseif side == "blue" then
+        tdm_core.skins.apply(player, "#0000ff")
+    else
+        tdm_core.skins.apply(player, nil) -- Reset to default
+    end
+end
+
+-- Returns "red", "blue", or nil based on whether the player is in an active match team
+function tdm_core.match.get_player_match_side(name)
+    -- Check for temporary PVE/Join overrides first
+    if tdm_core.match.player_sides and tdm_core.match.player_sides[name] then
+        return tdm_core.match.player_sides[name]
+    end
+
+    -- Strictly gate side detection to running matches
+    if tdm_core.match.state ~= "active" and tdm_core.match.state ~= "countdown" then
+        return nil
+    end
+
+    if not tdm_core.match.active_teams then 
+        return nil 
+    end
+    
+    local p_team = tdm_league.player_to_team[name]
+    if not p_team then return nil end
+    
+    if p_team == tdm_core.match.active_teams.red then
+        return "red"
+    elseif p_team == tdm_core.match.active_teams.blue then
+        return "blue"
+    end
+    
+    return nil
 end
 
 core.register_on_joinplayer(function(player)
     local pname = player:get_player_name()
     
-    -- Initial Reset
+    -- Initial HUD Setup
+    tdm_core.hud.init_hud(player)
+
+    -- Side Detection (Moved to top level scope)
+    local side = tdm_core.match.get_player_match_side(pname)
+    local match_active = (tdm_core.match.state == "active" or tdm_core.match.state == "countdown")
+
+    -- Detect mid-game join for participants
+    if match_active then
+        if side and not tdm_core.is_spectator(pname) then
+            -- Rejoin fight immediately
+            tdm_core.teams.players[pname] = side
+            tdm_core.teams.update_nametag(player)
+            tdm_core.reset_player(player, false)
+            player:set_pos(tdm_core.get_safe_spawn_pos(pname))
+            core.chat_send_player(pname, "LUANTI ESPORTS: Welcome back. Team " .. side:upper() .. " is in combat!")
+            return -- Skip Lobby
+        end
+    end
+
+    -- Regular join (Lobby flow)
     if tdm_core.is_spectator(pname) then
-        -- Spectators get a pure empty inventory
         local inv = player:get_inventory()
         inv:set_list("main", {})
         inv:set_list("ammo", {})
     else
-        -- Active players get the standard Utility Kit
         tdm_core.reset_player(player, false)
     end
     
-    -- Initial teleport to Lobby/Safe spot
     player:set_pos(tdm_core.get_safe_spawn_pos(pname))
+    
+    -- Lobby Ghost Mode: Invisible, Invulnerable, and Frozen
+    if not side or not match_active then
+        player:set_properties({
+            hp_max = 100,
+            visual_size = {x=1, y=1, z=1}, -- Full size for light calculation
+            textures = {"character.png^[alpha:0"}, -- 100% transparent
+            eye_height = 1.625,
+            interact_distance = 0, -- Cannot hit anything in lobby
+        })
+        player:set_hp(100)
+        player:set_armor_groups({immortal = 1})
+        
+        -- Admins can still move, but are hidden/protected
+        if not core.check_player_privs(pname, {server=true}) then
+            player:set_physics_override({speed = 0, jump = 0, gravity = 1})
+        else
+            -- Admin Movement Baseline
+            player:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1})
+        end
+    end
+    
+    -- Show Lobby (Immediate)
+    core.after(0, function()
+        if core.get_player_by_name(pname) then
+            tdm_core.lobby.show(player)
+        end
+    end)
 end)
 
 core.register_on_respawnplayer(function(player)
     if tdm_core.match.state == "active" then
         local pname = player:get_player_name()
+        
+        -- Ensure invisible during repositioning
+        player:set_properties({visual_size = {x=0, y=0, z=0}})
         player:set_pos(tdm_core.get_safe_spawn_pos(pname))
         
         -- Respawn Invulnerability (3 seconds)
@@ -295,77 +610,99 @@ core.register_on_respawnplayer(function(player)
 
         -- Clean Slate Reset
         tdm_core.reset_player(player, tdm_core.match.is_debug)
+        
+        -- Reveal player after brief delay to prevent "teleport glitching"
+        core.after(0.2, function()
+            if player:is_player() then
+                local side = tdm_core.match.get_player_match_side(pname)
+                tdm_core.skins.apply(player, side)
+            end
+        end)
     end
     return true
 end)
 
-core.register_chatcommand("match", {
-    params = "<team1> <team2> [duration] [ff_on/off] [day/night]",
-    description = "Start a league match (Admin only). Options: [off] for FF, [night] for Time.",
-    privs = {server = true},
-    func = function(name, param)
-        local t1, t2, dur, ff, time_mode = param:match("^(%S+)%s+(%S+)%s*(%d*)%s*(%S*)%s*(%S*)$")
-        if not t1 or not t2 then return false, "Usage: /match <Team1> <Team2> [duration] [off] [day/night]" end
-        
-        if not tdm_league.teams[t1] or not tdm_league.teams[t2] then
-            return false, "One or both teams do not exist."
-        end
-        
-        -- Friendly Fire Logic
-        tdm_core.match.friendly_fire = true
-        if ff == "off" then
-            tdm_core.match.friendly_fire = false
-        end
+function tdm_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_count, bot_diff)
+    local is_pve = pve_mode or false
+    tdm_core.match.is_pve = is_pve
+    
+    -- World Time Logic
+    core.settings:set("time_speed", "0") -- Freeze time
+    if time_mode == "night" then
+        core.set_timeofday(0) -- Midnight
+    else
+        core.set_timeofday(0.5) -- Noon
+    end
 
-        -- Time of Day Logic
-        core.settings:set("time_speed", "0") -- Freeze time
-        if time_mode == "night" then
-            core.set_timeofday(0) -- Midnight
-        else
-            core.set_timeofday(0.5) -- Noon (Default)
-        end
+    -- Update Team Names for HUD
+    tdm_core.teams.active_team_names.red = t1
+    tdm_core.teams.active_team_names.blue = t2
+    
+    -- Force HUD refresh for everyone
+    for _, p in ipairs(core.get_connected_players()) do
+        tdm_core.hud.init_hud(p)
+    end
+    tdm_core.hud.update_timer("MATCH ACTIVE!")
 
-        -- Update Team Names for HUD
-        tdm_core.teams.active_team_names.red = t1
-        tdm_core.teams.active_team_names.blue = t2
-        
-        -- Force HUD refresh for everyone
-        for _, p in ipairs(core.get_connected_players()) do
-            tdm_core.hud.init_hud(p)
-        end
-        tdm_core.hud.update_timer("MATCH ACTIVE!")
+    -- Initial Statistics wipe
+    tdm_core.match.player_stats = {}
 
-        
-        -- Check for minimum players (2 per team)
-        local players = core.get_connected_players()
-        local t1_online = {}
-        local t2_online = {}
-        
+    local players = core.get_connected_players()
+    local t1_online = {}
+    local t2_online = {}
+    
+    if is_pve then
+        -- PVE: Team 1 is players, Team 2 is Bots
         for _, p in ipairs(players) do
             local pname = p:get_player_name()
-            -- Skip spectators
+            if not tdm_core.is_spectator(pname) then
+                local pteam = tdm_league.player_to_team[pname]
+                if pteam == t1 then table.insert(t1_online, p) end
+            end
+        end
+    else
+        -- Regular PVP
+        for _, p in ipairs(players) do
+            local pname = p:get_player_name()
             if not tdm_core.is_spectator(pname) then
                 local pteam = tdm_league.player_to_team[pname]
                 if pteam == t1 then table.insert(t1_online, p) end
                 if pteam == t2 then table.insert(t2_online, p) end
             end
         end
-        
-        if #t1_online < 1 or #t2_online < 1 then
-            return false, "Each team needs at least 1 player online. (Found: " .. t1 .. ": " .. #t1_online .. ", " .. t2 .. ": " .. #t2_online .. ")"
-        end
-        
-        -- Start match (with countdown)
+    end
+
+    if not is_pve and (#t1_online < 1 or #t2_online < 1) then
+        return false, "Each team needs at least 1 player online. (Found: " .. t1 .. ": " .. #t1_online .. ", " .. t2 .. ": " .. #t2_online .. ")"
+    end
+    if is_pve and #t1_online < 1 then
+        return false, "Your team must have at least 1 player online."
+    end
+    
+    -- Start match (with countdown)
+    if is_pve then
+        -- PVE SPECIFIC: Team 1 (Players) is always BLUE, Team 2 (Bots) is always RED
+        tdm_core.match.active_teams = {red = t2, blue = t1}
+    else
         tdm_core.match.active_teams = {red = t1, blue = t2}
-        tdm_core.match.state = "countdown"
-        tdm_core.match.is_debug = false
-        tdm_core.match.timer = 6 -- Adjusted for first-second trigger
-        tdm_core.match.match_duration = tonumber(dur) or 300
-        
-        -- Clear old assignments
-        tdm_core.teams.players = {}
-        
-        -- Assign players to Red/Blue with limited nametag distance
+    end
+    tdm_core.match.state = "countdown"
+    tdm_core.match.is_debug = false
+    tdm_core.match.timer = 6
+    tdm_core.match.match_duration = tonumber(dur_secs) or 300
+    
+    -- Clear old assignments
+    tdm_core.teams.players = {}
+    
+    -- Assign participants to their respective Red/Blue sides
+    if is_pve then
+        -- In PvE, Team online 1 (Players) are ALL BLUE
+        for _, p in ipairs(t1_online) do
+            tdm_core.teams.players[p:get_player_name()] = "blue"
+            tdm_core.teams.update_nametag(p)
+        end
+    else
+        -- In PvP, follow the standard Red/Blue mapping
         for _, p in ipairs(t1_online) do
             tdm_core.teams.players[p:get_player_name()] = "red"
             tdm_core.teams.update_nametag(p)
@@ -374,36 +711,81 @@ core.register_chatcommand("match", {
             tdm_core.teams.players[p:get_player_name()] = "blue"
             tdm_core.teams.update_nametag(p)
         end
-        
-        -- Reset Arena (Map, Gas, Items)
-        if tdm_mapgen and tdm_mapgen.reset_island then
-            tdm_mapgen.reset_island()
+    end
+    
+    -- Reset Arena
+    if tdm_mapgen and tdm_mapgen.reset_island then
+        tdm_mapgen.reset_island()
+    end
+    
+    if tdm_storm then
+        tdm_storm.current_radius = 100
+        if tdm_storm.randomize_center then
+            tdm_storm.randomize_center()
         end
-        
-        if tdm_storm then
-            tdm_storm.current_radius = 100
-            if tdm_storm.randomize_center then
-                tdm_storm.randomize_center()
-            end
-        end
-        
-        tdm_core.teams.scores.red = 0
-        tdm_core.teams.scores.blue = 0
-        tdm_core.hud.update_scores()
-        
-        -- Teleport and Clean Slate for everyone
-        for _, p in ipairs(players) do
+    end
+    
+    tdm_core.teams.scores.red = 0
+    tdm_core.teams.scores.blue = 0
+    tdm_core.hud.update_scores()
+    
+    -- Teleport Combatants
+        for _, p in ipairs(core.get_connected_players()) do
             local pname = p:get_player_name()
-            if not tdm_core.is_spectator(pname) then
-                if tdm_league.player_to_team[pname] == t1 or tdm_league.player_to_team[pname] == t2 then
-                    p:set_pos(tdm_core.get_safe_spawn_pos(pname))
-                    tdm_core.reset_player(p, false) -- League matches start with loot search
+            local my_team = tdm_league.get_team(pname)
+            
+            -- PVE Overdrive: If in PVE, everyone not spectating should join the fight
+            if is_pve and not tdm_core.is_spectator(pname) and (not my_team or my_team == "NONE") then
+                my_team = t1
+                -- Temporarily assign them for the duration of this match
+                tdm_core.match.player_sides[pname] = "red"
+            end
+
+            if my_team == t1 or my_team == t2 then
+                local side
+                if is_pve then
+                    side = "blue" -- Everyone online is on the player side
+                else
+                    side = (my_team == t1) and "red" or "blue"
                 end
+                tdm_core.match.player_sides[pname] = side
+                
+                -- Full Match Setup (Inventory, Physics, HUD)
+                tdm_core.reset_player(p, tdm_core.match.is_debug)
+                p:set_pos(tdm_core.get_safe_spawn_pos(side))
+                tdm_core.hud.init_hud(p)
             end
         end
-        
-        core.chat_send_all("LEAGUE MATCH STARTED: " .. t1 .. " vs " .. t2 .. "!")
-        return true, "Match started."
+    
+    if is_pve then
+        -- Spawn Bots
+        tdm_core.bots.clear_all()
+        core.after(5, function()
+            local count = bot_count or 5
+            local diff = bot_diff or "medium"
+            for i = 1, count do
+                -- Tactical Mix: 60% Rusher (Aggressive Pressure), 40% Standard (Balanced)
+                local class = math.random() > 0.6 and "standard" or "rusher"
+                tdm_core.bots.spawn(tdm_core.get_safe_spawn_pos(nil), diff, class)
+            end
+        end)
+        core.chat_send_all("PVE SENTRY PROTOCOL INITIATED. " .. (bot_count or 5) .. " Hostiles Detected.")
+    else
+        core.chat_send_all("MATCH STARTED: " .. t1 .. " vs " .. t2 .. "!")
+    end
+    
+    return true, "Match started."
+end
+
+core.register_chatcommand("match", {
+    params = "<team1> <team2> [duration] [ff_on/off] [day/night]",
+    description = "Start a league match (Admin only). Options: [off] for FF, [night] for Time.",
+    privs = {server = true},
+    func = function(name, param)
+        local t1, t2, dur, ff, time_mode = param:match("^(%S+)%s+(%S+)%s*(%d*)%s*(%S*)%s*(%S*)$")
+        if not t1 or not t2 then return false, "Usage: /match <Team1> <Team2> [duration] [off] [day/night]" end
+        tdm_core.match.friendly_fire = (ff ~= "off")
+        return tdm_core.match.start(t1, t2, dur, false, time_mode)
     end
 })
 
@@ -414,166 +796,30 @@ core.register_chatcommand("matchdebug", {
     func = function(name, param)
         local t1, t2, ff, time_mode = param:match("^(%S+)%s+(%S+)%s*(%S*)%s*(%S*)$")
         if not t1 or not t2 then return false, "Usage: /matchdebug <Team1> <Team2> [off] [day/night]" end
-        
-        -- Friendly Fire Logic
-        tdm_core.match.friendly_fire = true
-        if ff == "off" then
-            tdm_core.match.friendly_fire = false
-        end
+        tdm_core.match.friendly_fire = (ff ~= "off")
+        -- Debug matches are fast 5 min day or night
+        return tdm_core.match.start(t1, t2, 300, false, time_mode)
+    end
+})
 
-        -- Time of Day Logic
-        core.settings:set("time_speed", "0")
-        if time_mode == "night" then
-            core.set_timeofday(0)
-        else
-            core.set_timeofday(0.5)
-        end
-
-        -- Update Team Names for HUD
-        tdm_core.teams.active_team_names.red = t1
-        tdm_core.teams.active_team_names.blue = t2
-        
-        -- Force HUD refresh for everyone
-        for _, p in ipairs(core.get_connected_players()) do
-            tdm_core.hud.init_hud(p)
-        end
-        tdm_core.hud.update_timer("DEBUG MATCH ACTIVE!")
-
-        
-        -- Create teams if they don't exist
-        for _, tname in ipairs({t1, t2}) do
-            if not tdm_league.teams[tname] then
-                tdm_league.teams[tname] = {leader=name, members={name}, wins=0, losses=0}
-            end
-        end
-        
-        -- Start match (with countdown)
-        tdm_core.match.active_teams = {red = t1, blue = t2}
-        tdm_core.match.state = "countdown"
-        tdm_core.match.is_debug = true
-        tdm_core.match.timer = 6
-        tdm_core.match.match_duration = 300
-        
-        -- Assign all online players (alternating if teamless, or staying in their team if they have one)
-        local players = core.get_connected_players()
-        tdm_core.teams.players = {}
-        
-        for i, p in ipairs(players) do
-            local pname = p:get_player_name()
-            local assigned = (i % 2 == 0) and "blue" or "red"
-            tdm_core.teams.players[pname] = assigned
-            
-            -- Clean Slate with Weapons
-            tdm_core.reset_player(p, true)
-            p:set_pos(tdm_core.get_safe_spawn_pos(pname))
-        end
-        
-        -- Reset Arena (Map, Gas, Items)
-        if tdm_mapgen and tdm_mapgen.reset_island then
-            tdm_mapgen.reset_island()
-        end
-        
-        if tdm_storm then
-            tdm_storm.current_radius = 100
-            if tdm_storm.randomize_center then
-                tdm_storm.randomize_center()
-            end
-        end
-        
-        tdm_core.teams.scores.red = 0
-        tdm_core.teams.scores.blue = 0
-        tdm_core.hud.update_scores()
-        
-        core.chat_send_all("DEBUG MATCH STARTED: " .. t1 .. " vs " .. t2 .. "! All systems ready.")
-        return true, "Debug match started."
+core.register_chatcommand("botmatch", {
+    params = "<team> <bot_count> [difficulty] [day/night]",
+    description = "Start a PVE match against AI bots. Bots replace the blue team.",
+    privs = {server = true},
+    func = function(name, param)
+        local team, count_str, diff, time_mode = param:match("^(%S+)%s+(%d+)%s*(%S*)%s*(%S*)$")
+        if not team or not count_str then return false, "Usage: /botmatch <team> <number> [easy/medium/hard] [day/night]" end
+        return tdm_core.match.start(team, "BOTS", 300, true, time_mode, tonumber(count_str), diff)
     end
 })
 
 -- PROTECT SPECTATORS FROM PUNCHES
 core.register_on_punchplayer(function(player, hitter, time_from_last_punch, tool_capabilities, dir, damage)
-    if tdm_core.is_spectator(player:get_player_name()) or (hitter and hitter:is_player() and tdm_core.is_spectator(hitter:get_player_name())) then
+    local pname = player:get_player_name()
+    if tdm_core.is_spectator(pname) then return true end
+    if hitter and hitter:is_player() and tdm_core.is_spectator(hitter:get_player_name()) then
         return true -- Block damage
     end
 end)
-
-core.register_chatcommand("botmatch", {
-    params = "<team> <bot_count> [difficulty]",
-    description = "Start a PVE match against AI bots. Bots replace the blue team.",
-    privs = {server = true},
-    func = function(name, param)
-        local team, count_str, diff = param:match("^(%S+)%s+(%d+)%s*(%S*)$")
-        if not team or not count_str then return false, "Usage: /botmatch <team> <number> [easy/medium/hard]" end
-        
-        local bot_count = tonumber(count_str) or 5
-        if not tdm_league.teams[team] then
-            return false, "Team " .. team .. " does not exist."
-        end
-        
-        -- PVE Match Settings
-        tdm_core.match.friendly_fire = false
-        tdm_core.match.is_debug = false
-        tdm_core.match.is_pve = true
-        core.set_timeofday(0.5)
-        
-        tdm_core.teams.active_team_names.red = team
-        tdm_core.teams.active_team_names.blue = "BOTS"
-        
-        -- Force HUD
-        for _, p in ipairs(core.get_connected_players()) do
-            tdm_core.hud.init_hud(p)
-        end
-        tdm_core.hud.update_timer("PVE MATCH ACTIVE!")
-        
-        local players = core.get_connected_players()
-        local t1_online = {}
-        for _, p in ipairs(players) do
-            local pname = p:get_player_name()
-            if not tdm_core.is_spectator(pname) then
-                local pteam = tdm_league.player_to_team[pname]
-                if pteam == team then table.insert(t1_online, p) end
-            end
-        end
-        
-        if #t1_online < 1 then
-            return false, "No players online for team " .. team
-        end
-        
-        tdm_core.match.active_teams = {red = team, blue = "BOTS"}
-        tdm_core.match.state = "countdown"
-        tdm_core.match.timer = 6
-        tdm_core.match.match_duration = 300
-        
-        tdm_core.teams.players = {}
-        for _, p in ipairs(t1_online) do
-            tdm_core.teams.players[p:get_player_name()] = "red"
-            tdm_core.teams.update_nametag(p)
-        end
-        
-        if tdm_mapgen and tdm_mapgen.reset_island then tdm_mapgen.reset_island() end
-        if tdm_storm then tdm_storm.current_radius = 100 end
-        
-        tdm_core.teams.scores.red = 0
-        tdm_core.teams.scores.blue = 0
-        tdm_core.hud.update_scores()
-        
-        -- Spawn players
-        for _, p in ipairs(t1_online) do
-            local pname = p:get_player_name()
-            p:set_pos(tdm_core.get_safe_spawn_pos(pname))
-            tdm_core.reset_player(p, true) -- Give weapons for PVE
-        end
-        
-        -- Clear old bots and spawn new ones
-        tdm_core.bots.clear_all()
-        core.after(5, function()
-            for i = 1, bot_count do
-                tdm_core.bots.spawn(tdm_core.get_safe_spawn_pos(nil), diff or "medium")
-            end
-        end)
-        
-        core.chat_send_all("PVE SENTRY PROTOCOL INITIATED. " .. bot_count .. " Hostiles Detected.")
-        return true, "Bot match started."
-    end
-})
 
 

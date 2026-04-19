@@ -1,5 +1,7 @@
 tdm_core.hud = {}
 tdm_core.hud.player_huds = {}
+tdm_core.hud.kill_feed_events = {} -- Global list of recent kills {killer, k_col, victim, v_col, icon, age}
+tdm_core.hud.spectator_feed_huds = {} -- pname -> { {id1, id2, id3}, ... }
 
 tdm_core.hud.init_hud = function(player)
     local player_name = player:get_player_name()
@@ -24,13 +26,16 @@ tdm_core.hud.init_hud = function(player)
         text = "Red 0 - 0 Blue",
     })
     
-    -- Scoreboard Logos
+    -- Scoreboard Logos (Dynamic Team Logos)
+    local r_team_active = tdm_core.teams.active_team_names.red
+    local b_team_active = tdm_core.teams.active_team_names.blue
+    
     huds.logo_red = player:hud_add({
         hud_elem_type = "image",
         position = {x = 0.44, y = 0.05},
         scale = {x = 0.05, y = 0.05},
         alignment = {x = 0, y = 0},
-        text = "tdm_logo_red.png",
+        text = tdm_core.get_team_logo(r_team_active, "tdm_logo_red.png"),
     })
     
     huds.logo_blue = player:hud_add({
@@ -38,7 +43,16 @@ tdm_core.hud.init_hud = function(player)
         position = {x = 0.56, y = 0.05},
         scale = {x = 0.05, y = 0.05},
         alignment = {x = 0, y = 0},
-        text = "tdm_logo_blue.png",
+        text = tdm_core.get_team_logo(b_team_active, "tdm_logo_blue.png"),
+    })
+
+    -- Match Timer (Top Center, below scores)
+    huds.timer = player:hud_add({
+        hud_elem_type = "text",
+        position = {x = 0.5, y = 0.1},
+        alignment = {x = 0, y = 0},
+        number = 0xFFFF00, -- Gold
+        text = "05:00",
     })
     
     -- Team assignment indicator (Only for combatants)
@@ -63,13 +77,25 @@ tdm_core.hud.init_hud = function(player)
             offset = {x = 0, y = 0},
             text = "Rifle: 0 | Shotgun: 0",
             alignment = {x = -1, y = 0},
-            scale = {x = 100, y = 100},
             number = 0xFFFFFF,
         })
         
         -- Initial update
         tdm_core.hud.update_ammo(player)
     end
+    
+    -- Scoreboard HUD (Center or Top-Left)
+    huds.scoreboard = player:hud_add({
+        hud_elem_type = "text",
+        position = {x = 0.5, y = 0.2},
+        alignment = {x = 0, y = 0},
+        number = 0xFFFF00, -- Gold color for standings
+        text = "", -- Hidden by default for players
+        scale = 1.5,
+    })
+    
+    -- Periodic update immediately
+    tdm_core.hud.update_scoreboard()
 end
 
 tdm_core.hud.update_scores = function()
@@ -83,20 +109,140 @@ tdm_core.hud.update_scores = function()
             player:hud_change(huds.scores, "text", score_text)
             
             -- Resolve Logos
-            local r_logo = "tdm_logo_red.png"
-            local b_logo = "tdm_logo_blue.png"
-            
-            if tdm_league and tdm_league.teams[r_name] and tdm_league.teams[r_name].logo_id then
-                r_logo = "tdm_logo_lib_" .. tdm_league.teams[r_name].logo_id .. ".png"
-            end
-            if tdm_league and tdm_league.teams[b_name] and tdm_league.teams[b_name].logo_id then
-                b_logo = "tdm_logo_lib_" .. tdm_league.teams[b_name].logo_id .. ".png"
-            end
+            local r_logo = tdm_core.get_team_logo(r_name, "tdm_logo_red.png")
+            local b_logo = tdm_core.get_team_logo(b_name, "tdm_logo_blue.png")
             
             player:hud_change(huds.logo_red, "text", r_logo)
             player:hud_change(huds.logo_blue, "text", b_logo)
         end
     end
+end
+
+-- Broadcast Feed API
+function tdm_core.hud.add_kill_event(killer, k_team, victim, v_team, weapon)
+    local k_col = 0xFFFFFF
+    if k_team == "red" then k_col = 0xFFAAAA
+    elseif k_team == "blue" then k_col = 0xAAAAFF end
+    
+    local v_col = 0xFFFFFF
+    if v_team == "red" then v_col = 0xFFAAAA
+    elseif v_team == "blue" then v_col = 0xAAAAFF end
+    
+    local icon = "tdm_feed_skull.png"
+    if weapon == "rifle" then icon = "tdm_feed_rifle.png"
+    elseif weapon == "shotgun" then icon = "tdm_feed_shotgun.png"
+    elseif weapon == "pickaxe" then icon = "tdm_feed_pickaxe.png" end
+
+    table.insert(tdm_core.hud.kill_feed_events, 1, {
+        killer = killer or "Unknown",
+        k_col = k_col,
+        victim = victim or "Unknown",
+        v_col = v_col,
+        icon = icon,
+        age = 5.0
+    })
+    
+    -- Limit to 5 events
+    if #tdm_core.hud.kill_feed_events > 5 then
+        table.remove(tdm_core.hud.kill_feed_events)
+    end
+    
+    tdm_core.hud.refresh_spectator_feeds()
+end
+
+function tdm_core.hud.refresh_spectator_feeds()
+    for _, player in ipairs(core.get_connected_players()) do
+        local name = player:get_player_name()
+        if tdm_core.is_spectator(name) then
+            tdm_core.hud.draw_kill_feed(player)
+        else
+            -- Ensure active players don't have feed artifacts
+            tdm_core.hud.clear_kill_feed(player)
+        end
+    end
+end
+
+function tdm_core.hud.clear_kill_feed(player)
+    local name = player:get_player_name()
+    local huds = tdm_core.hud.spectator_feed_huds[name]
+    if huds then
+        for _, ids in ipairs(huds) do
+            for _, id in ipairs(ids) do player:hud_remove(id) end
+        end
+        tdm_core.hud.spectator_feed_huds[name] = nil
+    end
+end
+
+function tdm_core.hud.draw_kill_feed(player)
+    local name = player:get_player_name()
+    tdm_core.hud.clear_kill_feed(player)
+    
+    local huds_list = {}
+    local y_start = 0.15
+    local y_step = 0.03
+    
+    for i, event in ipairs(tdm_core.hud.kill_feed_events) do
+        local y_pos = y_start + (i-1) * y_step
+        
+        local ids = {}
+        -- Killer
+        table.insert(ids, player:hud_add({
+            hud_elem_type = "text",
+            position = {x = 0.90, y = y_pos},
+            text = event.killer,
+            number = event.k_col,
+            alignment = {x = -1, y = 0},
+            scale = 1.0,
+        }))
+        -- Icon
+        table.insert(ids, player:hud_add({
+            hud_elem_type = "image",
+            position = {x = 0.92, y = y_pos},
+            text = event.icon,
+            scale = {x = 0.4, y = 0.4}, -- Reduced scale for a sleek look
+            alignment = {x = 0, y = 0},
+        }))
+        -- Victim
+        table.insert(ids, player:hud_add({
+            hud_elem_type = "text",
+            position = {x = 0.95, y = y_pos},
+            text = event.victim,
+            number = event.v_col,
+            alignment = {x = 1, y = 0},
+            scale = 1.0,
+        }))
+        
+        table.insert(huds_list, ids)
+    end
+    
+    tdm_core.hud.spectator_feed_huds[name] = huds_list
+end
+
+-- Cleanup loop
+local feed_timer = 0
+core.register_globalstep(function(dtime)
+    feed_timer = feed_timer + dtime
+    if feed_timer < 0.2 then return end
+    feed_timer = 0
+    
+    local changed = false
+    local new_list = {}
+    for i, event in ipairs(tdm_core.hud.kill_feed_events) do
+        event.age = event.age - 0.2
+        if event.age > 0 then
+            table.insert(new_list, event)
+        else
+            changed = true
+        end
+    end
+    
+    if changed then
+        tdm_core.hud.kill_feed_events = new_list
+        tdm_core.hud.refresh_spectator_feeds()
+    end
+end)
+
+function tdm_core.hud.update_timer(player, time_left, state)
 end
 
 function tdm_core.hud.show_intro(player, time, r_name, b_name)
@@ -105,39 +251,33 @@ function tdm_core.hud.show_intro(player, time, r_name, b_name)
     if not huds then return end
     
     -- Resolve Logos
-    local r_logo = "tdm_logo_red.png"
-    local b_logo = "tdm_logo_blue.png"
-    if tdm_league and tdm_league.teams[r_name] and tdm_league.teams[r_name].logo_id then
-        r_logo = "tdm_logo_lib_" .. tdm_league.teams[r_name].logo_id .. ".png"
-    end
-    if tdm_league and tdm_league.teams[b_name] and tdm_league.teams[b_name].logo_id then
-        b_logo = "tdm_logo_lib_" .. tdm_league.teams[b_name].logo_id .. ".png"
-    end
+    local r_logo = tdm_core.get_team_logo(r_name, "tdm_logo_red.png")
+    local b_logo = tdm_core.get_team_logo(b_name, "tdm_logo_blue.png")
 
     -- Create elements if they don't exist
     if not huds.intro_vs then
-        -- Branding Bars for Contrast
+        -- Branding Bars for Contrast (Responsive)
         huds.intro_bar_red = player:hud_add({
             hud_elem_type = "image",
             position = {x = 0.3, y = 0.65},
             text = "tdm_hud_bar.png",
-            scale = {x = 1.5, y = 1.5},
+            scale = {x = -50, y = -10},
             alignment = {x = 0, y = 0},
         })
         huds.intro_bar_blue = player:hud_add({
             hud_elem_type = "image",
             position = {x = 0.7, y = 0.65},
             text = "tdm_hud_bar.png",
-            scale = {x = 1.5, y = 1.5},
+            scale = {x = -50, y = -10},
             alignment = {x = 0, y = 0},
         })
 
-        -- VS Graphic
+        -- VS Graphic (Responsive)
         huds.intro_vs = player:hud_add({
             hud_elem_type = "image",
             position = {x = 0.5, y = 0.45},
             text = "tdm_hud_vs.png",
-            scale = {x = 0.25, y = 0.25},
+            scale = {x = -35, y = -35},
             alignment = {x = 0, y = 0},
         })
 
@@ -145,14 +285,14 @@ function tdm_core.hud.show_intro(player, time, r_name, b_name)
             hud_elem_type = "image",
             position = {x = 0.3, y = 0.4},
             text = r_logo,
-            scale = {x = 0.3, y = 0.3},
+            scale = {x = -25, y = -25},
             alignment = {x = 0, y = 0},
         })
         huds.intro_logo_blue = player:hud_add({
             hud_elem_type = "image",
             position = {x = 0.7, y = 0.4},
             text = b_logo,
-            scale = {x = 0.3, y = 0.3},
+            scale = {x = -25, y = -25},
             alignment = {x = 0, y = 0},
         })
 
@@ -162,6 +302,7 @@ function tdm_core.hud.show_intro(player, time, r_name, b_name)
             text = (r_name or "Phoenix"):upper(),
             number = 0xFF5555,
             alignment = {x = 0, y = 0},
+            scale = 3,
         })
         huds.intro_team_blue = player:hud_add({
             hud_elem_type = "text",
@@ -169,14 +310,15 @@ function tdm_core.hud.show_intro(player, time, r_name, b_name)
             text = (b_name or "Wolf"):upper(),
             number = 0x5555FF,
             alignment = {x = 0, y = 0},
+            scale = 3,
         })
 
-        -- Pure Image-Based Countdown (Native Assets)
+        -- Pure Image-Based Countdown (Responsive)
         huds.intro_timer_img = player:hud_add({
             hud_elem_type = "image",
             position = {x = 0.5, y = 0.75},
             text = "tdm_hud_5.png",
-            scale = {x = 0.35, y = 0.35},
+            scale = {x = -25, y = -25},
             alignment = {x = 0, y = 0},
         })
     end
@@ -194,20 +336,136 @@ function tdm_core.hud.hide_intro(player)
     local huds = tdm_core.hud.player_huds[pname]
     if not huds then return end
     
-    local keys = {"intro_bar_red", "intro_bar_blue", "intro_vs", "intro_logo_red", "intro_logo_blue", "intro_team_red", "intro_team_blue", "intro_timer_img"}
-    for _, key in ipairs(keys) do
-        if huds[key] then
-            player:hud_remove(huds[key])
-            huds[key] = nil
+    -- Corrected keys to match actual intro elements
+    local keys = {
+        "intro_vs", "intro_bar_red", "intro_bar_blue", 
+        "intro_team_red", "intro_team_blue", 
+        "intro_logo_red", "intro_logo_blue", 
+        "intro_timer_img"
+    }
+    for _, k in ipairs(keys) do
+        if huds[k] then
+            player:hud_remove(huds[k])
+            huds[k] = nil
         end
     end
 end
 
-tdm_core.hud.update_timer = function(text)
+function tdm_core.hud.show_outro(player, data)
+    local pname = player:get_player_name()
+    local huds = tdm_core.hud.player_huds[pname]
+    if not huds then return end
+    
+    -- Clean previous state
+    tdm_core.hud.hide_outro(player)
+    
+    local title_color = 0xFFFFFF
+    if data.color == "red" then title_color = 0xFF4444
+    elseif data.color == "blue" then title_color = 0x4444FF end
+
+    -- 1. Full-Screen Backdrop
+    huds.outro_bg = player:hud_add({
+        hud_elem_type = "image",
+        position = {x = 0.5, y = 0.5},
+        text = "tdm_hud_bar.png^[colorize:#000000ee",
+        scale = {x = -2000, y = -2000},
+        alignment = {x = 0, y = 0},
+    })
+    
+    -- 2. Winner Header
+    huds.outro_title = player:hud_add({
+        hud_elem_type = "text",
+        position = {x = 0.5, y = 0.15},
+        text = data.title,
+        number = title_color,
+        scale = 3,
+        alignment = {x = 0, y = 0},
+    })
+    
+    -- 3. Dynamic Winner Logo (Resized to 75% for cleaner layout)
+    local win_logo = tdm_core.get_team_logo(data.win_team, "tdm_logo_library_dragon.png")
+    huds.outro_logo = player:hud_add({
+        hud_elem_type = "image",
+        position = {x = 0.5, y = 0.35},
+        text = win_logo,
+        scale = {x = 2.25, y = 2.25},
+        alignment = {x = 0, y = 0},
+    })
+    
+    -- 3.5 Interactive Return Button (Manual Transition)
+    core.show_formspec(pname, "tdm_core:outro_return", 
+        "size[4,2]bgcolor[#00000000;false]" ..
+        "style[return_lobby;bgcolor=#333333;textcolor=white;font=bold]" ..
+        "button[0,0.5;4,1;return_lobby;RETURN TO LOBBY]")
+    
+    -- 4. MVP Highlight (Gold Text)
+    local mvp_txt = "MVP: " .. data.mvp .. " (" .. data.mvp_kills .. " KILLS)"
+    huds.outro_mvp = player:hud_add({
+        hud_elem_type = "text",
+        position = {x = 0.5, y = 0.55}, -- Moved down slightly
+        text = mvp_txt,
+        number = 0xFFD700, -- Gold
+        scale = 1.5,
+        alignment = {x = 0, y = 0},
+    })
+    
+    -- 5. Detailed Scores (Two Columns)
+    local red_scores = "RED TEAM STANDINGS\n" .. string.rep("-", 30) .. "\n"
+    for _, p in ipairs(data.red_roster) do
+        red_scores = red_scores .. string.format("%-20s | %2d | %2d\n", p.name:sub(1,15), p.k, p.d)
+    end
+    
+    huds.outro_red = player:hud_add({
+        hud_elem_type = "text",
+        position = {x = 0.35, y = 0.78},
+        text = red_scores,
+        number = 0xFFAAAA,
+        scale = 1.2,
+        alignment = {x = 0, y = 0},
+    })
+    
+    local blue_scores = "BLUE TEAM STANDINGS\n" .. string.rep("-", 30) .. "\n"
+    for _, p in ipairs(data.blue_roster) do
+        blue_scores = blue_scores .. string.format("%-20s | %2d | %2d\n", p.name:sub(1,15), p.k, p.d)
+    end
+    
+    huds.outro_blue = player:hud_add({
+        hud_elem_type = "text",
+        position = {x = 0.65, y = 0.78},
+        text = blue_scores,
+        number = 0xAAAAFF,
+        scale = 1.2,
+        alignment = {x = 0, y = 0},
+    })
+end
+
+function tdm_core.hud.hide_outro(player)
+    local pname = player:get_player_name()
+    local huds = tdm_core.hud.player_huds[pname]
+    if not huds then return end
+    
+    local keys = {"outro_bg", "outro_title", "outro_logo", "outro_mvp", "outro_red", "outro_blue"}
+    for _, k in ipairs(keys) do
+        if huds[k] then
+            player:hud_remove(huds[k])
+            huds[k] = nil
+        end
+    end
+end
+
+tdm_core.hud.update_timer = function(text, is_critical)
     for _, player in ipairs(core.get_connected_players()) do
-        local huds = tdm_core.hud.player_huds[player:get_player_name()]
+        local pname = player:get_player_name()
+        local huds = tdm_core.hud.player_huds[pname]
         if huds and huds.timer then
             player:hud_change(huds.timer, "text", text)
+            if is_critical then
+                player:hud_change(huds.timer, "number", 0xFF4444) -- Red
+                player:hud_change(huds.timer, "scale", {x=2.5, y=2.5}) -- Large
+            else
+                player:hud_change(huds.timer, "number", 0xFFFF00) -- Gold
+                player:hud_change(huds.timer, "scale", {x=1.2, y=1.2}) -- Normal
+            end
         end
     end
 end
@@ -249,3 +507,95 @@ tdm_core.hud.update_ammo = function(player)
         player:hud_change(huds.ammo, "text", text)
     end
 end
+
+-- NEW STATS HUD LOGIC
+local player_scoreboard_visible = {} -- [pname] = bool
+
+tdm_core.hud.update_scoreboard = function()
+    local stats = tdm_core.match.player_stats or {}
+    local sorted = {}
+    for name, data in pairs(stats) do
+        table.insert(sorted, {name = name, kills = data.kills, deaths = data.deaths})
+    end
+    
+    -- Sort by kills desc, then deaths asc
+    table.sort(sorted, function(a, b)
+        if a.kills ~= b.kills then return a.kills > b.kills end
+        return a.deaths < b.deaths
+    end)
+    
+    local score_lines = {"=== STANDINGS ==="}
+    for i, p in ipairs(sorted) do
+        if i > 10 then break end -- Show top 10
+        table.insert(score_lines, string.format("%d. %-12s | K: %d  D: %d", i, p.name, p.kills, p.deaths))
+    end
+    
+    local full_text = table.concat(score_lines, "\n")
+    
+    for _, player in ipairs(core.get_connected_players()) do
+        local name = player:get_player_name()
+        local huds = tdm_core.hud.player_huds[name]
+        if huds and huds.scoreboard then
+            -- Update for spectators and any player currently holding the toggle key
+            if tdm_core.is_spectator(name) or player_scoreboard_visible[name] then
+                player:hud_change(huds.scoreboard, "text", full_text)
+            end
+        end
+    end
+    
+    return full_text
+end
+
+
+
+tdm_core.hud.toggle_scoreboard = function(player, visible)
+    local name = player:get_player_name()
+    if player_scoreboard_visible[name] == visible then return end
+    player_scoreboard_visible[name] = visible
+    
+    local huds = tdm_core.hud.player_huds[name]
+    if huds and huds.scoreboard then
+        local text = ""
+        if visible then
+            text = tdm_core.hud.update_scoreboard()
+        end
+        player:hud_change(huds.scoreboard, "text", text)
+        -- Also show/hide background bar? No, text matches branding bars enough.
+    end
+end
+
+-- Input and Periodic Update Loop
+local scoreboard_timer = 0
+core.register_globalstep(function(dtime)
+    scoreboard_timer = scoreboard_timer + dtime
+    local update_all = false
+    if scoreboard_timer >= 1.0 then
+        scoreboard_timer = 0
+        update_all = true
+    end
+    
+    for _, player in ipairs(core.get_connected_players()) do
+        local name = player:get_player_name()
+        local controls = player:get_player_control()
+        
+        -- Toggle if Aux1 (Special Key) is held
+        if not tdm_core.is_spectator(name) then
+            tdm_core.hud.toggle_scoreboard(player, controls.aux1)
+        elseif update_all then
+            -- Refresh spectator HUD periodically
+            tdm_core.hud.update_scoreboard()
+        end
+    end
+end)
+
+core.register_on_player_receive_fields(function(player, formname, fields)
+    if formname == "tdm_core:outro_return" and fields.return_lobby then
+        tdm_core.hud.hide_outro(player)
+        tdm_core.lobby.show(player)
+        -- Ensure lobby physics are reset
+        if not core.check_player_privs(player:get_player_name(), {server=true}) then
+            player:set_physics_override({speed = 0, jump = 0})
+        end
+        return true
+    end
+end)

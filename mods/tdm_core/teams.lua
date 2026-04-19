@@ -21,7 +21,9 @@ tdm_core.teams.assign_player = function(player_name)
     end
     
     local assigned_team = "red"
-    if blue_count < red_count then
+    if tdm_core.match.is_pve then
+        assigned_team = "blue"
+    elseif blue_count < red_count then
         assigned_team = "blue"
     end
     
@@ -40,10 +42,8 @@ tdm_core.teams.get_player_team = function(player_name)
     return tdm_core.teams.players[player_name]
 end
 
-core.register_on_joinplayer(function(player)
-    -- HUD only, no automatic team assignment
-    tdm_core.hud.init_hud(player)
-end)
+-- Join logic moved to match.lua for centralized management
+
 
 core.register_on_leaveplayer(function(player)
     tdm_core.teams.players[player:get_player_name()] = nil

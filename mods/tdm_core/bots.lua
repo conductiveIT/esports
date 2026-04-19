@@ -1,17 +1,44 @@
+local math_random = math.random
+local math_atan2 = math.atan2
+local math_pi = math.pi
+local vector_distance = vector.distance
+local vector_direction = vector.direction
+local vector_multiply = vector.multiply
+local core_get_node = core.get_node
+
 tdm_core.bots = {}
 
 local difficulty_settings = {
-    easy = { hp = 50, fire_rate = 1.5, spread = 0.2, damage = 5, speed = 3 },
-    medium = { hp = 100, fire_rate = 1.0, spread = 0.1, damage = 10, speed = 4.5 },
-    hard = { hp = 150, fire_rate = 0.5, spread = 0.05, damage = 15, speed = 5.5 }
+    easy = { hp = 70, fire_rate = 2.5, spread = 0.3, damage = 2, speed = 1.5 },
+    medium = { hp = 170, fire_rate = 1.5, spread = 0.15, damage = 5, speed = 3.0 },
+    hard = { hp = 340, fire_rate = 0.8, spread = 0.05, damage = 10, speed = 4.5 }
 }
 
-function tdm_core.bots.spawn(pos, diff)
+local class_settings = {
+    standard = { 
+        min_dist = 20, max_dist = 30, 
+        fire_mult = 1.0, dmg_mult = 1.0, speed_mult = 1.0, spread_mult = 1.0,
+        tint = "^[colorize:#FF4444:150" -- Red Tactical
+    },
+    sniper = { 
+        min_dist = 40, max_dist = 60, 
+        fire_mult = 2.5, dmg_mult = 3.0, speed_mult = 0.8, spread_mult = 0.05,
+        tint = "^[colorize:#FF4444:150" -- Red Tactical
+    },
+    rusher = { 
+        min_dist = 5, max_dist = 12, 
+        fire_mult = 0.5, dmg_mult = 0.5, speed_mult = 1.4, spread_mult = 2.0,
+        tint = "^[colorize:#FF4444:150" -- Red Tactical
+    }
+}
+
+function tdm_core.bots.spawn(pos, diff, class)
     local obj = core.add_entity(pos, "tdm_core:bot")
     if obj then
         local ent = obj:get_luaentity()
         if ent then
             ent:set_difficulty(diff)
+            ent:set_class(class)
         end
     end
 end
@@ -33,16 +60,27 @@ core.register_entity("tdm_core:bot", {
         collisionbox = {-0.3, 0.0, -0.3, 0.3, 1.7, 0.3},
         visual = "mesh",
         mesh = "character.b3d",
-        textures = {"character.png^[colorize:#FF3333:120"}, -- Red tint for bots
+        textures = {"character.png^[colorize:#FF4444:150"}, -- Standardized Red Tactical for bots
         is_visible = true,
         makes_footstep_sound = true,
     },
     
     _difficulty = "medium",
+    _class = "standard",
     _cooldown = 0,
     _anim = "",
-    _ammo = 0, -- Bots spawn empty and must loot
+    _ammo = 0, -- Bots spawn empty and must loot crates for ammo
+    _scan_timer = 0, -- Throttle node scans
     
+    set_class = function(self, class)
+        self._class = class or "standard"
+        local cdef = class_settings[self._class]
+        if cdef then
+            local tex = "character.png" .. cdef.tint
+            self.object:set_properties({textures = {tex}})
+        end
+    end,
+
     set_difficulty = function(self, diff)
         self._difficulty = diff or "medium"
         local def = difficulty_settings[self._difficulty]
@@ -77,115 +115,141 @@ core.register_entity("tdm_core:bot", {
         end
         
         local def = difficulty_settings[self._difficulty] or difficulty_settings["medium"]
+        local cdef = class_settings[self._class] or class_settings["standard"]
         self._cooldown = self._cooldown - dtime
+        self._scan_timer = self._scan_timer - dtime
         
         local pos = self.object:get_pos()
         
         -- LOOTING STATE: Need ammo
         if self._ammo <= 0 then
-            local rad = 25
-            local ppos = {x=math.floor(pos.x+0.5), y=math.floor(pos.y+0.5), z=math.floor(pos.z+0.5)}
-            local crates = core.find_nodes_in_area(
-                {x=ppos.x-rad, y=ppos.y-5, z=ppos.z-rad},
-                {x=ppos.x+rad, y=ppos.y+5, z=ppos.z+rad},
-                {"tdm_loot:box"}
-            )
-            
-            if #crates > 0 then
-                -- Find closest crate
-                local min_dist = 999
+            -- OPTIMIZED: Use internal cache and throttle scans to once every 2 seconds
+            if not self._target_crate or self._scan_timer <= 0 then
+                self._scan_timer = 2.0 
+                local min_dist = 30 -- Scan radius
                 local target_crate = nil
-                for _, cp in ipairs(crates) do
-                    local dist = vector.distance(pos, cp)
-                    if dist < min_dist then
-                        min_dist = dist
-                        target_crate = cp
-                    end
-                end
                 
-                if target_crate then
-                    if min_dist < 2.5 then
-                        -- Smash crate and grab loot!
-                        core.remove_node(target_crate)
-                        core.sound_play("tdm_break_crate", {pos = target_crate, max_hear_distance = 16})
-                        self._ammo = 30 -- Reload
-                        self.object:set_velocity({x=0, y=self.object:get_velocity().y, z=0})
-                        self:set_animation("stand")
-                    else
-                        -- Sprint to crate
-                        local target_pos = {x=target_crate.x, y=target_crate.y, z=target_crate.z}
-                        local dir = vector.direction(pos, target_pos)
-                        local yaw = math.atan2(dir.z, dir.x) - math.pi/2
-                        self.object:set_yaw(yaw)
-                        
-                        local vel = vector.multiply(dir, def.speed * 1.2) -- Move faster when looting
-                        vel.y = self.object:get_velocity().y
-                        
-                        -- Basic jump logic
-                        local front_node = core.get_node({x=pos.x+dir.x, y=pos.y, z=pos.z+dir.z})
-                        if front_node.name ~= "air" and core.registered_nodes[front_node.name].walkable then
-                            vel.y = 5 
+                if tdm_loot and tdm_loot.crate_positions then
+                    for _, cp in pairs(tdm_loot.crate_positions) do
+                        local d = vector_distance(pos, cp)
+                        if d < min_dist then
+                            min_dist = d
+                            target_crate = cp
                         end
-                        
-                        self.object:set_velocity(vel)
-                        self:set_animation("walk")
                     end
                 end
-                return -- Skip combat this tick
+                self._target_crate = target_crate
+            end
+            
+            -- If no crates found, don't just stand there - fall through to combat/hunt logic
+            if self._target_crate then
+                local dist = vector_distance(pos, self._target_crate)
+                if dist < 2.5 then
+                    -- Smash crate and grab loot!
+                    core.remove_node(self._target_crate)
+                    core.sound_play("tdm_break_crate", {pos = self._target_crate, max_hear_distance = 16})
+                    self._ammo = 30 -- Reload
+                    self._target_crate = nil
+                    self.object:set_velocity({x=0, y=self.object:get_velocity().y, z=0})
+                    self:set_animation("stand")
+                else
+                    -- Move toward crate
+                    local dir = vector_direction(pos, self._target_crate)
+                    self.object:set_yaw(math_atan2(-dir.x, dir.z))
+                    
+                    local vel = vector_multiply(dir, def.speed * 1.5)
+                    vel.y = self.object:get_velocity().y
+                    self.object:set_velocity(vel)
+                    self:set_animation("walk")
+
+                    -- Jump over obstacles
+                    local node_ahead = core.get_node({x=pos.x + dir.x, y=pos.y + 0.5, z=pos.z + dir.z})
+                    if node_ahead.name ~= "air" and node_ahead.name ~= "ignore" then
+                        local v = self.object:get_velocity()
+                        self.object:set_velocity({x=v.x, y=5, z=v.z})
+                    end
+                end
+                return
             end
         end
+
+        -- COMBAT STATE: Hunt Players
+        local target = nil
+        local min_dist = 100
         
-        -- COMBAT STATE: Hunt and Destroy
-        local nearest = nil
-        local min_dist = 9999
-        
-        -- Find target
-        for _, p in ipairs(core.get_connected_players()) do
-            local pname = p:get_player_name()
-            if not tdm_core.is_spectator(pname) and p:get_hp() > 0 then
-                local p_pos = p:get_pos()
-                local dist = vector.distance(pos, p_pos)
-                if dist < min_dist then
-                    min_dist = dist
-                    nearest = p
+        for _, player in ipairs(core.get_connected_players()) do
+            local pname = player:get_player_name()
+            if not tdm_core.is_spectator(pname) and player:get_hp() > 0 then
+                local ppos = player:get_pos()
+                local d = vector_distance(pos, ppos)
+                if d < min_dist then
+                    min_dist = d
+                    target = player
                 end
             end
         end
         
-        if nearest and min_dist < 40 then
-            local p_pos = nearest:get_pos()
-            p_pos.y = p_pos.y + 1.5 -- target chest
-            local dir = vector.direction(pos, p_pos)
+        if target then
+            local ppos = target:get_pos()
+            local dir = vector_direction(pos, ppos)
+            self.object:set_yaw(math_atan2(-dir.x, dir.z))
             
-            -- Look at player
-            local yaw = math.atan2(dir.z, dir.x) - math.pi/2
-            self.object:set_yaw(yaw)
+            -- Line of sight check
+            local ray = core.raycast({x=pos.x, y=pos.y+1.5, z=pos.z}, {x=ppos.x, y=ppos.y+1.5, z=ppos.z}, true, false)
+            local los = true
+            for pointed in ray do
+                if pointed.type == "node" then
+                    los = false
+                    break
+                end
+            end
             
-            -- Line of Sight Check
-            local los = core.line_of_sight({x=pos.x, y=pos.y+1.5, z=pos.z}, p_pos)
-            
-            if los and min_dist < 30 and self._ammo > 0 then
-                -- Open Fire
-                self.object:set_velocity({x=0, y=self.object:get_velocity().y, z=0})
-                self:set_animation("stand")
+            if los and min_dist < (cdef.max_dist or 30) and self._ammo > 0 then
+                -- Move toward ideal distance or back away if too close (for snipers)
+                if min_dist < (cdef.min_dist or 5) then
+                    -- Too close! Retreat or stay mobile
+                    local vel = vector_multiply(dir, -def.speed * cdef.speed_mult * 0.7)
+                    self.object:set_velocity({x=vel.x, y=self.object:get_velocity().y, z=vel.z})
+                    self:set_animation("walk")
+                else
+                    -- Ideal range: Stop and fire
+                    self.object:set_velocity({x=0, y=self.object:get_velocity().y, z=0})
+                    self:set_animation("stand")
+                end
                 
                 if self._cooldown <= 0 then
-                    self._cooldown = def.fire_rate
+                    self._cooldown = def.fire_rate * cdef.fire_mult
                     self._ammo = self._ammo - 1
-                    tdm_core.bots.shoot(self.object, nearest, def.damage, def.spread)
+                    
+                    local bullet_pos = {x=pos.x, y=pos.y + 1.5, z=pos.z}
+                    tdm_core.bots.shoot(self.object, target, def.damage * cdef.dmg_mult, def.spread * cdef.spread_mult)
+                    
+                    -- Muzzle flash
+                    core.add_particle({
+                        pos = bullet_pos,
+                        velocity = {x=0, y=0, z=0},
+                        acceleration = {x=0, y=0, z=0},
+                        expirationtime = 0.1,
+                        size = 5,
+                        collisiondetection = false,
+                        vertical = false,
+                        texture = "tdm_muzzle_flash.png",
+                        glow = 14
+                    })
                 end
             else
                 -- Advance aggressively
-                local vel = vector.multiply(dir, def.speed)
+                local vel = vector_multiply(dir, def.speed * cdef.speed_mult)
                 vel.y = self.object:get_velocity().y
-                
-                local front_node = core.get_node({x=pos.x+dir.x, y=pos.y, z=pos.z+dir.z})
-                if front_node.name ~= "air" and core.registered_nodes[front_node.name].walkable then
-                    vel.y = 5 
-                end
-                
                 self.object:set_velocity(vel)
                 self:set_animation("walk")
+                
+                -- Jump over obstacles
+                local node_ahead = core.get_node({x=pos.x + dir.x, y=pos.y + 0.5, z=pos.z + dir.z})
+                if node_ahead.name ~= "air" and node_ahead.name ~= "ignore" and node_ahead.name ~= "tdm_core:storm_gas" then
+                    local v = self.object:get_velocity()
+                    self.object:set_velocity({x=v.x, y=5, z=v.z})
+                end
             end
         else
             self.object:set_velocity({x=0, y=self.object:get_velocity().y, z=0})
@@ -194,7 +258,9 @@ core.register_entity("tdm_core:bot", {
     end,
     
     on_punch = function(self, puncher, time_from_last_punch, tool_capabilities, dir)
-        local hp = self.object:get_hp()
+        local damage = tool_capabilities.damage_groups.fleshy or 5
+        local hp = self.object:get_hp() - damage
+        
         if hp <= 0 then
             local pos = self.object:get_pos()
             core.add_particlespawner({
@@ -202,16 +268,28 @@ core.register_entity("tdm_core:bot", {
                 minpos = pos, maxpos = {x=pos.x, y=pos.y+2, z=pos.z},
                 minvel = {x=-2, y=-1, z=-2}, maxvel = {x=2, y=3, z=2},
                 minexptime = 1, maxexptime = 2, minsize = 2, maxsize = 4,
-                texture = "core_particle_white.png^[colorize:#FF0000:120"
+                texture = "core_particle_white.png^[colorize:#33FF33:150"
             })
             core.sound_play("tdm_hit", {pos = pos, max_hear_distance = 16})
             
-            -- Score integration: If puncher is player, give their team a point
+            -- Score integration
             if puncher and puncher:is_player() then
-                local p_team = tdm_core.teams.get_player_team(puncher:get_player_name())
+                local pname = puncher:get_player_name()
+                local p_team = tdm_core.teams.get_player_team(pname)
                 if p_team == "red" then tdm_core.teams.scores.red = tdm_core.teams.scores.red + 1 end
                 if p_team == "blue" then tdm_core.teams.scores.blue = tdm_core.teams.scores.blue + 1 end
+                
+                tdm_core.match.add_kill(pname)
                 tdm_core.hud.update_scores()
+                
+                -- Broadcast to Kill Feed
+                local tool = puncher:get_wielded_item():get_name()
+                local weapon = "pickaxe"
+                if tool:find("rifle") then weapon = "rifle"
+                elseif tool:find("shotgun") then weapon = "shotgun" end
+                tdm_core.hud.add_kill_event(pname, p_team, "Sentry", "bots", weapon)
+                
+                core.chat_send_all(">> Sentry Destroyed by " .. pname .. "!")
             end
             
             -- Auto-Respawn bot
@@ -224,8 +302,10 @@ core.register_entity("tdm_core:bot", {
             
             self.object:remove()
         else
+            self.object:set_hp(hp)
             core.sound_play("player_punch", {pos = self.object:get_pos(), max_hear_distance = 16, gain=0.5})
         end
+        return true -- We handled the damage logic manually
     end
 })
 
@@ -275,7 +355,7 @@ function tdm_core.bots.shoot(bot_obj, target_player, damage, spread)
         local tpos = vector.add(pos, vector.multiply(dir, d))
         core.add_particle({
             pos = tpos, velocity = {x=0, y=0, z=0}, expirationtime = 0.1,
-            size = 0.4, texture = "tdm_tracer.png^[colorize:#FF0000:200", glow = 14,
+            size = 0.4, texture = "tdm_tracer.png^[colorize:#33FF33:200", glow = 14,
         })
     end
 end

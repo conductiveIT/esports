@@ -64,6 +64,11 @@ tdm_mapgen = {}
 function tdm_mapgen.reset_island()
     core.log("action", "[TDM Mapgen] Resetting island for a new session...")
     
+    -- Clear internal caches
+    if tdm_loot and tdm_loot.clear_cache then
+        tdm_loot.clear_cache()
+    end
+    
     -- 1. Clear all items and entities on the island
     core.clear_objects({mode = "full"})
     

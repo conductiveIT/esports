@@ -2,6 +2,8 @@
 
 This is a fast-paced hitscan Team Deathmatch base game for Luanti with building and storm mechanics.
 
+Note: this was built using Antigravity with Gemini 3 Pro.  If you don't want to use AI generated conte
+
 ## How to Install & Play
 
 1. **Copy to Games Directory**
@@ -23,8 +25,25 @@ This is a fast-paced hitscan Team Deathmatch base game for Luanti with building 
    - **Building**: Select a Wall or Ramp Blueprint and left-click the terrain to instantly place a piece. 
    - **Storm**: A perimeter storm closes in over time during an active match. If you are too far from the center, you take periodic damage.
 
-## Next Steps
+## Commands
 
-Currently, the game uses solid-color placeholder textures (via Luanti texture modifiers). To improve the game visually:
-- Replace `textures/tdm_weapons_assault_rifle.png`, etc., with actual pixel art.
-- Replace sounds (`tdm_shoot_assault_rifle.ogg`, `tdm_build.ogg`) by creating a `sounds` folder in the respective mods.
+### Match Management
+*   `/match <red_team_name> <blue_team_name>`: Starts a competitive match between two registered league teams. This initializes the countdown and the storm.
+*   `/matchdebug <red_team_name> <blue_team_name>`: Starts a debug match with all standard weapons (Assault Rifle, Shotgun) and ammo provided immediately.
+*   `/botmatch <team_name> <bot_count> [difficulty]`: Starts a PVE match for a team against a specified number of AI bots. Difficulty can be `easy`, `medium`, or `hard`.
+
+### Player Commands
+*   `/spectate`: Toggles spectator mode. Spectators are invisible, can't take damage, and have no inventory.
+*   `/follow <player_name>`: While in spectator mode, smoothly follow another player's perspective.
+*   `/skin <1-3>`: Instantly change your player character's skin.
+
+### League & Team Administration
+*   `/team list`: List all registered teams and their members.
+*   `/league`: Display the current league standings.
+*   `/leaguesetleader <team_name> <player_name>`: Change the owner/leader of a team (Admin only).
+*   `/leaguedelete <team_name>`: Permanently remove a team from the league records (Admin only).
+
+### Lobby & GUI
+*   `/lobby`: Opens the Main Menu. 
+    - **Admins** can manage matchmaking, PVE settings, and league registration here.
+    - **Players** are automatically directed to the Leaderboard.
