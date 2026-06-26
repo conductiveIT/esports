@@ -231,11 +231,14 @@ local function get_formspec(name)
                 local d = stats.deaths or 0
                 local c = stats.captures or 0
                 local rating = k - d + (c * 10)
-                local kd = k
+                local kd = "0.0"
                 if d > 0 then
-                    kd = math.floor((k / d) * 10) / 10
+                    local val = math.floor((k / d) * 10)
+                    kd = tostring(math.floor(val / 10)) .. "." .. tostring(val % 10)
+                else
+                    kd = tostring(k) .. ".0"
                 end
-                table.insert(roster_items, string.format("%s (R:%d, KD:%.1f)", mname, rating, kd))
+                table.insert(roster_items, string.format("%s (R:%d KD:%s)", mname, rating, kd))
             end
 
             fs = fs ..
@@ -276,7 +279,7 @@ local function get_formspec(name)
             local board_items = {}
             for i, p in ipairs(sorted_players) do
                 if i > 50 then break end -- Show top 50
-                table.insert(board_items, string.format("%d. %s (R:%d, K:%d D:%d C:%d)", i, p.name, p.rating, p.kills, p.deaths, p.captures))
+                table.insert(board_items, string.format("%d. %s (R:%d K:%d D:%d C:%d)", i, p.name, p.rating, p.kills, p.deaths, p.captures))
             end
             if #board_items == 0 then
                 table.insert(board_items, "No player stats recorded yet")
@@ -340,7 +343,7 @@ local function get_formspec(name)
                 local d = stats.deaths or 0
                 local c = stats.captures or 0
                 local rating = k - d + (c * 10)
-                table.insert(roster_items, string.format("%s (R:%d, K:%d D:%d C:%d)", mname, rating, k, d, c))
+                table.insert(roster_items, string.format("%s (R:%d K:%d D:%d C:%d)", mname, rating, k, d, c))
             end
             
             fs = fs .. "textlist[0.5,4.8;6.0,4.0;roster_list;" .. table.concat(roster_items, ",") .. ";;false]"
