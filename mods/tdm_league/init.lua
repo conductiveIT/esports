@@ -125,21 +125,34 @@ core.register_chatcommand("team", {
         if not cmd then return false, "Usage: /team create|invite|join|leave|list" end
         
         if cmd == "create" then
-            if tdm_league.player_to_team[name] then
+            local is_admin = core.check_player_privs(name, {server = true})
+            if tdm_league.player_to_team[name] and not is_admin then
                 return false, "You are already in a team!"
             end
             if arg == "" then return false, "Please specify a team name." end
             if tdm_league.teams[arg] then return false, "Team name already taken." end
             
-            tdm_league.teams[arg] = {
-                leader = name,
-                members = {name},
-                wins = 0,
-                losses = 0
-            }
-            tdm_league.player_to_team[name] = arg
-            tdm_league.save()
-            return true, "Team '" .. arg .. "' created! You are the leader."
+            if is_admin then
+                -- Admin creates a team: empty leader, empty members, admin does not join
+                tdm_league.teams[arg] = {
+                    leader = "",
+                    members = {},
+                    wins = 0,
+                    losses = 0
+                }
+                tdm_league.save()
+                return true, "Team '" .. arg .. "' created by Administrator."
+            else
+                tdm_league.teams[arg] = {
+                    leader = name,
+                    members = {name},
+                    wins = 0,
+                    losses = 0
+                }
+                tdm_league.player_to_team[name] = arg
+                tdm_league.save()
+                return true, "Team '" .. arg .. "' created! You are the leader."
+            end
             
         elseif cmd == "invite" then
             local team_name = tdm_league.player_to_team[name]

@@ -98,6 +98,12 @@ local function get_formspec(name)
         "style[exit_server;bgcolor=#770000;textcolor=white]" ..
         "button[10.5,1.3;3.0,0.9;exit_server;DISCONNECT]"
         
+    if is_admin then
+        fs = fs ..
+            "style[exit_lobby;bgcolor=#555555;textcolor=white]" ..
+            "button[8.0,1.3;2.2,0.9;exit_lobby;EXIT]"
+    end
+        
     -- Dynamic Tab Highlighting Style
     local active_btn = ""
     if tab == "matchmaking" then active_btn = "tab_match"
@@ -241,17 +247,38 @@ local function get_formspec(name)
                 table.insert(roster_items, string.format("%s (R:%d KD:%s)", mname, rating, kd))
             end
 
-            fs = fs ..
-                "box[7.0,4.5;6.5,4.5;#222222aa]" ..
-                "label[7.2,5;TEAM: " .. selected:upper() .. "]" ..
-                "label[7.2,5.5;Leader: " .. data.leader .. "]" ..
-                "label[7.2,6.2;ROSTER:]" ..
-                "textlist[7.2,6.6;6.1,1.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
-                "button[7.2,8.2;6.1,0.6;unselect_team;Show Global Leaderboard]"
-            
             if is_admin then
-                -- Shifted right to avoid conflict with Create Team button
-                fs = fs .. "button[9.5,9.2;4.0,0.8;set_owner;SET AS OWNER]"
+                -- Admin Team Inspector Panel: Roster + Join Requests + Set Owner + Approve/Deny
+                local requests = tdm_league.requests[selected] or {}
+                fs = fs ..
+                    "box[7.0,4.5;6.5,4.6;#222222aa]" ..
+                    "label[7.2,4.9;TEAM: " .. selected:upper() .. "]" ..
+                    "label[7.2,5.3;Leader: " .. (data.leader ~= "" and data.leader or "None") .. "]" ..
+                    "label[7.2,5.8;ROSTER:]" ..
+                    "textlist[7.2,6.1;6.1,1.2;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
+                    "label[7.2,7.5;JOIN REQUESTS:]"
+                
+                if #requests > 0 then
+                    fs = fs ..
+                        "textlist[7.2,7.8;3.5,1.1;sel_request;" .. table.concat(requests, ",") .. ";;false]" ..
+                        "button[10.9,7.8;2.2,0.5;accept_request;APPROVE]" ..
+                        "button[10.9,8.4;2.2,0.5;deny_request;DENY]"
+                else
+                    fs = fs .. "label[7.2,8.1;No pending requests.]"
+                end
+                
+                fs = fs ..
+                    "button[7.0,9.2;3.0,0.8;unselect_team;BACK]" ..
+                    "button[10.2,9.2;3.3,0.8;set_owner;SET OWNER]"
+            else
+                -- Normal Team Inspector Panel
+                fs = fs ..
+                    "box[7.0,4.5;6.5,4.5;#222222aa]" ..
+                    "label[7.2,5;TEAM: " .. selected:upper() .. "]" ..
+                    "label[7.2,5.5;Leader: " .. (data.leader ~= "" and data.leader or "None") .. "]" ..
+                    "label[7.2,6.2;ROSTER:]" ..
+                    "textlist[7.2,6.6;6.1,1.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
+                    "button[7.2,8.2;6.1,0.6;unselect_team;Show Global Leaderboard]"
             end
         else
             -- Sort players for Global Leaderboard
@@ -292,8 +319,10 @@ local function get_formspec(name)
         end
         
         if is_admin then
-            fs = fs .. "field[0.5,9.2;4.5,0.8;new_team;New Team Name;]" ..
-            "button[5.2,9.2;3.5,0.8;create_team;CREATE TEAM]"
+            if not selected then
+                fs = fs .. "field[0.5,9.2;4.5,0.8;new_team;New Team Name;]" ..
+                "button[5.2,9.2;3.5,0.8;create_team;CREATE TEAM]"
+            end
         else
             fs = fs .. "label[0.5,9.2;Registration handled by administrators.]"
         end
@@ -334,7 +363,7 @@ local function get_formspec(name)
             
             fs = fs ..
                 "label[0.5,3.8;TEAM ROSTER: " .. p_team_name:upper() .. "]" ..
-                "label[0.5,4.3;Leader: " .. team_data.leader .. "]"
+                "label[0.5,4.3;Leader: " .. (team_data.leader ~= "" and team_data.leader or "None") .. "]"
                 
             local roster_items = {}
             for _, mname in ipairs(team_data.members) do
@@ -452,13 +481,15 @@ core.register_on_player_receive_fields(function(player, formname, fields)
     if fields.quit then
         local side = tdm_core.match.get_player_match_side(name)
         
-        if not side and not is_admin then
+        if not side and not tdm_core.is_spectator(name) and (not is_admin or not fields.exit_lobby) then
             core.after(0, function()
                 if core.get_player_by_name(name) then
                     tdm_core.lobby.show(player)
                 end
             end)
-            core.chat_send_player(name, "LOBBY: You must remain in the menu until a match starts.")
+            if not is_admin then
+                core.chat_send_player(name, "LOBBY: You must remain in the menu until a match starts.")
+            end
             return
         else
             tdm_core.lobby.blackout_hide(player)
@@ -598,25 +629,32 @@ core.register_on_player_receive_fields(function(player, formname, fields)
         tdm_core.lobby.show(player)
     end
 
-    -- Process Join Request (Owner)
+    -- Process Join Request (Owner or Admin)
     if fields.accept_request or fields.deny_request then
-        local idx = player_settings[name].sel_request_idx
-        local requests = tdm_league.requests[p_team_nav] or {}
-        local target = requests[idx]
+        local target_team = p_team_nav
+        if is_admin then
+            target_team = player_settings[name].selected_team
+        end
         
-        if target then
-            if fields.accept_request then
-                table.insert(tdm_league.teams[p_team_nav].members, target)
-                tdm_league.player_to_team[target] = p_team_nav
-                core.chat_send_player(target, "LOBBY: Your request to join '" .. p_team_nav .. "' was approved!")
-                core.chat_send_player(name, "LOBBY: Accepted " .. target .. " into the team.")
-            else
-                core.chat_send_player(target, "LOBBY: Your request to join '" .. p_team_nav .. "' was denied.")
-                core.chat_send_player(name, "LOBBY: Denied " .. target .. "'s request.")
+        local idx = player_settings[name].sel_request_idx
+        if target_team and idx then
+            local requests = tdm_league.requests[target_team] or {}
+            local target = requests[idx]
+            
+            if target then
+                if fields.accept_request then
+                    table.insert(tdm_league.teams[target_team].members, target)
+                    tdm_league.player_to_team[target] = target_team
+                    core.chat_send_player(target, "LOBBY: Your request to join '" .. target_team .. "' was approved!")
+                    core.chat_send_player(name, "LOBBY: Accepted " .. target .. " into the team.")
+                else
+                    core.chat_send_player(target, "LOBBY: Your request to join '" .. target_team .. "' was denied.")
+                    core.chat_send_player(name, "LOBBY: Denied " .. target .. "'s request.")
+                end
+                tdm_league.remove_request(target, target_team)
+                tdm_league.save()
+                tdm_core.lobby.show(player)
             end
-            tdm_league.remove_request(target, p_team_nav)
-            tdm_league.save()
-            tdm_core.lobby.show(player)
         end
     end
 
@@ -801,8 +839,8 @@ core.register_globalstep(function(dtime)
             -- Restore normal settings
             player:override_day_night_ratio(nil)
             
-            -- Close lobby formspec and hide blackout for participants/spectators
-            if side or tdm_core.is_spectator(name) then
+            -- Close lobby formspec and hide blackout for participants/spectators (except admins!)
+            if (side or tdm_core.is_spectator(name)) and not is_admin then
                 tdm_core.lobby.blackout_hide(player)
                 core.close_formspec(name, "tdm_core:lobby")
             end

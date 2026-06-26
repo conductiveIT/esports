@@ -870,6 +870,12 @@ function tdm_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_count, 
                 tdm_core.reset_player(p, tdm_core.match.is_debug)
                 p:set_pos(tdm_core.get_safe_spawn_pos(side))
                 tdm_core.hud.init_hud(p)
+                
+                -- Close lobby and hide blackout on match start
+                if tdm_core.lobby and tdm_core.lobby.blackout_hide then
+                    tdm_core.lobby.blackout_hide(p)
+                end
+                core.close_formspec(pname, "tdm_core:lobby")
             end
         end
     
