@@ -189,6 +189,13 @@ tdm_weapons.register_gun = function(name, def)
                 return itemstack
             end
             local p_name = user:get_player_name()
+            
+            -- CTF TACTICAL LOCKOUT: Cannot fire while carrying flag
+            if user:get_meta():get_int("has_flag") == 1 then
+                core.chat_send_player(p_name, "TACTICAL LOCKOUT: You cannot fire while carrying the flag! Rely on your team for cover.")
+                return itemstack
+            end
+
             local cd = tdm_weapons.cooldowns[p_name] or 0
             
             if cd <= 0 then
@@ -245,6 +252,13 @@ core.register_tool("tdm_weapons:assault_rifle", {
             return itemstack
         end
         local p_name = user:get_player_name()
+        
+        -- CTF TACTICAL LOCKOUT: Cannot fire while carrying flag
+        if user:get_meta():get_int("has_flag") == 1 then
+            core.chat_send_player(p_name, "TACTICAL LOCKOUT: You cannot fire while carrying the flag! Rely on your team for cover.")
+            return itemstack
+        end
+
         local cd = tdm_weapons.cooldowns[p_name] or 0
         local inv = user:get_inventory()
         
@@ -293,6 +307,13 @@ core.register_tool("tdm_weapons:shotgun", {
             return itemstack
         end
         local p_name = user:get_player_name()
+        
+        -- CTF TACTICAL LOCKOUT: Cannot fire while carrying flag
+        if user:get_meta():get_int("has_flag") == 1 then
+            core.chat_send_player(p_name, "TACTICAL LOCKOUT: You cannot fire while carrying the flag! Rely on your team for cover.")
+            return itemstack
+        end
+
         local cd = tdm_weapons.cooldowns[p_name] or 0
         local inv = user:get_inventory()
         

@@ -22,8 +22,9 @@ tdm_storm.target_radius = 120
 tdm_storm.center = {x=0, y=0, z=0}
 
 function tdm_storm.randomize_center()
+    local scale = tdm_core.match.current_map_scale or 1.0
     local angle = math.random() * math.pi * 2
-    local dist = math.random() * 50 -- within 50 blocks of center
+    local dist = math.random() * (50 * scale) -- scaled distance from center
     tdm_storm.center = {
         x = math.floor(math.cos(angle) * dist + 0.5),
         y = 0,
@@ -46,13 +47,15 @@ core.register_globalstep(function(dtime)
     if dtime_accumulator < 1 then return end
     dtime_accumulator = dtime_accumulator - 1
     
-    if tdm_core.match.state == "active" and not tdm_core.match.is_pve then
-        -- Shrink logic
-        local shrink_speed = 0.5 -- units per second
-        local min_radius = 27 -- Reduced by 10% for a tighter endgame confrontation
-        
-        if tdm_storm.current_radius > min_radius then
-            tdm_storm.current_radius = tdm_storm.current_radius - shrink_speed
+    if tdm_core.match.state == "active" then
+        -- Shrink logic (PVP TDM ONLY)
+        if not tdm_core.match.is_pve and not tdm_core.match.is_ctf then
+            local shrink_speed = 0.5 -- units per second
+            local min_radius = 27 -- Reduced by 10% for a tighter endgame confrontation
+            
+            if tdm_storm.current_radius > min_radius then
+                tdm_storm.current_radius = tdm_storm.current_radius - shrink_speed
+            end
         end
         
         -- Damage players outside
@@ -82,7 +85,7 @@ core.register_globalstep(function(dtime)
             end
         end
         
-        -- Visualize storm bounds by placing gas nodes
+        -- Visualize storm bounds by placing gas nodes (ALL MODES)
         local steps = math_floor(current_radius * math_pi * 2)
         local step_size = 2 -- RESTORED: Continuous ring for better visual impact
         for i = 0, steps, step_size do

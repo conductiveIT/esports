@@ -44,7 +44,8 @@ function tdm_core.bots.spawn(pos, diff, class)
 end
 
 function tdm_core.bots.clear_all()
-    for _, obj in pairs(core.object_refs) do
+    local all_objs = core.get_objects_inside_radius({x=0, y=0, z=0}, 500)
+    for _, obj in ipairs(all_objs) do
         local ent = obj:get_luaentity()
         if ent and ent.name == "tdm_core:bot" then
             obj:remove()
@@ -294,9 +295,10 @@ core.register_entity("tdm_core:bot", {
             
             -- Auto-Respawn bot
             local diff = self._difficulty
+            local class = self._class or "standard"
             core.after(2, function()
                 if tdm_core.match.state == "active" and tdm_core.match.is_pve then
-                    tdm_core.bots.spawn(tdm_core.get_safe_spawn_pos(nil), diff)
+                    tdm_core.bots.spawn(tdm_core.get_safe_spawn_pos("red"), diff, class)
                 end
             end)
             

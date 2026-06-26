@@ -148,26 +148,34 @@ core.register_globalstep(function(dtime)
             
             for _, p in ipairs(core.get_connected_players()) do
                 local pname = p:get_player_name()
-                local stats = tdm_core.match.player_stats[pname] or {kills=0, deaths=0}
+                local stats = tdm_core.match.player_stats[pname] or {kills=0, deaths=0, captures=0}
                 local p_team = tdm_core.teams.get_player_team(pname)
                 
                 if p_team == "red" then 
-                    table.insert(red_list, {name=pname, k=stats.kills, d=stats.deaths})
+                    table.insert(red_list, {name=pname, k=stats.kills, d=stats.deaths, c=stats.captures})
                 elseif p_team == "blue" then
-                    table.insert(blue_list, {name=pname, k=stats.kills, d=stats.deaths})
+                    table.insert(blue_list, {name=pname, k=stats.kills, d=stats.deaths, c=stats.captures})
                 end
                 
-                -- Determine MVP (Humans only)
-                if stats.kills > mvp.kills and not tdm_core.is_spectator(pname) then
-                    mvp = {name=pname, kills=stats.kills}
+                -- Determine MVP (Humans only) - prioritized by captures in CTF
+                local score = stats.kills
+                if tdm_core.match.is_ctf then score = (stats.captures * 10) + stats.kills end
+                
+                if score > mvp.kills and not tdm_core.is_spectator(pname) then
+                    mvp = {name=pname, kills=score}
                 end
                 
                 -- Freeze players for Outro
                 p:set_physics_override({speed = 0, jump = 0})
             end
             
-            -- SORT BY KILLS
-            local sort_fn = function(a, b) return a.k > b.k end
+            -- SORT BY PERFORMANCE (Captures if CTF, otherwise Kills)
+            local sort_fn = function(a, b) 
+                if tdm_core.match.is_ctf then
+                    if a.c ~= b.c then return a.c > b.c end
+                end
+                return a.k > b.k 
+            end
             table.sort(red_list, sort_fn)
             table.sort(blue_list, sort_fn)
             
@@ -177,6 +185,7 @@ core.register_globalstep(function(dtime)
                 color = win_color,
                 mvp = mvp.name,
                 mvp_kills = mvp.kills,
+                is_ctf = tdm_core.match.is_ctf,
                 win_team = win_team_id,
                 red_team = r_name,
                 blue_team = b_name,
@@ -251,9 +260,9 @@ end)
 
 core.register_on_dieplayer(function(player, reason)
     -- This handles scoring
-    if tdm_core.match.state == "active" then
+    if tdm_core.match.state == "active" and not tdm_core.match.is_ctf then
         local p_team = tdm_core.teams.get_player_team(player:get_player_name())
-        -- Simple scoring: if you die, the other team gets a point
+        -- Simple scoring: if you die, the other team gets a point (TDM ONLY)
         if p_team == "red" then
             tdm_core.teams.scores.blue = tdm_core.teams.scores.blue + 1
         elseif p_team == "blue" then
@@ -318,7 +327,7 @@ end)
 -- Helper stats functions
 function tdm_core.match.add_kill(name)
     if not tdm_core.match.player_stats[name] then
-        tdm_core.match.player_stats[name] = {kills = 0, deaths = 0}
+        tdm_core.match.player_stats[name] = {kills = 0, deaths = 0, captures = 0}
     end
     tdm_core.match.player_stats[name].kills = tdm_core.match.player_stats[name].kills + 1
     
@@ -337,7 +346,7 @@ end
 
 function tdm_core.match.add_death(name)
     if not tdm_core.match.player_stats[name] then
-        tdm_core.match.player_stats[name] = {kills = 0, deaths = 0}
+        tdm_core.match.player_stats[name] = {kills = 0, deaths = 0, captures = 0}
     end
     tdm_core.match.player_stats[name].deaths = tdm_core.match.player_stats[name].deaths + 1
     
@@ -354,51 +363,75 @@ function tdm_core.match.add_death(name)
     end
 end
 
+function tdm_core.match.add_capture(name)
+    if not tdm_core.match.player_stats[name] then
+        tdm_core.match.player_stats[name] = {kills = 0, deaths = 0, captures = 0}
+    end
+    tdm_core.match.player_stats[name].captures = tdm_core.match.player_stats[name].captures + 1
+    
+    if tdm_core.hud.update_scoreboard then
+        tdm_core.hud.update_scoreboard()
+    end
+end
+
 
 -- Helper to find a safe ground position within the storm and on the island
-function tdm_core.get_safe_spawn_pos(pname)
+function tdm_core.get_safe_spawn_pos(pname_or_side)
     local storm_center = tdm_storm.center
     local storm_radius = tdm_storm.current_radius
     local island_radius = 70 
     
-    local my_team = pname and tdm_core.teams.get_player_team(pname) or nil
+    local side = pname_or_side
+    local my_name = nil
+    if side and side ~= "red" and side ~= "blue" then
+        my_name = pname_or_side
+        side = tdm_core.match.get_player_match_side(my_name)
+    end
+    
+    local is_base_spawn = (tdm_core.match.is_ctf and side and tdm_core.ctf.bases[side])
     
     local attempts = 0
     while attempts < 50 do
-        local angle = math.random() * math.pi * 2
-        local dist = math.random() * (storm_radius * 0.8)
-        local target_x = storm_center.x + math.cos(angle) * dist
-        local target_z = storm_center.z + math.sin(angle) * dist
+        local target_x, target_z
         
-        -- Clamp to island
-        local dist_from_center = math.sqrt(target_x^2 + target_z^2)
-        if dist_from_center > island_radius then
-            local scale = island_radius / dist_from_center
-            target_x = target_x * scale
-            target_z = target_z * scale
+        if is_base_spawn then
+            -- CTF: Spawn TIGHTLY near own flag stand
+            local base = tdm_core.ctf.bases[side]
+            target_x = base.x + (math.random() * 20 - 10)
+            target_z = base.z + (math.random() * 20 - 10)
+        else
+            -- TDM / Standard: Randomly on island
+            local angle = math.random() * math.pi * 2
+            local dist = math.random() * (storm_radius * 0.8)
+            target_x = storm_center.x + math.cos(angle) * dist
+            target_z = storm_center.z + math.sin(angle) * dist
+            
+            -- Clamp to island
+            local dist_from_center = math.sqrt(target_x^2 + target_z^2)
+            if dist_from_center > island_radius then
+                local scale = island_radius / dist_from_center
+                target_x = target_x * scale
+                target_z = target_z * scale
+            end
         end
         
         -- Anti-Camp: Check for nearby hostiles (Players and Bots)
         local enemy_nearby = false
+        local safety_dist_enemy = is_base_spawn and 12 or 30 -- Reduced at bases to allow defense
+        local safety_dist_team = is_base_spawn and 4 or 20 -- Reduced at bases to allow clustering
         
         -- Check Player positions
         for _, alt_p in ipairs(core.get_connected_players()) do
             local other_name = alt_p:get_player_name()
-            local other_team = tdm_core.teams.get_player_team(other_name)
-            local is_enemy = false
-            
-            if pname then
-                -- I am a player: Enemies are players on other teams
-                if my_team and other_team and other_team ~= my_team then is_enemy = true end
-            else
-                -- I am a bot: All active players are enemies
-                is_enemy = true
-            end
-            
-            if is_enemy and not tdm_core.is_spectator(other_name) then
+            if other_name ~= my_name and not tdm_core.is_spectator(other_name) then
                 local other_pos = alt_p:get_pos()
                 local d = vector.distance({x=target_x, y=0, z=target_z}, {x=other_pos.x, y=0, z=other_pos.z})
-                if d < 30 then
+                
+                local other_side = tdm_core.match.get_player_match_side(other_name)
+                local is_enemy = (side and other_side and side ~= other_side)
+                local thresh = is_enemy and safety_dist_enemy or safety_dist_team
+                
+                if d < thresh then
                     enemy_nearby = true
                     break
                 end
@@ -407,14 +440,23 @@ function tdm_core.get_safe_spawn_pos(pname)
         
         -- Check Bot positions (using object scan)
         if not enemy_nearby then
-            local nearby_objects = core.get_objects_inside_radius({x=target_x, y=0, z=target_z}, 30)
+            local nearby_objects = core.get_objects_inside_radius({x=target_x, y=0, z=target_z}, safety_dist_enemy)
             for _, obj in ipairs(nearby_objects) do
                 local ent = obj:get_luaentity()
                 if ent and ent.name == "tdm_core:bot" then
-                    -- If I am a player, bots are always enemies
-                    -- If I am a bot, I should also spread out from other bots
-                    enemy_nearby = true
-                    break
+                    local other_pos = obj:get_pos()
+                    local d_bot = vector.distance({x=target_x, y=0, z=target_z}, {x=other_pos.x, y=0, z=other_pos.z})
+                    
+                    -- If we are a player on blue, bots (red) are enemies
+                    if side == "blue" and d_bot < safety_dist_enemy then
+                         enemy_nearby = true
+                         break
+                    end
+                    -- If we are a bot or a player on red, bots are teammates - check small radius
+                    if (not side or side == "red") and d_bot < safety_dist_team then
+                        enemy_nearby = true
+                        break
+                    end
                 end
             end
         end
@@ -431,13 +473,22 @@ function tdm_core.get_safe_spawn_pos(pname)
         attempts = attempts + 1
     end
     
-    return {x=0, y=2.0, z=0}
+    -- LAST RESORT: Forced Deployment at Base (if CTF)
+    if is_base_spawn then
+        local base = tdm_core.ctf.bases[side]
+        return {x=base.x + (math.random() * 6 - 3), y=base.y + 1, z=base.z + (math.random() * 6 - 3)}
+    end
+    
+    return {x=0, y=10.0, z=0}
 end
 
 -- Resets a player to a clean match state
 function tdm_core.reset_player(player, provide_weapons)
     local pname = player:get_player_name()
     local inv = player:get_inventory()
+    
+    -- Clear CTF state
+    player:get_meta():set_int("has_flag", 0)
     
     -- Wipe Inventories
     inv:set_list("main", {})
@@ -622,11 +673,37 @@ core.register_on_respawnplayer(function(player)
     return true
 end)
 
-function tdm_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_count, bot_diff)
-    local is_pve = pve_mode or false
-    tdm_core.match.is_pve = is_pve
+tdm_core.match.current_map_scale = 1.0
+
+function tdm_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_count, bot_diff, game_mode, map_size)
+    -- 1. DEEP STATE RESET: Purge all stale data and physical nodes
+    tdm_core.ctf.reset()
+    tdm_core.match.player_sides = {}
+    tdm_core.match.last_attacker = {}
+    tdm_core.match.player_stats = {}
     
-    -- World Time Logic
+    -- 2. Map Scaling
+    local scales = {Small = 0.5, Medium = 0.75, Large = 1.0}
+    local scale = scales[map_size or "Large"] or 1.0
+    tdm_core.match.current_map_scale = scale
+    
+    -- 3. Apply Scaling to Environment & CTF Data
+    tdm_storm.current_radius = 100 * scale
+    tdm_core.ctf.bases.red.x = 80 * scale
+    tdm_core.ctf.bases.blue.x = -80 * scale
+
+    -- 4. Mode Configuration
+    local is_pve = (pve_mode == true)
+    tdm_core.match.is_pve = is_pve
+    tdm_core.match.is_ctf = (game_mode == "ctf")
+    tdm_core.teams.scores = {red = 0, blue = 0}
+
+    -- 5. Physical Objective Deployment
+    if tdm_core.match.is_ctf then
+        tdm_core.ctf.spawn_flags()
+    end
+    
+    -- 6. World Time Logic
     core.settings:set("time_speed", "0") -- Freeze time
     if time_mode == "night" then
         core.set_timeofday(0) -- Midnight
@@ -634,18 +711,20 @@ function tdm_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_count, 
         core.set_timeofday(0.5) -- Noon
     end
 
-    -- Update Team Names for HUD
-    tdm_core.teams.active_team_names.red = t1
-    tdm_core.teams.active_team_names.blue = t2
+    -- 7. Update Team Names for HUD
+    if is_pve then
+        tdm_core.teams.active_team_names.red = "BOTS"
+        tdm_core.teams.active_team_names.blue = t1
+    else
+        tdm_core.teams.active_team_names.red = t1
+        tdm_core.teams.active_team_names.blue = t2
+    end
     
     -- Force HUD refresh for everyone
     for _, p in ipairs(core.get_connected_players()) do
         tdm_core.hud.init_hud(p)
     end
     tdm_core.hud.update_timer("MATCH ACTIVE!")
-
-    -- Initial Statistics wipe
-    tdm_core.match.player_stats = {}
 
     local players = core.get_connected_players()
     local t1_online = {}
@@ -713,9 +792,14 @@ function tdm_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_count, 
         end
     end
     
-    -- Reset Arena
+    -- Reset Arena and CTF State
     if tdm_mapgen and tdm_mapgen.reset_island then
         tdm_mapgen.reset_island()
+    end
+    
+    if tdm_core.match.is_ctf then
+        tdm_core.ctf.reset()
+        tdm_core.ctf.spawn_flags()
     end
     
     if tdm_storm then
@@ -766,7 +850,7 @@ function tdm_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_count, 
             for i = 1, count do
                 -- Tactical Mix: 60% Rusher (Aggressive Pressure), 40% Standard (Balanced)
                 local class = math.random() > 0.6 and "standard" or "rusher"
-                tdm_core.bots.spawn(tdm_core.get_safe_spawn_pos(nil), diff, class)
+                tdm_core.bots.spawn(tdm_core.get_safe_spawn_pos("red"), diff, class)
             end
         end)
         core.chat_send_all("PVE SENTRY PROTOCOL INITIATED. " .. (bot_count or 5) .. " Hostiles Detected.")

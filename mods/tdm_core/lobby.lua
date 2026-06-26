@@ -44,7 +44,11 @@ local function get_formspec(name)
     
     -- Ensure settings exist
     if not player_settings[name] then
-        player_settings[name] = { count = "5", diff = "medium", red = "", blue = "", pve = "", match_dur = "5m", match_tod = "Day" }
+        player_settings[name] = { 
+            count = "5", diff = "medium", red = "", blue = "", pve = "", 
+            match_dur = "5m", match_tod = "Day", match_mode = "TDM",
+            map_size = "Large"
+        }
     end
     local settings = player_settings[name]
     
@@ -115,14 +119,22 @@ local function get_formspec(name)
             "label[6.5,4.3;Current Setup: " .. settings.count .. " Bots, " .. settings.diff .. " difficulty]" ..
             
             "label[6.5,5.2;Player Team:]" ..
-            "dropdown[6.5,5.6;4,0.6;sel_pve;" .. teams_str .. ";" .. pve_idx .. "]" ..
+            "dropdown[6.5,5.6;4,0.6;sel_pve;" .. teams_str .. ";" .. pve_idx .. "]"
             
-            "box[1,8.0;10,1.2;#333333]" ..
+            local size_list = {"Small","Medium","Large"}
+            local size_idx = 3
+            for i, v in ipairs(size_list) do if v == settings.map_size then size_idx = i break end end
+
+            fs = fs .. "box[1,8.0;10,1.2;#333333]" ..
             "label[1.2,8.2;ARENA CONFIGURATION]" ..
-            "label[1.2,8.6;Match Duration:]" ..
-            "dropdown[3.5,8.5;2,0.6;sel_dur;1m,5m,10m,15m,20m,30m;2]" ..
-            "label[6,8.6;Time of Day:]" ..
-            "dropdown[8.5,8.5;2.5,0.6;sel_tod;Day,Night;1]" ..
+            "label[1.1,8.6;Dur:]" ..
+            "dropdown[1.7,8.5;1.5,0.6;sel_dur;1m,5m,10m,15m,20m,30m;2]" ..
+            "label[3.3,8.6;Mode:]" ..
+            "dropdown[4.2,8.5;1.5,0.6;sel_mode;TDM,CTF;" .. (settings.match_mode == "CTF" and 2 or 1) .. "]" ..
+            "label[5.8,8.6;Time:]" ..
+            "dropdown[6.6,8.5;1.5,0.6;sel_tod;Day,Night;1]" ..
+            "label[8.2,8.6;Size:]" ..
+            "dropdown[9.0,8.5;2.0,0.6;sel_map_size;Small,Medium,Large;" .. size_idx .. "]" ..
 
             "button[1,9.4;4,0.8;" .. start_comp_name .. ";START TEAM BATTLE]" ..
             "button[6.5,9.4;4,0.8;" .. start_pve_name .. ";START PVE MATCH]"
@@ -533,6 +545,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
     if fields.sel_pve then player_settings[name].pve = fields.sel_pve end
     if fields.sel_dur then player_settings[name].match_dur = fields.sel_dur end
     if fields.sel_tod then player_settings[name].match_tod = fields.sel_tod end
+    if fields.sel_mode then player_settings[name].match_mode = fields.sel_mode end
+    if fields.sel_map_size then player_settings[name].map_size = fields.sel_map_size end
 
     -- League Inspector Selection
     if fields.teams_list then
@@ -587,6 +601,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
             local dur_str = player_settings[name].match_dur or "5m"
             local dur = tonumber(dur_str:match("%d+")) * 60
             local tod = (player_settings[name].match_tod or "Day"):lower()
+            local mode = (player_settings[name].match_mode or "TDM"):lower()
             
             -- Auto-spectate if admin is not in the team
             if tdm_league.get_team(name) ~= p_team then
@@ -594,7 +609,9 @@ core.register_on_player_receive_fields(function(player, formname, fields)
                 if cmd and not tdm_core.is_spectator(name) then cmd.func(name, "") end
             end
 
-            tdm_core.match.start(p_team, "BOTS", dur, true, tod, count, diff)
+            local map_size = player_settings[name].map_size or "Large"
+
+            tdm_core.match.start(p_team, "BOTS", dur, true, tod, count, diff, mode, map_size)
             core.close_formspec(name, "tdm_core:lobby")
             return
         else
@@ -615,6 +632,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
                 local dur_str = player_settings[name].match_dur or "5m"
                 local dur = tonumber(dur_str:match("%d+")) * 60
                 local tod = (player_settings[name].match_tod or "Day"):lower()
+                local mode = (player_settings[name].match_mode or "TDM"):lower()
 
                 -- Auto-spectate if admin is not in either team
                 local my_team = tdm_league.get_team(name)
@@ -623,7 +641,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
                     if cmd and not tdm_core.is_spectator(name) then cmd.func(name, "") end
                 end
 
-                tdm_core.match.start(red, blue, dur, false, tod)
+                local map_size = player_settings[name].map_size or "Large"
+                tdm_core.match.start(red, blue, dur, false, tod, 0, nil, mode, map_size)
                 core.close_formspec(name, "tdm_core:lobby")
                 return
             end
@@ -635,6 +654,11 @@ core.register_on_player_receive_fields(function(player, formname, fields)
     if fields.stop_match and is_admin then
         tdm_core.match.state = "over"
         tdm_core.match.timer = 1
+        -- Clear state immediately to prevent stale data on instant restarts
+        tdm_core.match.player_sides = {}
+        tdm_core.teams.players = {}
+        tdm_core.match.player_stats = {}
+        
         if tdm_core.bots then tdm_core.bots.clear_all() end
         core.chat_send_all("ADMIN: Match has been stopped by " .. name)
         tdm_core.lobby.show(player)

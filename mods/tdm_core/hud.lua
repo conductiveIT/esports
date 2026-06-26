@@ -84,6 +84,26 @@ tdm_core.hud.init_hud = function(player)
         tdm_core.hud.update_ammo(player)
     end
     
+    -- CTF STATUS HUD (Top left area)
+    if tdm_core.match.is_ctf then
+        huds.ctf_status = player:hud_add({
+            hud_elem_type = "text",
+            position = {x = 0.05, y = 0.15},
+            alignment = {x = 1, y = 0},
+            number = 0xFFFF00,
+            text = "RED FLAG: HOME\nBLUE FLAG: HOME",
+        })
+
+        huds.carrier_alert = player:hud_add({
+            hud_elem_type = "text",
+            position = {x = 0.5, y = 0.4},
+            alignment = {x = 0, y = 0},
+            number = 0xFF4444, -- Bright Red/Orange Alert
+            text = "", -- Hidden by default
+            scale = {x = 2, y = 2},
+        })
+    end
+    
     -- Scoreboard HUD (Center or Top-Left)
     huds.scoreboard = player:hud_add({
         hud_elem_type = "text",
@@ -114,6 +134,36 @@ tdm_core.hud.update_scores = function()
             
             player:hud_change(huds.logo_red, "text", r_logo)
             player:hud_change(huds.logo_blue, "text", b_logo)
+        end
+    end
+    
+    -- Update CTF HUD if needed
+    if tdm_core.match.is_ctf then
+        local r_state = tdm_core.ctf.states.red:upper()
+        local b_state = tdm_core.ctf.states.blue:upper()
+        
+        local r_carrier = tdm_core.ctf.get_carrier("red")
+        local b_carrier = tdm_core.ctf.get_carrier("blue")
+        
+        if r_carrier then r_state = "TAKEN BY " .. r_carrier end
+        if b_carrier then b_state = "TAKEN BY " .. b_carrier end
+        
+        local status_text = "RED FLAG: " .. r_state .. "\nBLUE FLAG: " .. b_state
+        
+        for _, p in ipairs(core.get_connected_players()) do
+            local pname = p:get_player_name()
+            local huds = tdm_core.hud.player_huds[pname]
+            if huds and huds.ctf_status then
+                p:hud_change(huds.ctf_status, "text", status_text)
+                
+                -- Carrier Alert (Specific to the player holding a flag)
+                local has_flag = p:get_meta():get_int("has_flag") == 1
+                if has_flag then
+                    p:hud_change(huds.carrier_alert, "text", ">>> YOU HAVE THE FLAG <<<\nRETURN TO BASE!")
+                else
+                    p:hud_change(huds.carrier_alert, "text", "")
+                end
+            end
         end
     end
 end
@@ -392,49 +442,70 @@ function tdm_core.hud.show_outro(player, data)
         alignment = {x = 0, y = 0},
     })
     
-    -- 3.5 Interactive Return Button (Manual Transition)
+    -- 3.5 Interactive Return Button (Manual Transition) - Anchored Bottom
     core.show_formspec(pname, "tdm_core:outro_return", 
-        "size[4,2]bgcolor[#00000000;false]" ..
-        "style[return_lobby;bgcolor=#333333;textcolor=white;font=bold]" ..
-        "button[0,0.5;4,1;return_lobby;RETURN TO LOBBY]")
+        "size[8,2]position[0.5,0.85]anchor[0.5,0.5]bgcolor[#00000000;false]" ..
+        "style[return_lobby;bgcolor=#555555;textcolor=gold;font=bold;font_size=24]" ..
+        "button[0,0;8,1.5;return_lobby;RETURN TO LOBBY]")
     
     -- 4. MVP Highlight (Gold Text)
-    local mvp_txt = "MVP: " .. data.mvp .. " (" .. data.mvp_kills .. " KILLS)"
+    local mvp_label = data.is_ctf and "POINTS" or "KILLS"
+    local mvp_txt = "MVP: " .. data.mvp .. " (" .. data.mvp_kills .. " " .. mvp_label .. ")"
     huds.outro_mvp = player:hud_add({
         hud_elem_type = "text",
-        position = {x = 0.5, y = 0.55}, -- Moved down slightly
+        position = {x = 0.5, y = 0.50},
         text = mvp_txt,
-        number = 0xFFD700, -- Gold
+        number = 0xFFD700,
         scale = 1.5,
         alignment = {x = 0, y = 0},
     })
     
     -- 5. Detailed Scores (Two Columns)
-    local red_scores = "RED TEAM STANDINGS\n" .. string.rep("-", 30) .. "\n"
+    local red_scores = "RED TEAM STANDINGS\n"
+    if data.is_ctf then
+        red_scores = red_scores .. "PLAYER               | C | K | D\n" .. string.rep("-", 38) .. "\n"
+    else
+        red_scores = red_scores .. "PLAYER               | K | D\n" .. string.rep("-", 30) .. "\n"
+    end
+    
     for _, p in ipairs(data.red_roster) do
-        red_scores = red_scores .. string.format("%-20s | %2d | %2d\n", p.name:sub(1,15), p.k, p.d)
+        if data.is_ctf then
+            red_scores = red_scores .. string.format("%-20s |%2d |%2d |%2d\n", p.name:sub(1,15), p.c, p.k, p.d)
+        else
+            red_scores = red_scores .. string.format("%-20s |%2d |%2d\n", p.name:sub(1,15), p.k, p.d)
+        end
     end
     
     huds.outro_red = player:hud_add({
         hud_elem_type = "text",
-        position = {x = 0.35, y = 0.78},
+        position = {x = 0.35, y = 0.65}, -- Moved to middle
         text = red_scores,
         number = 0xFFAAAA,
-        scale = 1.2,
+        scale = 1.5,
         alignment = {x = 0, y = 0},
     })
     
-    local blue_scores = "BLUE TEAM STANDINGS\n" .. string.rep("-", 30) .. "\n"
+    local blue_scores = "BLUE TEAM STANDINGS\n"
+    if data.is_ctf then
+        blue_scores = blue_scores .. "PLAYER               | C | K | D\n" .. string.rep("-", 38) .. "\n"
+    else
+        blue_scores = blue_scores .. "PLAYER               | K | D\n" .. string.rep("-", 30) .. "\n"
+    end
+    
     for _, p in ipairs(data.blue_roster) do
-        blue_scores = blue_scores .. string.format("%-20s | %2d | %2d\n", p.name:sub(1,15), p.k, p.d)
+        if data.is_ctf then
+            blue_scores = blue_scores .. string.format("%-20s |%2d |%2d |%2d\n", p.name:sub(1,15), p.c, p.k, p.d)
+        else
+            blue_scores = blue_scores .. string.format("%-20s |%2d |%2d\n", p.name:sub(1,15), p.k, p.d)
+        end
     end
     
     huds.outro_blue = player:hud_add({
         hud_elem_type = "text",
-        position = {x = 0.65, y = 0.78},
+        position = {x = 0.65, y = 0.65}, -- Moved to middle
         text = blue_scores,
         number = 0xAAAAFF,
-        scale = 1.2,
+        scale = 1.5,
         alignment = {x = 0, y = 0},
     })
 end
@@ -451,6 +522,9 @@ function tdm_core.hud.hide_outro(player)
             huds[k] = nil
         end
     end
+    
+    -- Explicitly close the return button formspec
+    core.close_formspec(pname, "tdm_core:outro_return")
 end
 
 tdm_core.hud.update_timer = function(text, is_critical)
@@ -514,23 +588,36 @@ local player_scoreboard_visible = {} -- [pname] = bool
 tdm_core.hud.update_scoreboard = function()
     local stats = tdm_core.match.player_stats or {}
     local sorted = {}
+    local is_ctf = tdm_core.match.is_ctf
+    
     for name, data in pairs(stats) do
-        table.insert(sorted, {name = name, kills = data.kills, deaths = data.deaths})
+        table.insert(sorted, {name = name, kills = data.kills, deaths = data.deaths, captures = data.captures or 0})
     end
     
-    -- Sort by kills desc, then deaths asc
+    -- Dynamic Sort: Captures > Kills > Deaths (less is better)
     table.sort(sorted, function(a, b)
+        if is_ctf then
+            if a.captures ~= b.captures then return a.captures > b.captures end
+        end
         if a.kills ~= b.kills then return a.kills > b.kills end
         return a.deaths < b.deaths
     end)
     
-    local score_lines = {"=== STANDINGS ==="}
-    for i, p in ipairs(sorted) do
-        if i > 10 then break end -- Show top 10
-        table.insert(score_lines, string.format("%d. %-12s | K: %d  D: %d", i, p.name, p.kills, p.deaths))
-    end
+    -- Render Text
+    local header = is_ctf and "PLAYER               | CAP | KIL | DEA\n" or "PLAYER               | KILLS | DEATHS\n"
+    local separator = string.rep("-", is_ctf and 38 or 35) .. "\n"
+    local final_text = "MATCH STANDINGS\n" .. header .. separator
     
-    local full_text = table.concat(score_lines, "\n")
+    for i, p in ipairs(sorted) do
+        if i > 8 then break end -- Show top 8
+        local row
+        if is_ctf then
+            row = string.format("%-20s | %3d | %3d | %3d\n", p.name:sub(1,15), p.captures, p.kills, p.deaths)
+        else
+            row = string.format("%-20s | %5d | %7d\n", p.name:sub(1,15), p.kills, p.deaths)
+        end
+        final_text = final_text .. row
+    end
     
     for _, player in ipairs(core.get_connected_players()) do
         local name = player:get_player_name()
@@ -538,12 +625,12 @@ tdm_core.hud.update_scoreboard = function()
         if huds and huds.scoreboard then
             -- Update for spectators and any player currently holding the toggle key
             if tdm_core.is_spectator(name) or player_scoreboard_visible[name] then
-                player:hud_change(huds.scoreboard, "text", full_text)
+                player:hud_change(huds.scoreboard, "text", final_text)
             end
         end
     end
     
-    return full_text
+    return final_text
 end
 
 

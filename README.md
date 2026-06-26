@@ -2,7 +2,7 @@
 
 This is a fast-paced hitscan Team Deathmatch base game for Luanti with building and storm mechanics.
 
-Note: this was built using Antigravity with Gemini 3 Pro.  If you don't want to use AI generated conte
+Note: this was built using Antigravity with Gemini 3 Pro.  If you don't want to use AI generated content then this is not the mod for you.
 
 ## How to Install & Play
 
@@ -47,3 +47,4 @@ Note: this was built using Antigravity with Gemini 3 Pro.  If you don't want to 
 *   `/lobby`: Opens the Main Menu. 
     - **Admins** can manage matchmaking, PVE settings, and league registration here.
     - **Players** are automatically directed to the Leaderboard.
+œœ
