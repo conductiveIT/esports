@@ -465,7 +465,7 @@ function tdm_core.get_safe_spawn_pos(pname_or_side)
             -- Find the ground
             for y = 30, -20, -1 do
                 local node = core.get_node_or_nil({x=target_x, y=y, z=target_z})
-                if node and node.name ~= "air" and node.name ~= "ignore" and node.name ~= "tdm_storm:gas" then
+                if node and node.name ~= "air" and node.name ~= "ignore" and node.name ~= "tdm_storm:gas" and node.name ~= "tdm_storm:gas_wall" then
                     return {x=target_x, y=y + 0.5, z=target_z}
                 end
             end

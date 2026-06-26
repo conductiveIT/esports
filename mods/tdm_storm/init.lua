@@ -1,6 +1,10 @@
 tdm_storm = {}
 tdm_storm.current_radius = 100
+tdm_storm.target_radius = 120
+tdm_storm.center = {x=0, y=0, z=0}
+tdm_storm.placed_nodes = {}
 
+-- Register the original gas node for compatibility/fallback
 core.register_node("tdm_storm:gas", {
     description = "Storm Gas",
     drawtype = "glasslike",
@@ -18,8 +22,31 @@ core.register_node("tdm_storm:gas", {
     post_effect_color = {a = 100, r = 150, g = 0, b = 255}, -- Purple screen tint
 })
 
-tdm_storm.target_radius = 120
-tdm_storm.center = {x=0, y=0, z=0}
+-- Register the new highly-optimized long gas wall node
+core.register_node("tdm_storm:gas_wall", {
+    description = "Storm Gas Wall",
+    drawtype = "nodebox",
+    paramtype = "light",
+    paramtype2 = "facedir",
+    tiles = {"tdm_storm_gas.png"},
+    use_texture_alpha = "blend",
+    sunlight_propagates = true,
+    walkable = false,
+    pointable = false,
+    diggable = false,
+    climbable = false,
+    buildable_to = true,
+    is_ground_content = false,
+    groups = {not_in_creative_inventory = 1},
+    post_effect_color = {a = 100, r = 150, g = 0, b = 255}, -- Purple screen tint
+    node_box = {
+        type = "fixed",
+        fixed = {
+            -- A wall that is 1 block wide, 20 blocks high, and 10 blocks long
+            {-0.5, -2.0, -5.0, 0.5, 18.0, 5.0}
+        }
+    }
+})
 
 function tdm_storm.randomize_center()
     local scale = tdm_core.match.current_map_scale or 1.0
@@ -33,12 +60,81 @@ function tdm_storm.randomize_center()
     core.log("action", "[TDM Storm] Randomized center to: " .. core.pos_to_string(tdm_storm.center))
 end
 
-local math_floor = math.floor
-local math_cos = math.cos
-local math_sin = math.sin
-local math_pi = math.pi
-local core_get_node = core.get_node
-local core_set_node = core.set_node
+-- Draw a highly-optimized square storm using long wall blocks
+local function draw_square_storm(center, R)
+    local old_nodes = tdm_storm.placed_nodes or {}
+    
+    -- 1. Clear old nodes
+    for _, pos in ipairs(old_nodes) do
+        local node = core.get_node(pos)
+        if node.name == "tdm_storm:gas_wall" then
+            core.set_node(pos, {name = "air"})
+        end
+    end
+    tdm_storm.placed_nodes = {}
+    
+    -- If match is not active, don't draw new ones
+    if tdm_core.match.state ~= "active" then
+        return
+    end
+
+    local new_nodes = {}
+    local Y = 1 -- Place at default ground/sea level
+
+    local r_int = math.floor(R + 0.5)
+    local min_x = center.x - r_int
+    local max_x = center.x + r_int
+    local min_z = center.z - r_int
+    local max_z = center.z + r_int
+
+    -- West & East walls (aligned with Z axis, param2 = 0)
+    for z = min_z, max_z, 10 do
+        -- West wall
+        local pos_w = {x = min_x, y = Y, z = z}
+        core.set_node(pos_w, {name = "tdm_storm:gas_wall", param2 = 0})
+        table.insert(new_nodes, pos_w)
+        
+        -- East wall
+        local pos_e = {x = max_x, y = Y, z = z}
+        core.set_node(pos_e, {name = "tdm_storm:gas_wall", param2 = 0})
+        table.insert(new_nodes, pos_e)
+    end
+    -- Ensure corner coverage at positive end
+    if (max_z - min_z) % 10 ~= 0 then
+        local pos_w_end = {x = min_x, y = Y, z = max_z}
+        core.set_node(pos_w_end, {name = "tdm_storm:gas_wall", param2 = 0})
+        table.insert(new_nodes, pos_w_end)
+        
+        local pos_e_end = {x = max_x, y = Y, z = max_z}
+        core.set_node(pos_e_end, {name = "tdm_storm:gas_wall", param2 = 0})
+        table.insert(new_nodes, pos_e_end)
+    end
+
+    -- North & South walls (aligned with X axis, param2 = 1)
+    for x = min_x, max_x, 10 do
+        -- South wall
+        local pos_s = {x = x, y = Y, z = min_z}
+        core.set_node(pos_s, {name = "tdm_storm:gas_wall", param2 = 1})
+        table.insert(new_nodes, pos_s)
+        
+        -- North wall
+        local pos_n = {x = x, y = Y, z = max_z}
+        core.set_node(pos_n, {name = "tdm_storm:gas_wall", param2 = 1})
+        table.insert(new_nodes, pos_n)
+    end
+    -- Ensure corner coverage at positive end
+    if (max_x - min_x) % 10 ~= 0 then
+        local pos_s_end = {x = max_x, y = Y, z = min_z}
+        core.set_node(pos_s_end, {name = "tdm_storm:gas_wall", param2 = 1})
+        table.insert(new_nodes, pos_s_end)
+        
+        local pos_n_end = {x = max_x, y = Y, z = max_z}
+        core.set_node(pos_n_end, {name = "tdm_storm:gas_wall", param2 = 1})
+        table.insert(new_nodes, pos_n_end)
+    end
+    
+    tdm_storm.placed_nodes = new_nodes
+end
 
 local dtime_accumulator = 0
 
@@ -51,7 +147,7 @@ core.register_globalstep(function(dtime)
         -- Shrink logic (PVP TDM ONLY)
         if not tdm_core.match.is_pve and not tdm_core.match.is_ctf then
             local shrink_speed = 0.5 -- units per second
-            local min_radius = 27 -- Reduced by 10% for a tighter endgame confrontation
+            local min_radius = 27 -- tightness of endgame
             
             if tdm_storm.current_radius > min_radius then
                 tdm_storm.current_radius = tdm_storm.current_radius - shrink_speed
@@ -64,12 +160,17 @@ core.register_globalstep(function(dtime)
         local current_center = tdm_storm.center
         local current_radius = tdm_storm.current_radius
         
+        local min_x = current_center.x - current_radius
+        local max_x = current_center.x + current_radius
+        local min_z = current_center.z - current_radius
+        local max_z = current_center.z + current_radius
+        
         for _, player in ipairs(core.get_connected_players()) do
             local pname = player:get_player_name()
             local pos = player:get_pos()
-            local dist = math.sqrt((pos.x - current_center.x)^2 + (pos.z - current_center.z)^2)
             
-            if dist > current_radius then
+            -- Check if outside the square bounds
+            if pos.x < min_x or pos.x > max_x or pos.z < min_z or pos.z > max_z then
                 -- Player is outside the storm
                 if not tdm_core.is_spectator(pname) and player:get_hp() > 0 then
                     player:set_hp(player:get_hp() - 2)
@@ -85,25 +186,13 @@ core.register_globalstep(function(dtime)
             end
         end
         
-        -- Visualize storm bounds by placing gas nodes (ALL MODES)
-        local steps = math_floor(current_radius * math_pi * 2)
-        local step_size = 2 -- RESTORED: Continuous ring for better visual impact
-        for i = 0, steps, step_size do
-            local angle = (i / steps) * math_pi * 2
-            local px = math_floor(current_center.x + math_cos(angle) * current_radius + 0.5)
-            local pz = math_floor(current_center.z + math_sin(angle) * current_radius + 0.5)
-            
-            -- Place a vertical column of gas
-            for py = -2, 15 do
-                local rpos = {x=px, y=py, z=pz}
-                local node = core_get_node(rpos)
-                if node.name == "air" then
-                    core_set_node(rpos, {name="tdm_storm:gas"})
-                end
-            end
-        end
+        -- Visualize storm bounds by placing optimized gas walls
+        draw_square_storm(current_center, current_radius)
     else
-        -- Reset storm when not active
-        tdm_storm.current_radius = 100
+        -- Reset and clear storm when not active
+        if tdm_storm.current_radius ~= 100 or (tdm_storm.placed_nodes and #tdm_storm.placed_nodes > 0) then
+            tdm_storm.current_radius = 100
+            draw_square_storm(tdm_storm.center, 100) -- This will clear the old nodes since state is not active
+        end
     end
 end)
