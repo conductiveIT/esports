@@ -422,10 +422,11 @@ core.register_on_item_pickup(function(itemstack, picker, pointed_thing)
     end
 
     if item_name == "tdm_weapons:assault_rifle" or item_name == "tdm_weapons:shotgun" then
+        local ammo_name = (item_name == "tdm_weapons:assault_rifle") and "tdm_weapons:rifle_ammo" or "tdm_weapons:shotgun_ammo"
+        local count = (item_name == "tdm_weapons:assault_rifle") and 20 or 8
+
         if inv:contains_item("main", item_name) then
             -- Convert duplicate to ammo
-            local ammo_name = (item_name == "tdm_weapons:assault_rifle") and "tdm_weapons:rifle_ammo" or "tdm_weapons:shotgun_ammo"
-            local count = (item_name == "tdm_weapons:assault_rifle") and 20 or 8
             inv:add_item("ammo", ammo_name .. " " .. count)
             
             if pointed_thing and pointed_thing.ref then
@@ -434,10 +435,23 @@ core.register_on_item_pickup(function(itemstack, picker, pointed_thing)
             end
             tdm_core.hud.update_ammo(picker)
             return ItemStack("") -- Successfully scavenged
+        else
+            -- First time pickup: Give weapon AND starting ammo
+            local leftover = inv:add_item("main", itemstack)
+            if leftover:get_count() < itemstack:get_count() then
+                inv:add_item("ammo", ammo_name .. " " .. count)
+                
+                if pointed_thing and pointed_thing.ref then
+                    pointed_thing.ref:remove()
+                    core.sound_play("tdm_pickup", {pos = picker:get_pos(), gain = 0.5})
+                end
+                tdm_core.hud.update_ammo(picker)
+            end
+            return leftover
         end
     end
     
-    -- Manually implement pickup for weapons/items into 'main'
+    -- Manually implement pickup for other items (e.g. pickaxe, health pack) into 'main'
     local leftover = inv:add_item("main", itemstack)
     
     if leftover:get_count() < itemstack:get_count() then
