@@ -544,8 +544,9 @@ function tdm_core.reset_player(player, provide_weapons)
     end
     
     -- Give Utility Kit
-    inv:add_item("main", "tdm_building:blueprint_wall")
-    inv:add_item("main", "tdm_building:blueprint_ramp")
+    inv:set_stack("main", 2, ItemStack("tdm_building:blueprint_wall"))
+    inv:set_stack("main", 3, ItemStack("tdm_building:blueprint_ramp"))
+    player:set_wield_index(1) -- Select the empty Slot 1 (hand) immediately
     
     -- Give Weapons (Debug or Staging)
     if provide_weapons then
