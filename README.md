@@ -28,23 +28,28 @@ Note: this was built using Antigravity with Gemini 3 Pro.  If you don't want to 
 ## Commands
 
 ### Match Management
-*   `/match <red_team_name> <blue_team_name>`: Starts a competitive match between two registered league teams. This initializes the countdown and the storm.
-*   `/matchdebug <red_team_name> <blue_team_name>`: Starts a debug match with all standard weapons (Assault Rifle, Shotgun) and ammo provided immediately.
-*   `/botmatch <team_name> <bot_count> [difficulty]`: Starts a PVE match for a team against a specified number of AI bots. Difficulty can be `easy`, `medium`, or `hard`.
+*   `/match <team1> <team2> [duration] [off] [day/night]`: Starts a competitive match between two registered league teams. Optional parameters include match duration in seconds, `off` to disable friendly fire, and `day` or `night` to control match time (Admin only).
+*   `/matchdebug <team1> <team2> [off] [day/night]`: Starts a debug match instantly with all standard weapons and ammo provided immediately. Optional parameters include `off` to disable friendly fire, and `day` or `night` to control match time (Admin only).
+*   `/botmatch <team> <bot_count> [easy/medium/hard] [day/night]`: Starts a PVE match for a team against a specified number of AI bots. Bots replace the opposing team. Optional parameters include difficulty and `day` or `night` match time (Admin only).
 
 ### Player Commands
-*   `/spectate`: Toggles spectator mode. Spectators are invisible, can't take damage, and have no inventory.
-*   `/follow <player_name>`: While in spectator mode, smoothly follow another player's perspective.
-*   `/skin <1-3>`: Instantly change your player character's skin.
+*   `/spectate [player_name]`: Toggles spectator mode for yourself or another player. Spectators are invisible, can't take damage, have no inventory, and have flight/noclip privileges enabled (Admin only).
+*   `/follow [player_name] | off`: Follow a player cinematically while in spectator mode. Leave blank to open the follow menu, or use `off` to stop following.
+*   `/skin reset | #RRGGBB`: Tints your character skin with a hex color code, or resets it to the default (Admin only).
 
 ### League & Team Administration
-*   `/team list`: List all registered teams and their members.
-*   `/league`: Display the current league standings.
-*   `/leaguesetleader <team_name> <player_name>`: Change the owner/leader of a team (Admin only).
-*   `/leaguedelete <team_name>`: Permanently remove a team from the league records (Admin only).
+*   `/team create <name> | invite <player> | join | leave | logo <eagle/lion/dragon/skull> | list`: Manage your TDM League team.
+    - `create <name>`: Create a new team with yourself as leader.
+    - `invite <player>`: Invite a player to your team (leader only).
+    - `join`: Join the team that invited you.
+    - `leave`: Leave your current team.
+    - `logo <eagle/lion/dragon/skull>`: Set your team's logo (leader only).
+    - `list`: List all active teams, their leaders, and their points.
+*   `/league`: Display the current league standings (wins and losses).
+*   `/leaguesetleader <team_name> <player_name>`: Assign a player as the leader/owner of a team (Admin only).
+*   `/leaguedelete <team_name>`: Permanently remove a team and its members from the league (Admin only).
 
 ### Lobby & GUI
-*   `/lobby`: Opens the Main Menu. 
-    - **Admins** can manage matchmaking, PVE settings, and league registration here.
-    - **Players** are automatically directed to the Leaderboard.
-œœ
+*   `/lobby`: Opens the Main Menu.
+    - **Admins** can manage matchmaking, PVE settings, and league registration.
+    - **Players** are directed to the Leaderboard.
