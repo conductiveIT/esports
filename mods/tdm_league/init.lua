@@ -305,3 +305,38 @@ core.register_chatcommand("league", {
         return true, out
     end
 })
+
+core.register_chatcommand("leaderboard", {
+    description = "Show the Global Player Leaderboard (Rating = Kills - Deaths + Captures * 10)",
+    func = function(name, param)
+        local sorted = {}
+        for pname, stats in pairs(tdm_league.player_stats) do
+            local kills = stats.kills or 0
+            local deaths = stats.deaths or 0
+            local captures = stats.captures or 0
+            local rating = kills - deaths + (captures * 10)
+            table.insert(sorted, {
+                name = pname,
+                kills = kills,
+                deaths = deaths,
+                captures = captures,
+                rating = rating
+            })
+        end
+        
+        table.sort(sorted, function(a, b)
+            if a.rating ~= b.rating then return a.rating > b.rating end
+            if a.kills ~= b.kills then return a.kills > b.kills end
+            return a.deaths < b.deaths
+        end)
+        
+        local out = "=== GLOBAL PLAYER LEADERBOARD ===\n"
+        out = out .. string.format("%-15s | %-6s | %-5s | %-5s | %-5s\n", "Player", "Rating", "Kills", "Deaths", "Caps")
+        out = out .. "----------------------------------------------\n"
+        for i, p in ipairs(sorted) do
+            if i > 10 then break end -- Top 10
+            out = out .. string.format("%-15s | %-6d | %-5d | %-5d | %-5d\n", p.name:sub(1,15), p.rating, p.kills, p.deaths, p.captures)
+        end
+        return true, out
+    end
+})

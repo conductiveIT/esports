@@ -173,14 +173,16 @@ local function get_formspec(name)
             
             local roster_items = {}
             for _, mname in ipairs(data.members) do
-                local stats = tdm_league.player_stats[mname] or {kills=0, deaths=0}
+                local stats = tdm_league.player_stats[mname] or {kills=0, deaths=0, captures=0}
                 local k = stats.kills or 0
                 local d = stats.deaths or 0
+                local c = stats.captures or 0
+                local rating = k - d + (c * 10)
                 local kd = k
                 if d > 0 then
                     kd = math.floor((k / d) * 10) / 10
                 end
-                table.insert(roster_items, string.format("%s (KD: %.1f)", mname, kd))
+                table.insert(roster_items, string.format("%s (R:%d, KD:%.1f)", mname, rating, kd))
             end
 
             fs = fs ..
@@ -195,9 +197,41 @@ local function get_formspec(name)
                 fs = fs .. "button[8.0,9.2;3.5,0.8;set_owner;SET AS OWNER]"
             end
         else
+            -- Sort players for Global Leaderboard
+            local sorted_players = {}
+            for pname, stats in pairs(tdm_league.player_stats) do
+                local k = stats.kills or 0
+                local d = stats.deaths or 0
+                local c = stats.captures or 0
+                local rating = k - d + (c * 10)
+                table.insert(sorted_players, {
+                    name = pname,
+                    kills = k,
+                    deaths = d,
+                    captures = c,
+                    rating = rating
+                })
+            end
+            
+            table.sort(sorted_players, function(a, b)
+                if a.rating ~= b.rating then return a.rating > b.rating end
+                if a.kills ~= b.kills then return a.kills > b.kills end
+                return a.deaths < b.deaths
+            end)
+            
+            local board_items = {}
+            for i, p in ipairs(sorted_players) do
+                if i > 50 then break end -- Show top 50
+                table.insert(board_items, string.format("%d. %s (R:%d, K:%d D:%d C:%d)", i, p.name, p.rating, p.kills, p.deaths, p.captures))
+            end
+            if #board_items == 0 then
+                table.insert(board_items, "No player stats recorded yet")
+            end
+            
             fs = fs ..
                 "box[6.5,4.5;5,4.5;#222222aa]" ..
-                "label[6.7,6;Select team for details...]"
+                "label[6.7,5;GLOBAL LEADERBOARD]" ..
+                "textlist[6.7,5.4;4.6,3.3;global_leaderboard;" .. table.concat(board_items, ",") .. ";;false]"
         end
         
         if is_admin then
@@ -247,8 +281,12 @@ local function get_formspec(name)
                 
             local roster_items = {}
             for _, mname in ipairs(team_data.members) do
-                local stats = tdm_league.player_stats[mname] or {kills=0, deaths=0}
-                table.insert(roster_items, string.format("%s (K:%d D:%d)", mname, stats.kills, stats.deaths))
+                local stats = tdm_league.player_stats[mname] or {kills=0, deaths=0, captures=0}
+                local k = stats.kills or 0
+                local d = stats.deaths or 0
+                local c = stats.captures or 0
+                local rating = k - d + (c * 10)
+                table.insert(roster_items, string.format("%s (R:%d, K:%d D:%d C:%d)", mname, rating, k, d, c))
             end
             
             fs = fs .. "textlist[0.5,4.8;5.5,4.0;roster_list;" .. table.concat(roster_items, ",") .. ";;false]"

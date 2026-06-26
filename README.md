@@ -46,6 +46,7 @@ Note: this was built using Antigravity with Gemini 3 Pro.  If you don't want to 
     - `logo <eagle/lion/dragon/skull>`: Set your team's logo (leader only).
     - `list`: List all active teams, their leaders, and their points.
 *   `/league`: Display the current league standings (wins and losses).
+*   `/leaderboard`: Display the global player leaderboard based on Net Kill Differential and Flag Capture Bonus.
 *   `/leaguesetleader <team_name> <player_name>`: Assign a player as the leader/owner of a team (Admin only).
 *   `/leaguedelete <team_name>`: Permanently remove a team and its members from the league (Admin only).
 

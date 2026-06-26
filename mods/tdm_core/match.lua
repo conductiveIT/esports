@@ -325,6 +325,7 @@ core.register_on_dieplayer(function(player, reason)
 end)
 
 -- Helper stats functions
+-- Helper stats functions
 function tdm_core.match.add_kill(name)
     if not tdm_core.match.player_stats[name] then
         tdm_core.match.player_stats[name] = {kills = 0, deaths = 0, captures = 0}
@@ -336,11 +337,15 @@ function tdm_core.match.add_kill(name)
         tdm_core.hud.update_scoreboard()
     end
     
-    -- Persist to league
-    if tdm_league and tdm_league.player_stats then
-        if not tdm_league.player_stats[name] then tdm_league.player_stats[name] = {kills=0, deaths=0} end
-        tdm_league.player_stats[name].kills = tdm_league.player_stats[name].kills + 1
-        tdm_league.save()
+    -- Persist to league (PVP ONLY!)
+    if not tdm_core.match.is_pve then
+        if tdm_league and tdm_league.player_stats then
+            if not tdm_league.player_stats[name] then
+                tdm_league.player_stats[name] = {kills = 0, deaths = 0, captures = 0}
+            end
+            tdm_league.player_stats[name].kills = (tdm_league.player_stats[name].kills or 0) + 1
+            tdm_league.save()
+        end
     end
 end
 
@@ -355,11 +360,15 @@ function tdm_core.match.add_death(name)
         tdm_core.hud.update_scoreboard()
     end
     
-    -- Persist to league
-    if tdm_league and tdm_league.player_stats then
-        if not tdm_league.player_stats[name] then tdm_league.player_stats[name] = {kills=0, deaths=0} end
-        tdm_league.player_stats[name].deaths = tdm_league.player_stats[name].deaths + 1
-        tdm_league.save()
+    -- Persist to league (PVP ONLY!)
+    if not tdm_core.match.is_pve then
+        if tdm_league and tdm_league.player_stats then
+            if not tdm_league.player_stats[name] then
+                tdm_league.player_stats[name] = {kills = 0, deaths = 0, captures = 0}
+            end
+            tdm_league.player_stats[name].deaths = (tdm_league.player_stats[name].deaths or 0) + 1
+            tdm_league.save()
+        end
     end
 end
 
@@ -371,6 +380,17 @@ function tdm_core.match.add_capture(name)
     
     if tdm_core.hud.update_scoreboard then
         tdm_core.hud.update_scoreboard()
+    end
+    
+    -- Persist to league (PVP ONLY!)
+    if not tdm_core.match.is_pve then
+        if tdm_league and tdm_league.player_stats then
+            if not tdm_league.player_stats[name] then
+                tdm_league.player_stats[name] = {kills = 0, deaths = 0, captures = 0}
+            end
+            tdm_league.player_stats[name].captures = (tdm_league.player_stats[name].captures or 0) + 1
+            tdm_league.save()
+        end
     end
 end
 
