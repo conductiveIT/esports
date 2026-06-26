@@ -85,5 +85,4 @@ core.register_on_joinplayer(function(player)
     inv:set_list("main", {}) -- Clear inventory to remove old items
     inv:set_stack("main", 2, ItemStack("tdm_building:blueprint_wall"))
     inv:set_stack("main", 3, ItemStack("tdm_building:blueprint_ramp"))
-    player:set_wield_index(1) -- Select the empty Slot 1 (hand) immediately
 end)
