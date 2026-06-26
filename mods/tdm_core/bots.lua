@@ -122,6 +122,23 @@ core.register_entity("tdm_core:bot", {
         
         local pos = self.object:get_pos()
         
+        -- Update dynamic nametag with health bar for bots/sentries
+        local hp = self.object:get_hp()
+        local hp_max = self.object:get_properties().hp_max or 100
+        local pct = math.max(0, math.min(1, hp / hp_max))
+        local bars_total = 10
+        local filled = math.floor(pct * bars_total + 0.5)
+        local bar = ""
+        for i = 1, bars_total do
+            bar = bar .. (i <= filled and "|" or ".")
+        end
+        local tag_text = string.format("Sentry (%s) [%s]\n[%s] %d HP", self._difficulty:upper(), self._class:upper(), bar, hp)
+        
+        self.object:set_properties({
+            nametag = tag_text,
+            nametag_color = {a = 255, r = 255, g = 50, b = 50} -- Red tactical color for bot nametags
+        })
+        
         -- LOOTING STATE: Need ammo
         if self._ammo <= 0 then
             -- OPTIMIZED: Use internal cache and throttle scans to once every 2 seconds

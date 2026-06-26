@@ -14,9 +14,10 @@ tdm_core.match.player_sides = {} -- [name] = "red" or "blue" (Temporary override
 local dtime_accumulator = 0
 local proximity_accumulator = 0
 
+local proximity_accumulator = 0
 core.register_globalstep(function(dtime)
     proximity_accumulator = proximity_accumulator + dtime
-    if proximity_accumulator >= 0.2 then
+    if proximity_accumulator >= 0.1 then
         proximity_accumulator = 0
         local all_players = core.get_connected_players()
         for _, p in ipairs(all_players) do
@@ -26,29 +27,50 @@ core.register_globalstep(function(dtime)
             if tdm_core.is_spectator(pname) then
                 p:set_nametag_attributes({color = {a=0, r=0, g=0, b=0}})
             else
-                local p_pos = p:get_pos()
                 local show_name = false
+                local match_active = (tdm_core.match.state == "active" or tdm_core.match.state == "countdown")
                 
-                -- Loop to see if any combatant is near this player
-                for _, other in ipairs(all_players) do
-                    local other_name = other:get_player_name()
-                    if other_name ~= pname and not tdm_core.is_spectator(other_name) then
-                        if vector.distance(p_pos, other:get_pos()) < 15 then
-                            show_name = true
-                            break
+                if not match_active then
+                    -- Lobby mode: Always show names for players
+                    show_name = true
+                else
+                    -- Active match: Show names only if another combatant is within 15 meters (Tactical Proximity)
+                    local p_pos = p:get_pos()
+                    for _, other in ipairs(all_players) do
+                        local other_name = other:get_player_name()
+                        if other_name ~= pname and not tdm_core.is_spectator(other_name) then
+                            if vector.distance(p_pos, other:get_pos()) < 15 then
+                                show_name = true
+                                break
+                            end
                         end
                     end
                 end
                 
-                -- Apply team color and alpha
+                -- Apply team color, alpha, and dynamic health bar text
                 local team = tdm_core.teams.get_player_team(pname)
-                local is_alive = p:get_hp() > 0
+                local hp = p:get_hp()
+                local hp_max = p:get_properties().hp_max or 100
+                local is_alive = hp > 0
                 local a = (show_name and is_alive) and 255 or 0
                 local r, g, b = 200, 200, 200
                 if team == "red" then r, g, b = 255, 50, 50
                 elseif team == "blue" then r, g, b = 50, 50, 255 end
                 
-                p:set_nametag_attributes({color = {a = a, r = r, g = g, b = b}})
+                -- Construct dynamic nametag text with health bar
+                local bars_total = 10
+                local pct = math.max(0, math.min(1, hp / hp_max))
+                local filled = math.floor(pct * bars_total + 0.5)
+                local bar = ""
+                for i = 1, bars_total do
+                    bar = bar .. (i <= filled and "|" or ".")
+                end
+                local tag_text = string.format("%s\n[%s] %d HP", pname, bar, hp)
+                
+                p:set_nametag_attributes({
+                    text = tag_text,
+                    color = {a = a, r = r, g = g, b = b}
+                })
             end
         end
     end
