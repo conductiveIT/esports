@@ -1,4 +1,32 @@
 tdm_core.lobby = {}
+tdm_core.lobby.blackouts = {}
+
+function tdm_core.lobby.blackout_show(player)
+    local name = player:get_player_name()
+    if tdm_core.lobby.blackouts[name] then
+        return
+    end
+    
+    local hud_id = player:hud_add({
+        hud_elem_type = "image",
+        position = {x = 0.5, y = 0.5},
+        name = "lobby_blackout",
+        scale = {x = -100, y = -100}, -- 100% screen size
+        text = "tdm_hud_bar.png^[colorize:#000000:255", -- Solid black
+        alignment = {x = 0, y = 0},
+        offset = {x = 0, y = 0},
+    })
+    tdm_core.lobby.blackouts[name] = hud_id
+end
+
+function tdm_core.lobby.blackout_hide(player)
+    local name = player:get_player_name()
+    local hud_id = tdm_core.lobby.blackouts[name]
+    if hud_id then
+        player:hud_remove(hud_id)
+        tdm_core.lobby.blackouts[name] = nil
+    end
+end
 
 -- Store player current tab and settings
 local player_tabs = {} -- name -> tab_id
@@ -57,8 +85,8 @@ local function get_formspec(name)
     if teams_str == "" then teams_str = "No teams registered" end
     
     local fs = "formspec_version[6]" ..
-        "size[12,11]" ..
-        "background9[0,0;12,11;tdm_hud_bar.png;false;10]" ..
+        "size[14,11]" ..
+        "background9[0,0;14,11;tdm_hud_bar.png;false;10]" ..
         "style_type[button;bgcolor=#333333;textcolor=white;font=bold]" ..
         "style_type[label;textcolor=white;font=bold]" ..
         "style[btn_disabled;bgcolor=#111111;textcolor=#888888]" ..
@@ -68,20 +96,32 @@ local function get_formspec(name)
         "label[2.5,1;LUANTI ESPORTS - MAIN LOBBY]" ..
         "label[2.5,1.5;Current Team: " .. p_team .. "]" ..
         "style[exit_server;bgcolor=#770000;textcolor=white]" ..
-        "button[8.5,1.3;3.0,0.9;exit_server;DISCONNECT]"
+        "button[10.5,1.3;3.0,0.9;exit_server;DISCONNECT]"
+        
+    -- Dynamic Tab Highlighting Style
+    local active_btn = ""
+    if tab == "matchmaking" then active_btn = "tab_match"
+    elseif tab == "league" then active_btn = "tab_league"
+    elseif tab == "team" then active_btn = "tab_team"
+    elseif tab == "locker" then active_btn = "tab_locker"
+    elseif tab == "settings" then active_btn = "tab_settings" end
+    
+    if active_btn ~= "" then
+        fs = fs .. "style[" .. active_btn .. ";bgcolor=#0055aa;textcolor=white]"
+    end
         
     if is_admin then
         fs = fs .. 
-            "button[0.2,2.5;2.2,0.8;tab_match;MATCH]" ..
-            "button[2.6,2.5;2.2,0.8;tab_league;LEAGUE]" ..
-            "button[5.0,2.5;2.2,0.8;tab_team;TEAM]" ..
-            "button[7.4,2.5;2.2,0.8;tab_locker;LOCKER]" ..
-            "button[9.8,2.5;2.0,0.8;tab_settings;PVE]"
+            "button[0.5,2.5;2.4,0.8;tab_match;MATCH]" ..
+            "button[3.15,2.5;2.4,0.8;tab_league;LEAGUE]" ..
+            "button[5.8,2.5;2.4,0.8;tab_team;TEAM]" ..
+            "button[8.45,2.5;2.4,0.8;tab_locker;LOCKER]" ..
+            "button[11.1,2.5;2.4,0.8;tab_settings;PVE]"
     else
         fs = fs ..
-            "button[0.5,2.5;3.5,0.8;tab_league;LEAGUE]" ..
-            "button[4.25,2.5;3.5,0.8;tab_team;TEAM]" ..
-            "button[8.0,2.5;3.5,0.8;tab_locker;LOCKER]"
+            "button[0.5,2.5;4.0,0.8;tab_league;LEAGUE]" ..
+            "button[5.0,2.5;4.0,0.8;tab_team;TEAM]" ..
+            "button[9.5,2.5;4.0,0.8;tab_locker;LOCKER]"
     end
         
     local match_active = (tdm_core.match.state == "active")
@@ -104,46 +144,46 @@ local function get_formspec(name)
         end
 
         fs = fs .. 
-            "label[1,3.8;COMPETITIVE MATCH]" ..
-            "label[1,4.3;Choose the competing teams:]" ..
+            "label[0.8,3.8;COMPETITIVE MATCH]" ..
+            "label[0.8,4.3;Choose the competing teams:]" ..
             
-            "label[1,5.2;Red Team:]" ..
-            "dropdown[1,5.6;4,0.6;sel_red;" .. teams_str .. ";" .. red_idx .. "]" ..
+            "label[0.8,5.2;Red Team:]" ..
+            "dropdown[0.8,5.6;5.4,0.6;sel_red;" .. teams_str .. ";" .. red_idx .. "]" ..
             
-            "label[1,6.8;Blue Team:]" ..
-            "dropdown[1,7.2;4,0.6;sel_blue;" .. teams_str .. ";" .. blue_idx .. "]"
+            "label[0.8,6.8;Blue Team:]" ..
+            "dropdown[0.8,7.2;5.4,0.6;sel_blue;" .. teams_str .. ";" .. blue_idx .. "]"
             
-        fs = fs .. "box[5.5,3.8;0.1,4.0;#ffffff]" .. -- Divider (Shortened to avoid Arena overlap)
+        fs = fs .. "box[6.95,3.8;0.1,4.0;#ffffff]" .. -- Divider (Shortened to avoid Arena overlap)
             
-            "label[6.5,3.8;BOT PRACTICE (PVE)]" ..
-            "label[6.5,4.3;Current Setup: " .. settings.count .. " Bots, " .. settings.diff .. " difficulty]" ..
+            "label[7.4,3.8;BOT PRACTICE (PVE)]" ..
+            "label[7.4,4.3;Current Setup: " .. settings.count .. " Bots, " .. settings.diff .. " difficulty]" ..
             
-            "label[6.5,5.2;Player Team:]" ..
-            "dropdown[6.5,5.6;4,0.6;sel_pve;" .. teams_str .. ";" .. pve_idx .. "]"
+            "label[7.4,5.2;Player Team:]" ..
+            "dropdown[7.4,5.6;5.8,0.6;sel_pve;" .. teams_str .. ";" .. pve_idx .. "]"
             
             local size_list = {"Small","Medium","Large"}
             local size_idx = 3
             for i, v in ipairs(size_list) do if v == settings.map_size then size_idx = i break end end
-
-            fs = fs .. "box[1,8.0;10,1.2;#333333]" ..
-            "label[1.2,8.2;ARENA CONFIGURATION]" ..
-            "label[1.1,8.6;Dur:]" ..
-            "dropdown[1.7,8.5;1.5,0.6;sel_dur;1m,5m,10m,15m,20m,30m;2]" ..
-            "label[3.3,8.6;Mode:]" ..
-            "dropdown[4.2,8.5;1.5,0.6;sel_mode;TDM,CTF;" .. (settings.match_mode == "CTF" and 2 or 1) .. "]" ..
-            "label[5.8,8.6;Time:]" ..
-            "dropdown[6.6,8.5;1.5,0.6;sel_tod;Day,Night;1]" ..
-            "label[8.2,8.6;Size:]" ..
-            "dropdown[9.0,8.5;2.0,0.6;sel_map_size;Small,Medium,Large;" .. size_idx .. "]" ..
-
-            "button[1,9.4;4,0.8;" .. start_comp_name .. ";START TEAM BATTLE]" ..
-            "button[6.5,9.4;4,0.8;" .. start_pve_name .. ";START PVE MATCH]"
+ 
+            fs = fs .. "box[0.8,8.0;12.4,1.2;#333333]" ..
+            "label[1.0,8.2;ARENA CONFIGURATION]" ..
+            "label[1.0,8.8;Dur:]" ..
+            "dropdown[2.0,8.5;1.5,0.6;sel_dur;1m,5m,10m,15m,20m,30m;2]" ..
+            "label[3.9,8.8;Mode:]" ..
+            "dropdown[4.9,8.5;1.8,0.6;sel_mode;TDM,CTF;" .. (settings.match_mode == "CTF" and 2 or 1) .. "]" ..
+            "label[7.2,8.8;Time:]" ..
+            "dropdown[8.2,8.5;1.8,0.6;sel_tod;Day,Night;1]" ..
+            "label[10.5,8.8;Size:]" ..
+            "dropdown[11.5,8.5;1.5,0.6;sel_map_size;Small,Medium,Large;" .. size_idx .. "]" ..
+ 
+            "button[0.8,9.4;5.4,0.8;" .. start_comp_name .. ";START TEAM BATTLE]" ..
+            "button[7.8,9.4;5.4,0.8;" .. start_pve_name .. ";START PVE MATCH]"
             
         if match_active then
             fs = fs .. 
                 "style[stop_match;bgcolor=#770000;textcolor=white]" ..
                 "label[4.2,10.0;MATCH CURRENTLY IN PROGRESS]" ..
-                "button[1,10.4;10,0.5;stop_match;STOP MATCH]"
+                "button[0.8,10.4;12.4,0.5;stop_match;STOP MATCH]"
         end
     elseif tab == "league" then
         local sorted = {}
@@ -178,7 +218,7 @@ local function get_formspec(name)
         
         fs = fs ..
             "label[0.5,4;LEAGUE STANDINGS]" ..
-            "textlist[0.5,4.5;5.5,4.5;" .. list_name .. ";" .. table.concat(list_items, ",") .. ";" .. selected_idx .. ";false]"
+            "textlist[0.5,4.5;6.0,4.5;" .. list_name .. ";" .. table.concat(list_items, ",") .. ";" .. selected_idx .. ";false]"
             
         -- Team Inspector Panel
         if selected and tdm_league.teams[selected] then
@@ -199,16 +239,16 @@ local function get_formspec(name)
             end
 
             fs = fs ..
-                "box[6.5,4.5;5,4.5;#222222aa]" ..
-                "label[6.7,5;TEAM: " .. selected:upper() .. "]" ..
-                "label[6.7,5.5;Leader: " .. data.leader .. "]" ..
-                "label[6.7,6.2;ROSTER:]" ..
-                "textlist[6.7,6.6;4.6,1.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
-                "button[6.7,8.2;4.6,0.6;unselect_team;Show Global Leaderboard]"
+                "box[7.0,4.5;6.5,4.5;#222222aa]" ..
+                "label[7.2,5;TEAM: " .. selected:upper() .. "]" ..
+                "label[7.2,5.5;Leader: " .. data.leader .. "]" ..
+                "label[7.2,6.2;ROSTER:]" ..
+                "textlist[7.2,6.6;6.1,1.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
+                "button[7.2,8.2;6.1,0.6;unselect_team;Show Global Leaderboard]"
             
             if is_admin then
                 -- Shifted right to avoid conflict with Create Team button
-                fs = fs .. "button[8.0,9.2;3.5,0.8;set_owner;SET AS OWNER]"
+                fs = fs .. "button[9.5,9.2;4.0,0.8;set_owner;SET AS OWNER]"
             end
         else
             -- Sort players for Global Leaderboard
@@ -243,14 +283,14 @@ local function get_formspec(name)
             end
             
             fs = fs ..
-                "box[6.5,4.5;5,4.5;#222222aa]" ..
-                "label[6.7,5;GLOBAL LEADERBOARD]" ..
-                "textlist[6.7,5.4;4.6,3.3;global_leaderboard;" .. table.concat(board_items, ",") .. ";;false]"
+                "box[7.0,4.5;6.5,4.5;#222222aa]" ..
+                "label[7.2,5;GLOBAL LEADERBOARD]" ..
+                "textlist[7.2,5.4;6.1,3.3;global_leaderboard;" .. table.concat(board_items, ",") .. ";;false]"
         end
         
         if is_admin then
-            fs = fs .. "field[0.5,9.2;4,0.8;new_team;New Team Name;]" ..
-            "button[4.5,9.2;3,0.8;create_team;CREATE TEAM]"
+            fs = fs .. "field[0.5,9.2;4.5,0.8;new_team;New Team Name;]" ..
+            "button[5.2,9.2;3.5,0.8;create_team;CREATE TEAM]"
         else
             fs = fs .. "label[0.5,9.2;Registration handled by administrators.]"
         end
@@ -266,11 +306,11 @@ local function get_formspec(name)
 
             fs = fs ..
                 "label[0.5,3.8;FIND A TEAM]" ..
-                "textlist[0.5,4.3;5.5,4.5;find_teams;" .. table.concat(all_teams, ",") .. ";;false]" ..
-                "button[0.5,9.0;5.5,0.8;request_join;REQUEST TO JOIN]" ..
+                "textlist[0.5,4.3;6.0,4.5;find_teams;" .. table.concat(all_teams, ",") .. ";;false]" ..
+                "button[0.5,9.0;6.0,0.8;request_join;REQUEST TO JOIN]" ..
                 
-                "box[6.5,4.3;5,4.5;#222222aa]" ..
-                "label[6.7,4.8;PENDING INVITATIONS]"
+                "box[7.0,4.3;6.5,4.5;#222222aa]" ..
+                "label[7.2,4.8;PENDING INVITATIONS]"
                 
             local invites = {}
             for tname, target in pairs(tdm_league.invites) do
@@ -278,11 +318,11 @@ local function get_formspec(name)
             end
             
             if #invites > 0 then
-                fs = fs .. "textlist[6.7,5.3;4.6,2.5;sel_invite;" .. table.concat(invites, ",") .. ";;false]" ..
-                    "button[6.7,8.0;2.2,0.6;accept_invite;ACCEPT]" ..
-                    "button[9.1,8.0;2.2,0.6;decline_invite;DECLINE]"
+                fs = fs .. "textlist[7.2,5.3;6.1,2.5;sel_invite;" .. table.concat(invites, ",") .. ";;false]" ..
+                    "button[7.2,8.0;3.0,0.6;accept_invite;ACCEPT]" ..
+                    "button[10.3,8.0;3.0,0.6;decline_invite;DECLINE]"
             else
-                fs = fs .. "label[6.7,6;No pending invites.]"
+                fs = fs .. "label[7.2,6;No pending invites.]"
             end
         else
             -- SQUAD VIEW (Member or Owner)
@@ -303,26 +343,26 @@ local function get_formspec(name)
                 table.insert(roster_items, string.format("%s (R:%d, K:%d D:%d C:%d)", mname, rating, k, d, c))
             end
             
-            fs = fs .. "textlist[0.5,4.8;5.5,4.0;roster_list;" .. table.concat(roster_items, ",") .. ";;false]"
+            fs = fs .. "textlist[0.5,4.8;6.0,4.0;roster_list;" .. table.concat(roster_items, ",") .. ";;false]"
             
             if is_owner then
-                fs = fs .. "button[0.5,9.0;5.5,0.8;kick_player;KICK MEMBER]" ..
-                    "box[6.5,4.3;5,4.5;#222222aa]" ..
-                    "label[6.7,4.8;JOIN REQUESTS]"
+                fs = fs .. "button[0.5,9.0;6.0,0.8;kick_player;KICK MEMBER]" ..
+                    "box[7.0,4.3;6.5,4.5;#222222aa]" ..
+                    "label[7.2,4.8;JOIN REQUESTS]"
                     
                 local requests = tdm_league.requests[p_team_name] or {}
                 if #requests > 0 then
-                    fs = fs .. "textlist[6.7,5.3;4.6,2.5;sel_request;" .. table.concat(requests, ",") .. ";;false]" ..
-                        "button[6.7,8.0;2.2,0.6;accept_request;APPROVE]" ..
-                        "button[9.1,8.0;2.2,0.6;deny_request;DENY]"
+                    fs = fs .. "textlist[7.2,5.3;6.1,2.5;sel_request;" .. table.concat(requests, ",") .. ";;false]" ..
+                        "button[7.2,8.0;3.0,0.6;accept_request;APPROVE]" ..
+                        "button[10.3,8.0;3.0,0.6;deny_request;DENY]"
                 else
-                    fs = fs .. "label[6.7,6;No pending requests.]"
+                    fs = fs .. "label[7.2,6;No pending requests.]"
                 end
                 
-                fs = fs .. "field[6.5,9.2;3.5,0.8;invite_name;Invite Player;]" ..
-                    "button[10,9.2;1.5,0.8;send_invite;INVITE]"
+                fs = fs .. "field[7.0,9.2;4.5,0.8;invite_name;Invite Player;]" ..
+                    "button[11.6,9.2;1.9,0.8;send_invite;INVITE]"
             else
-                fs = fs .. "button[0.5,9.0;5.5,0.8;leave_team;LEAVE TEAM]"
+                fs = fs .. "button[0.5,9.0;6.0,0.8;leave_team;LEAVE TEAM]"
             end
         end
     elseif tab == "settings" then
@@ -367,25 +407,25 @@ local function get_formspec(name)
             fs = fs .. "label[1,3.5;Select your base field outfit:]"
             
             local skins = {
-                {id = "sam", name = "Tactical Sam", file = "character.png", portrait = "tdm_portrait_sam.png", x = 1},
-                {id = "elite", name = "Elite Soldier", file = "skin_1.png", portrait = "tdm_portrait_elite.png", x = 3.6},
-                {id = "recon", name = "Ghost Recon", file = "skin_2.png", portrait = "tdm_portrait_recon.png", x = 6.2},
-                {id = "infil", name = "Infiltrator", file = "skin_3.png", portrait = "tdm_portrait_infil.png", x = 8.8},
+                {id = "sam", name = "Tactical Sam", file = "character.png", portrait = "tdm_portrait_sam.png", x = 1.0},
+                {id = "elite", name = "Elite Soldier", file = "skin_1.png", portrait = "tdm_portrait_elite.png", x = 4.2},
+                {id = "recon", name = "Ghost Recon", file = "skin_2.png", portrait = "tdm_portrait_recon.png", x = 7.4},
+                {id = "infil", name = "Infiltrator", file = "skin_3.png", portrait = "tdm_portrait_infil.png", x = 10.6},
             }
-
+ 
             for _, s in ipairs(skins) do
                 -- High-Fidelity Operative Portrait
                 fs = fs .. "image[" .. s.x .. ",4.5;2.4,4.2;" .. s.portrait .. "]"
                 
                 if current == s.file then
                     fs = fs .. "style[set_skin_" .. s.id .. ";bgcolor=#00FF00;textcolor=black]"
-                    fs = fs .. "button[" .. s.x .. ",8.8;2,0.6;set_skin_" .. s.id .. ";ACTIVE]"
+                    fs = fs .. "button[" .. s.x .. ",8.8;2.4,0.6;set_skin_" .. s.id .. ";ACTIVE]"
                 else
-                    fs = fs .. "button[" .. s.x .. ",8.8;2,0.6;set_skin_" .. s.id .. ";SELECT]"
+                    fs = fs .. "button[" .. s.x .. ",8.8;2.4,0.6;set_skin_" .. s.id .. ";SELECT]"
                 end
                 fs = fs .. "label[" .. s.x .. ",4.2;" .. s.name .. "]"
             end
-
+ 
             fs = fs .. 
                 "label[1,10.0;Team colors will overlay these choices during a match.]"
         end
@@ -396,6 +436,7 @@ end
 
 function tdm_core.lobby.show(player)
     local name = player:get_player_name()
+    tdm_core.lobby.blackout_show(player)
     core.show_formspec(name, "tdm_core:lobby", get_formspec(name))
 end
 
@@ -416,6 +457,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
             end)
             core.chat_send_player(name, "LOBBY: You must remain in the menu until a match starts.")
             return
+        else
+            tdm_core.lobby.blackout_hide(player)
         end
     end
     
@@ -754,6 +797,12 @@ core.register_globalstep(function(dtime)
         else
             -- Restore normal settings
             player:override_day_night_ratio(nil)
+            
+            -- Close lobby formspec and hide blackout for participants/spectators
+            if side or tdm_core.is_spectator(name) then
+                tdm_core.lobby.blackout_hide(player)
+                core.close_formspec(name, "tdm_core:lobby")
+            end
         end
         
         -- DYNAMIC PRIVILEGE REFRESH: Ensure all active players can interact
@@ -795,6 +844,7 @@ core.register_on_joinplayer(function(player)
 end)
 
 core.register_on_leaveplayer(function(player)
+    tdm_core.lobby.blackouts[player:get_player_name()] = nil
     -- Delay to ensure core.get_connected_players() reflects the departure
     core.after(0.5, tdm_core.lobby.refresh_admins)
 end)
