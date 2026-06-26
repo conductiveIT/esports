@@ -83,7 +83,6 @@ core.register_on_joinplayer(function(player)
     local inv = player:get_inventory()
     inv:set_size("main", 8 * 4)
     inv:set_list("main", {}) -- Clear inventory to remove old items
-    inv:add_item("main", "tdm_weapons:pickaxe")
     inv:add_item("main", "tdm_building:blueprint_wall")
     inv:add_item("main", "tdm_building:blueprint_ramp")
 end)

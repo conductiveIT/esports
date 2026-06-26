@@ -544,7 +544,6 @@ function tdm_core.reset_player(player, provide_weapons)
     end
     
     -- Give Utility Kit
-    inv:add_item("main", "tdm_weapons:pickaxe")
     inv:add_item("main", "tdm_building:blueprint_wall")
     inv:add_item("main", "tdm_building:blueprint_ramp")
     
