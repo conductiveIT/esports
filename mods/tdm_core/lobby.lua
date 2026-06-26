@@ -162,12 +162,25 @@ local function get_formspec(name)
             table.insert(list_items, tname .. " (W: " .. d.wins .. " L: " .. d.losses .. ")")
         end
         
+        local selected = settings.selected_team
+        local selected_idx = 0
+        local list_name = "teams_list"
+        if selected then
+            for idx, tname in ipairs(sorted) do
+                if tname == selected then
+                    selected_idx = idx
+                    break
+                end
+            end
+        else
+            list_name = "teams_list_clear"
+        end
+        
         fs = fs ..
             "label[0.5,4;LEAGUE STANDINGS]" ..
-            "textlist[0.5,4.5;5.5,4.5;teams_list;" .. table.concat(list_items, ",") .. ";;false]"
+            "textlist[0.5,4.5;5.5,4.5;" .. list_name .. ";" .. table.concat(list_items, ",") .. ";" .. selected_idx .. ";false]"
             
         -- Team Inspector Panel
-        local selected = settings.selected_team
         if selected and tdm_league.teams[selected] then
             local data = tdm_league.teams[selected]
             
@@ -190,7 +203,8 @@ local function get_formspec(name)
                 "label[6.7,5;TEAM: " .. selected:upper() .. "]" ..
                 "label[6.7,5.5;Leader: " .. data.leader .. "]" ..
                 "label[6.7,6.2;ROSTER:]" ..
-                "textlist[6.7,6.6;4.6,2.2;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]"
+                "textlist[6.7,6.6;4.6,1.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
+                "button[6.7,8.2;4.6,0.6;unselect_team;Show Global Leaderboard]"
             
             if is_admin then
                 -- Shifted right to avoid conflict with Create Team button
@@ -587,8 +601,9 @@ core.register_on_player_receive_fields(function(player, formname, fields)
     if fields.sel_map_size then player_settings[name].map_size = fields.sel_map_size end
 
     -- League Inspector Selection
-    if fields.teams_list then
-        local event = core.explode_textlist_event(fields.teams_list)
+    local teams_list_field = fields.teams_list or fields.teams_list_clear
+    if teams_list_field then
+        local event = core.explode_textlist_event(teams_list_field)
         if event.type == "CHG" or event.type == "DCL" then
             local sorted = {}
             for tname, _ in pairs(tdm_league.teams) do
@@ -602,10 +617,19 @@ core.register_on_player_receive_fields(function(player, formname, fields)
             
             local selected = sorted[event.index]
             if selected then
-                player_settings[name].selected_team = selected
+                if player_settings[name].selected_team == selected then
+                    player_settings[name].selected_team = nil
+                else
+                    player_settings[name].selected_team = selected
+                end
                 tdm_core.lobby.show(core.get_player_by_name(name))
             end
         end
+    end
+
+    if fields.unselect_team then
+        player_settings[name].selected_team = nil
+        tdm_core.lobby.show(player)
     end
 
     -- Actions (Admin Only)
