@@ -246,10 +246,14 @@ end)
 core.register_on_punchplayer(function(player, hitter, time_from_last_punch, tool_capabilities, dir, damage)
     if not player or not hitter then return end
     local victim = player:get_player_name()
-    local attacker = hitter:get_player_name()
+    local attacker = nil
     local is_bot = false
     
-    if not attacker then
+    if hitter:is_player() then
+        attacker = hitter:get_player_name()
+    end
+    
+    if not attacker or attacker == "" then
         local ent = hitter:get_luaentity()
         if ent and ent.name == "tdm_core:bot" then
             attacker = "Sentry"
@@ -257,12 +261,16 @@ core.register_on_punchplayer(function(player, hitter, time_from_last_punch, tool
         end
     end
     
-    if not victim or not attacker or victim == attacker then return end
+    if not victim or not attacker or attacker == "" or victim == attacker then return end
     
-    local item = hitter:get_wielded_item():get_name()
     local weapon = "pickaxe"
-    if item:find("rifle") then weapon = "rifle"
-    elseif item:find("shotgun") then weapon = "shotgun" end
+    if hitter:is_player() then
+        local item = hitter:get_wielded_item():get_name()
+        if item:find("rifle") then weapon = "rifle"
+        elseif item:find("shotgun") then weapon = "shotgun" end
+    else
+        weapon = "rifle"
+    end
     
     tdm_core.match.last_attacker[victim] = {
         name = attacker,
@@ -315,14 +323,14 @@ core.register_on_dieplayer(function(player, reason)
         end
     end
     
-    if killer_name then
+    if killer_name and killer_name ~= "" then
         k_team = tdm_core.match.get_player_match_side(killer_name)
     end
     
     local v_team = tdm_core.match.get_player_match_side(victim)
-    tdm_core.hud.add_kill_event(killer_name or "Environment", k_team, victim, v_team, weapon)
+    tdm_core.hud.add_kill_event((killer_name and killer_name ~= "") and killer_name or "Environment", k_team, victim, v_team, weapon)
 
-    if killer_name then
+    if killer_name and killer_name ~= "" then
         tdm_core.match.add_kill(killer_name)
         core.chat_send_all(">> " .. victim .. " was eliminated by " .. killer_name .. "!")
     else
