@@ -22,12 +22,11 @@ core.register_node("tdm_storm:gas", {
     post_effect_color = {a = 100, r = 150, g = 0, b = 255}, -- Purple screen tint
 })
 
--- Register the new highly-optimized long gas wall node
-core.register_node("tdm_storm:gas_wall", {
-    description = "Storm Gas Wall",
+-- Register the new highly-optimized 2x20x2 circular storm gas column node
+core.register_node("tdm_storm:gas_column", {
+    description = "Storm Gas Column",
     drawtype = "nodebox",
     paramtype = "light",
-    paramtype2 = "facedir",
     tiles = {"tdm_storm_gas.png"},
     use_texture_alpha = "blend",
     sunlight_propagates = true,
@@ -42,8 +41,8 @@ core.register_node("tdm_storm:gas_wall", {
     node_box = {
         type = "fixed",
         fixed = {
-            -- A wall that is 1 block wide, 20 blocks high, and 10 blocks long
-            {-0.5, -2.0, -5.0, 0.5, 18.0, 5.0}
+            -- A column that is 2 blocks wide, 20 blocks high, and 2 blocks deep
+            {-1.0, -2.0, -1.0, 1.0, 18.0, 1.0}
         }
     }
 })
@@ -60,14 +59,14 @@ function tdm_storm.randomize_center()
     core.log("action", "[TDM Storm] Randomized center to: " .. core.pos_to_string(tdm_storm.center))
 end
 
--- Draw a highly-optimized square storm using long wall blocks
-local function draw_square_storm(center, R)
+-- Draw a highly-optimized circular storm using spaced 2x20x2 columns
+local function draw_circular_storm(center, R)
     local old_nodes = tdm_storm.placed_nodes or {}
     
     -- 1. Clear old nodes
     for _, pos in ipairs(old_nodes) do
         local node = core.get_node(pos)
-        if node.name == "tdm_storm:gas_wall" then
+        if node.name == "tdm_storm:gas_column" or node.name == "tdm_storm:gas_wall" then
             core.set_node(pos, {name = "air"})
         end
     end
@@ -81,56 +80,25 @@ local function draw_square_storm(center, R)
     local new_nodes = {}
     local Y = 1 -- Place at default ground/sea level
 
-    local r_int = math.floor(R + 0.5)
-    local min_x = center.x - r_int
-    local max_x = center.x + r_int
-    local min_z = center.z - r_int
-    local max_z = center.z + r_int
+    -- Calculate number of columns needed based on circumference
+    -- We place a column roughly every 2 meters for a visually continuous circle
+    local circumference = 2 * math.pi * R
+    local num_columns = math.max(8, math.floor(circumference / 2.0))
 
-    -- West & East walls (aligned with Z axis, param2 = 0)
-    for z = min_z, max_z, 10 do
-        -- West wall
-        local pos_w = {x = min_x, y = Y, z = z}
-        core.set_node(pos_w, {name = "tdm_storm:gas_wall", param2 = 0})
-        table.insert(new_nodes, pos_w)
-        
-        -- East wall
-        local pos_e = {x = max_x, y = Y, z = z}
-        core.set_node(pos_e, {name = "tdm_storm:gas_wall", param2 = 0})
-        table.insert(new_nodes, pos_e)
-    end
-    -- Ensure corner coverage at positive end
-    if (max_z - min_z) % 10 ~= 0 then
-        local pos_w_end = {x = min_x, y = Y, z = max_z}
-        core.set_node(pos_w_end, {name = "tdm_storm:gas_wall", param2 = 0})
-        table.insert(new_nodes, pos_w_end)
-        
-        local pos_e_end = {x = max_x, y = Y, z = max_z}
-        core.set_node(pos_e_end, {name = "tdm_storm:gas_wall", param2 = 0})
-        table.insert(new_nodes, pos_e_end)
-    end
+    local seen = {}
 
-    -- North & South walls (aligned with X axis, param2 = 1)
-    for x = min_x, max_x, 10 do
-        -- South wall
-        local pos_s = {x = x, y = Y, z = min_z}
-        core.set_node(pos_s, {name = "tdm_storm:gas_wall", param2 = 1})
-        table.insert(new_nodes, pos_s)
+    for i = 1, num_columns do
+        local angle = (i / num_columns) * math.pi * 2
+        local px = math.floor(center.x + math.cos(angle) * R + 0.5)
+        local pz = math.floor(center.z + math.sin(angle) * R + 0.5)
         
-        -- North wall
-        local pos_n = {x = x, y = Y, z = max_z}
-        core.set_node(pos_n, {name = "tdm_storm:gas_wall", param2 = 1})
-        table.insert(new_nodes, pos_n)
-    end
-    -- Ensure corner coverage at positive end
-    if (max_x - min_x) % 10 ~= 0 then
-        local pos_s_end = {x = max_x, y = Y, z = min_z}
-        core.set_node(pos_s_end, {name = "tdm_storm:gas_wall", param2 = 1})
-        table.insert(new_nodes, pos_s_end)
-        
-        local pos_n_end = {x = max_x, y = Y, z = max_z}
-        core.set_node(pos_n_end, {name = "tdm_storm:gas_wall", param2 = 1})
-        table.insert(new_nodes, pos_n_end)
+        local hash = px .. "," .. pz
+        if not seen[hash] then
+            seen[hash] = true
+            local pos = {x = px, y = Y, z = pz}
+            core.set_node(pos, {name = "tdm_storm:gas_column"})
+            table.insert(new_nodes, pos)
+        end
     end
     
     tdm_storm.placed_nodes = new_nodes
@@ -160,17 +128,14 @@ core.register_globalstep(function(dtime)
         local current_center = tdm_storm.center
         local current_radius = tdm_storm.current_radius
         
-        local min_x = current_center.x - current_radius
-        local max_x = current_center.x + current_radius
-        local min_z = current_center.z - current_radius
-        local max_z = current_center.z + current_radius
-        
         for _, player in ipairs(core.get_connected_players()) do
             local pname = player:get_player_name()
             local pos = player:get_pos()
             
-            -- Check if outside the square bounds
-            if pos.x < min_x or pos.x > max_x or pos.z < min_z or pos.z > max_z then
+            -- Circular distance check to match the map shape
+            local dist = math.sqrt((pos.x - current_center.x)^2 + (pos.z - current_center.z)^2)
+            
+            if dist > current_radius then
                 -- Player is outside the storm
                 if not tdm_core.is_spectator(pname) and player:get_hp() > 0 then
                     player:set_hp(player:get_hp() - 2)
@@ -186,13 +151,13 @@ core.register_globalstep(function(dtime)
             end
         end
         
-        -- Visualize storm bounds by placing optimized gas walls
-        draw_square_storm(current_center, current_radius)
+        -- Visualize storm bounds by placing optimized circular gas columns
+        draw_circular_storm(current_center, current_radius)
     else
         -- Reset and clear storm when not active
         if tdm_storm.current_radius ~= 100 or (tdm_storm.placed_nodes and #tdm_storm.placed_nodes > 0) then
             tdm_storm.current_radius = 100
-            draw_square_storm(tdm_storm.center, 100) -- This will clear the old nodes since state is not active
+            draw_circular_storm(tdm_storm.center, 100) -- This will clear the old nodes since state is not active
         end
     end
 end)
