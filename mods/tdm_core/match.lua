@@ -47,25 +47,16 @@ core.register_globalstep(function(dtime)
                     end
                 end
                 
-                -- Apply team color, alpha, and dynamic health bar text
+                -- Apply team color, alpha, and dynamic health text
                 local team = tdm_core.teams.get_player_team(pname)
                 local hp = p:get_hp()
-                local hp_max = p:get_properties().hp_max or 100
                 local is_alive = hp > 0
                 local a = (show_name and is_alive) and 255 or 0
                 local r, g, b = 200, 200, 200
                 if team == "red" then r, g, b = 255, 50, 50
                 elseif team == "blue" then r, g, b = 50, 50, 255 end
                 
-                -- Construct dynamic nametag text with health bar
-                local bars_total = 10
-                local pct = math.max(0, math.min(1, hp / hp_max))
-                local filled = math.floor(pct * bars_total + 0.5)
-                local bar = ""
-                for i = 1, bars_total do
-                    bar = bar .. (i <= filled and "|" or ".")
-                end
-                local tag_text = string.format("%s\n[%s] %d HP", pname, bar, hp)
+                local tag_text = string.format("%s (%d HP)", pname, hp)
                 
                 p:set_nametag_attributes({
                     text = tag_text,
