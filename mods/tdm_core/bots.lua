@@ -9,9 +9,9 @@ local core_get_node = core.get_node
 tdm_core.bots = {}
 
 local difficulty_settings = {
-    easy = { hp = 70, fire_rate = 2.5, spread = 0.3, damage = 2, speed = 1.5 },
-    medium = { hp = 170, fire_rate = 1.5, spread = 0.15, damage = 5, speed = 3.0 },
-    hard = { hp = 340, fire_rate = 0.8, spread = 0.05, damage = 10, speed = 4.5 }
+    easy = { hp = 70, fire_rate = 1.5, spread = 0.3, damage = 6, speed = 1.5 },
+    medium = { hp = 170, fire_rate = 0.8, spread = 0.15, damage = 12, speed = 3.0 },
+    hard = { hp = 340, fire_rate = 0.4, spread = 0.05, damage = 18, speed = 4.5 }
 }
 
 local class_settings = {
