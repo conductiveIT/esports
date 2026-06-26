@@ -6,6 +6,132 @@ local vector_direction = vector.direction
 local vector_multiply = vector.multiply
 local core_get_node = core.get_node
 
+local function get_obstacle_in_way(pos, dir)
+    local check_dists = {0.8, 1.5, 2.2}
+    local check_heights = {0.5, 1.5}
+    for _, dist in ipairs(check_dists) do
+        for _, height in ipairs(check_heights) do
+            local check_pos = vector.round({
+                x = pos.x + dir.x * dist,
+                y = pos.y + height,
+                z = pos.z + dir.z * dist
+            })
+            local node = core.get_node(check_pos)
+            if core.get_item_group(node.name, "player_built") > 0 then
+                return check_pos, node
+            end
+        end
+    end
+    return nil
+end
+
+local function attack_obstacle(self, pos, dir, obstacle_pos, def, cdef)
+    -- Stop moving
+    self.object:set_velocity({x=0, y=self.object:get_velocity().y, z=0})
+    self:set_animation("stand")
+    
+    -- Face the block
+    local block_dir = vector_direction(pos, obstacle_pos)
+    self.object:set_yaw(math_atan2(-block_dir.x, block_dir.z))
+    
+    if self._cooldown <= 0 then
+        local dist = vector_distance(pos, obstacle_pos)
+        if self._ammo > 0 and dist > 1.2 then
+            -- Ranged shoot
+            self._cooldown = def.fire_rate * cdef.fire_mult
+            self._ammo = self._ammo - 1
+            
+            local bullet_pos = {x=pos.x, y=pos.y + 1.5, z=pos.z}
+            core.sound_play("tdm_shoot_assault_rifle", {pos = pos, max_hear_distance = 32, gain = 0.5})
+            
+            -- Muzzle flash
+            core.add_particle({
+                pos = bullet_pos,
+                velocity = {x=0, y=0, z=0},
+                expirationtime = 0.1,
+                size = 5,
+                texture = "tdm_muzzle_flash.png",
+                glow = 14
+            })
+            
+            -- Tracer
+            local t_dir = vector_direction(bullet_pos, obstacle_pos)
+            local tracer_dist = vector_distance(bullet_pos, obstacle_pos)
+            local step = 2.0
+            for d = 1.0, tracer_dist, step do
+                local tpos = vector.add(bullet_pos, vector.multiply(t_dir, d))
+                core.add_particle({
+                    pos = tpos, velocity = {x=0, y=0, z=0}, expirationtime = 0.1,
+                    size = 0.4, texture = "tdm_tracer.png^[colorize:#33FF33:200", glow = 14,
+                })
+            end
+            
+            -- Damage node
+            local meta = core.get_meta(obstacle_pos)
+            local hp = meta:get_int("hp")
+            if hp == 0 then hp = 50 end
+            
+            local damage = def.damage * cdef.dmg_mult
+            hp = hp - damage
+            
+            -- Node hit particles
+            core.add_particlespawner({
+                amount = 8,
+                time = 0.1,
+                minpos = obstacle_pos,
+                maxpos = obstacle_pos,
+                minvel = {x=-0.5, y=0.5, z=-0.5},
+                maxvel = {x=0.5, y=1.5, z=0.5},
+                minexptime = 0.5,
+                maxexptime = 1,
+                minsize = 1,
+                maxsize = 2,
+                texture = "tdm_muzzle_flash.png^[colorize:#FFFFFF:200",
+            })
+            
+            if hp <= 0 then
+                core.remove_node(obstacle_pos)
+                core.sound_play("tdm_break_crate", {pos = obstacle_pos, max_hear_distance = 16})
+            else
+                meta:set_int("hp", hp)
+            end
+        else
+            -- Melee punch
+            self._cooldown = 0.6
+            core.sound_play("player_punch", {pos = pos, max_hear_distance = 16, gain = 0.8})
+            
+            -- Damage node
+            local meta = core.get_meta(obstacle_pos)
+            local hp = meta:get_int("hp")
+            if hp == 0 then hp = 50 end
+            
+            hp = hp - 15
+            
+            -- Wood chips particles
+            core.add_particlespawner({
+                amount = 5,
+                time = 0.1,
+                minpos = obstacle_pos,
+                maxpos = obstacle_pos,
+                minvel = {x=-0.5, y=0.5, z=-0.5},
+                maxvel = {x=0.5, y=1.0, z=0.5},
+                minexptime = 0.4,
+                maxexptime = 0.8,
+                minsize = 1,
+                maxsize = 2,
+                texture = "core_particle_white.png^[colorize:#8B5A2B:150",
+            })
+            
+            if hp <= 0 then
+                core.remove_node(obstacle_pos)
+                core.sound_play("tdm_break_crate", {pos = obstacle_pos, max_hear_distance = 16})
+            else
+                meta:set_int("hp", hp)
+            end
+        end
+    end
+end
+
 tdm_core.bots = {}
 
 local difficulty_settings = {
@@ -165,18 +291,25 @@ core.register_entity("tdm_core:bot", {
                 else
                     -- Move toward crate
                     local dir = vector_direction(pos, self._target_crate)
-                    self.object:set_yaw(math_atan2(-dir.x, dir.z))
                     
-                    local vel = vector_multiply(dir, def.speed * 1.5)
-                    vel.y = self.object:get_velocity().y
-                    self.object:set_velocity(vel)
-                    self:set_animation("walk")
+                    -- Check and attack obstacles in our way
+                    local obstacle_pos, obstacle_node = get_obstacle_in_way(pos, dir)
+                    if obstacle_pos then
+                        attack_obstacle(self, pos, dir, obstacle_pos, def, cdef)
+                    else
+                        self.object:set_yaw(math_atan2(-dir.x, dir.z))
+                        
+                        local vel = vector_multiply(dir, def.speed * 1.5)
+                        vel.y = self.object:get_velocity().y
+                        self.object:set_velocity(vel)
+                        self:set_animation("walk")
 
-                    -- Jump over obstacles
-                    local node_ahead = core.get_node({x=pos.x + dir.x, y=pos.y + 0.5, z=pos.z + dir.z})
-                    if node_ahead.name ~= "air" and node_ahead.name ~= "ignore" then
-                        local v = self.object:get_velocity()
-                        self.object:set_velocity({x=v.x, y=5, z=v.z})
+                        -- Jump over obstacles
+                        local node_ahead = core.get_node({x=pos.x + dir.x, y=pos.y + 0.5, z=pos.z + dir.z})
+                        if node_ahead.name ~= "air" and node_ahead.name ~= "ignore" then
+                            local v = self.object:get_velocity()
+                            self.object:set_velocity({x=v.x, y=5, z=v.z})
+                        end
                     end
                 end
                 return
@@ -266,17 +399,23 @@ core.register_entity("tdm_core:bot", {
                     })
                 end
             else
-                -- Advance aggressively
-                local vel = vector_multiply(dir, def.speed * cdef.speed_mult)
-                vel.y = self.object:get_velocity().y
-                self.object:set_velocity(vel)
-                self:set_animation("walk")
-                
-                -- Jump over obstacles
-                local node_ahead = core.get_node({x=pos.x + dir.x, y=pos.y + 0.5, z=pos.z + dir.z})
-                if node_ahead.name ~= "air" and node_ahead.name ~= "ignore" and node_ahead.name ~= "tdm_core:storm_gas" then
-                    local v = self.object:get_velocity()
-                    self.object:set_velocity({x=v.x, y=5, z=v.z})
+                -- Check and attack obstacles in our way
+                local obstacle_pos, obstacle_node = get_obstacle_in_way(pos, dir)
+                if obstacle_pos then
+                    attack_obstacle(self, pos, dir, obstacle_pos, def, cdef)
+                else
+                    -- Advance aggressively
+                    local vel = vector_multiply(dir, def.speed * cdef.speed_mult)
+                    vel.y = self.object:get_velocity().y
+                    self.object:set_velocity(vel)
+                    self:set_animation("walk")
+                    
+                    -- Jump over obstacles
+                    local node_ahead = core.get_node({x=pos.x + dir.x, y=pos.y + 0.5, z=pos.z + dir.z})
+                    if node_ahead.name ~= "air" and node_ahead.name ~= "ignore" and node_ahead.name ~= "tdm_core:storm_gas" then
+                        local v = self.object:get_velocity()
+                        self.object:set_velocity({x=v.x, y=5, z=v.z})
+                    end
                 end
             end
         else
@@ -373,6 +512,21 @@ function tdm_core.bots.shoot(bot_obj, target_player, damage, spread)
             end
         elseif pointed_thing.type == "node" then
             hit_pos = pointed_thing.intersection_point
+            local node_pos = pointed_thing.under
+            local node = core.get_node(node_pos)
+            if core.get_item_group(node.name, "player_built") > 0 then
+                local meta = core.get_meta(node_pos)
+                local hp = meta:get_int("hp")
+                if hp == 0 then hp = 50 end
+                
+                hp = hp - damage
+                if hp <= 0 then
+                    core.remove_node(node_pos)
+                    core.sound_play("tdm_break_crate", {pos = node_pos, max_hear_distance = 16})
+                else
+                    meta:set_int("hp", hp)
+                end
+            end
             break
         end
     end
