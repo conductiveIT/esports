@@ -651,26 +651,13 @@ tdm_core.hud.toggle_scoreboard = function(player, visible)
     end
 end
 
--- Input and Periodic Update Loop
-local scoreboard_timer = 0
+-- Input Update Loop (Event-driven scoreboard toggle)
 core.register_globalstep(function(dtime)
-    scoreboard_timer = scoreboard_timer + dtime
-    local update_all = false
-    if scoreboard_timer >= 1.0 then
-        scoreboard_timer = 0
-        update_all = true
-    end
-    
     for _, player in ipairs(core.get_connected_players()) do
         local name = player:get_player_name()
-        local controls = player:get_player_control()
-        
-        -- Toggle if Aux1 (Special Key) is held
         if not tdm_core.is_spectator(name) then
+            local controls = player:get_player_control()
             tdm_core.hud.toggle_scoreboard(player, controls.aux1)
-        elseif update_all then
-            -- Refresh spectator HUD periodically
-            tdm_core.hud.update_scoreboard()
         end
     end
 end)

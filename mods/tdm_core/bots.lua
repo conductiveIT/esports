@@ -175,35 +175,53 @@ core.register_entity("tdm_core:bot", {
         end
 
         -- COMBAT STATE: Hunt Players
-        local target = nil
-        local min_dist = 100
-        
-        for _, player in ipairs(core.get_connected_players()) do
-            local pname = player:get_player_name()
-            if not tdm_core.is_spectator(pname) and player:get_hp() > 0 then
-                local ppos = player:get_pos()
-                local d = vector_distance(pos, ppos)
-                if d < min_dist then
-                    min_dist = d
-                    target = player
+        -- Throttle target and LOS scanning to ~0.15s intervals
+        self._combat_timer = (self._combat_timer or 0) - dtime
+        if self._combat_timer <= 0 then
+            self._combat_timer = 0.15
+            
+            local target = nil
+            local min_dist = 100
+            
+            for _, player in ipairs(core.get_connected_players()) do
+                local pname = player:get_player_name()
+                if not tdm_core.is_spectator(pname) and player:get_hp() > 0 then
+                    local ppos = player:get_pos()
+                    local d = vector_distance(pos, ppos)
+                    if d < min_dist then
+                        min_dist = d
+                        target = player
+                    end
                 end
             end
+            
+            self._target = target
+            self._target_dist = min_dist
+            
+            if target then
+                local ppos = target:get_pos()
+                local ray = core.raycast({x=pos.x, y=pos.y+1.5, z=pos.z}, {x=ppos.x, y=ppos.y+1.5, z=ppos.z}, true, false)
+                local los = true
+                for pointed in ray do
+                    if pointed.type == "node" then
+                        los = false
+                        break
+                    end
+                end
+                self._has_los = los
+            else
+                self._has_los = false
+            end
         end
+
+        local target = self._target
+        local min_dist = self._target_dist or 100
+        local los = self._has_los
         
-        if target then
+        if target and target:get_hp() > 0 then
             local ppos = target:get_pos()
             local dir = vector_direction(pos, ppos)
             self.object:set_yaw(math_atan2(-dir.x, dir.z))
-            
-            -- Line of sight check
-            local ray = core.raycast({x=pos.x, y=pos.y+1.5, z=pos.z}, {x=ppos.x, y=ppos.y+1.5, z=ppos.z}, true, false)
-            local los = true
-            for pointed in ray do
-                if pointed.type == "node" then
-                    los = false
-                    break
-                end
-            end
             
             if los and min_dist < (cdef.max_dist or 30) and self._ammo > 0 then
                 -- Move toward ideal distance or back away if too close (for snipers)
@@ -353,7 +371,8 @@ function tdm_core.bots.shoot(bot_obj, target_player, damage, spread)
     core.sound_play("tdm_shoot_assault_rifle", {pos = pos, max_hear_distance = 32, gain = 0.5})
     
     local dist = vector.distance(pos, hit_pos)
-    for d = 1.0, dist, 0.5 do
+    local step = 2.0 -- Optimized: 75% fewer particles for massive network and rendering performance gains
+    for d = 1.0, dist, step do
         local tpos = vector.add(pos, vector.multiply(dir, d))
         core.add_particle({
             pos = tpos, velocity = {x=0, y=0, z=0}, expirationtime = 0.1,

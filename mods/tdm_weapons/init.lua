@@ -161,7 +161,7 @@ tdm_weapons.shoot_raycast = function(player, damage, range, spread)
     -- Tracer line
     if not hit_pos then hit_pos = end_pos end
     local dist = vector.distance(pos, hit_pos)
-    local step = 0.5 -- Higher density for a smooth line
+    local step = 2.0 -- Optimized: 75% fewer particles for massive network and rendering performance gains
     for d = 1.0, dist, step do -- Start closer to gun
         local tpos = vector.add(pos, vector.multiply(dir, d))
         core.add_particle({
