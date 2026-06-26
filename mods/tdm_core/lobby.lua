@@ -247,13 +247,18 @@ local function get_formspec(name)
                 table.insert(roster_items, string.format("%s (R:%d KD:%s)", mname, rating, kd))
             end
 
+            local leader_display = data.leader
+            if not leader_display or leader_display == "" then
+                leader_display = "None"
+            end
+
             if is_admin then
                 -- Admin Team Inspector Panel: Roster + Join Requests + Set Owner + Approve/Deny
                 local requests = tdm_league.requests[selected] or {}
                 fs = fs ..
                     "box[7.0,4.5;6.5,4.6;#222222aa]" ..
                     "label[7.2,4.9;TEAM: " .. selected:upper() .. "]" ..
-                    "label[7.2,5.3;Leader: " .. (data.leader ~= "" and data.leader or "None") .. "]" ..
+                    "label[7.2,5.3;Leader: " .. leader_display .. "]" ..
                     "label[7.2,5.8;ROSTER:]" ..
                     "textlist[7.2,6.1;6.1,1.2;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
                     "label[7.2,7.5;JOIN REQUESTS:]"
@@ -275,7 +280,7 @@ local function get_formspec(name)
                 fs = fs ..
                     "box[7.0,4.5;6.5,4.5;#222222aa]" ..
                     "label[7.2,5;TEAM: " .. selected:upper() .. "]" ..
-                    "label[7.2,5.5;Leader: " .. (data.leader ~= "" and data.leader or "None") .. "]" ..
+                    "label[7.2,5.5;Leader: " .. leader_display .. "]" ..
                     "label[7.2,6.2;ROSTER:]" ..
                     "textlist[7.2,6.6;6.1,1.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
                     "button[7.2,8.2;6.1,0.6;unselect_team;Show Global Leaderboard]"
