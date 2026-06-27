@@ -123,7 +123,7 @@ local function get_formspec(name)
             "button[3.15,2.5;2.4,0.8;tab_league;LEAGUE]" ..
             "button[5.8,2.5;2.4,0.8;tab_team;TEAM]" ..
             "button[8.45,2.5;2.4,0.8;tab_locker;LOCKER]" ..
-            "button[11.1,2.5;2.4,0.8;tab_settings;PVE]"
+            "button[11.1,2.5;2.4,0.8;tab_settings;ADMIN]"
     else
         fs = fs ..
             "button[0.5,2.5;4.0,0.8;tab_league;LEAGUE]" ..
@@ -586,17 +586,43 @@ local function get_formspec(name)
         for i, v in ipairs(diff_list) do if v == settings.diff then diff_idx = i break end end
 
         fs = fs ..
-            "label[1,4;PVE CONFIGURATION]" ..
-            "label[1,4.8;Bot Count:]" ..
-            "dropdown[1,5.2;3,0.8;bot_count;" .. table.concat(count_list, ",") .. ";" .. count_idx .. "]" ..
+            "label[0.5,4.0;PVE CONFIGURATION]" ..
+            "label[0.5,4.7;Bot Count:]" ..
+            "dropdown[0.5,5.1;3,0.8;bot_count;" .. table.concat(count_list, ",") .. ";" .. count_idx .. "]" ..
             
-            "label[1,6.5;AI Difficulty:]" ..
-            "dropdown[1,6.9;3,0.8;bot_diff;" .. table.concat(diff_list, ",") .. ";" .. diff_idx .. "]" ..
+            "label[0.5,6.2;AI Difficulty:]" ..
+            "dropdown[0.5,6.6;3,0.8;bot_diff;" .. table.concat(diff_list, ",") .. ";" .. diff_idx .. "]" ..
             
-            "label[6,4;TIPS]" ..
-            "label[6,4.8;- Bots spawn with 0 ammo.]" ..
-            "label[6,5.3;- They hunt crates to reload.]" ..
-            "label[6,5.8;- Hard bots move faster and hit harder.]"
+            "label[0.5,7.7;TIPS]" ..
+            "label[0.5,8.2;- Bots spawn with 0 ammo.]" ..
+            "label[0.5,8.6;- They hunt crates to reload.]" ..
+            "label[0.5,9.0;- Hard bots move faster/hit harder.]"
+
+        -- Nicknames mappings display for admins
+        local mapping_items = {}
+        local keys = {}
+        for username, nickname in pairs(esports_core.nicknames) do
+            table.insert(keys, username)
+        end
+        table.sort(keys)
+        
+        for _, u in ipairs(keys) do
+            table.insert(mapping_items, u .. " -> " .. esports_core.nicknames[u])
+        end
+        
+        local sel_nick_idx = settings.sel_nick_idx or 1
+        if sel_nick_idx > #mapping_items then sel_nick_idx = #mapping_items end
+        if #mapping_items == 0 then
+            table.insert(mapping_items, "No nicknames registered")
+        end
+        
+        fs = fs ..
+            "label[5.5,4.0;NICKNAME MAPPINGS]" ..
+            "textlist[5.5,4.5;8.0,4.5;admin_nicks_list;" .. table.concat(mapping_items, ",") .. ";" .. sel_nick_idx .. ";false]"
+            
+        if #keys > 0 then
+            fs = fs .. "button[5.5,9.2;8.0,0.8;btn_reset_nick;RESET SELECTED NICKNAME]"
+        end
     elseif tab == "locker" then
         local meta = core.get_player_by_name(name):get_meta()
         local current = meta:get_string("esports_selected_skin")
@@ -1169,6 +1195,26 @@ core.register_on_player_receive_fields(function(player, formname, fields)
         esports_core.lobby.show(player)
         return
     end
+
+    if fields.btn_reset_nick and is_admin then
+        local sel_idx = player_settings[name].sel_nick_idx or 1
+        local keys = {}
+        for username in pairs(esports_core.nicknames) do
+            table.insert(keys, username)
+        end
+        table.sort(keys)
+        local target = keys[sel_idx]
+        if target then
+            esports_core.nicknames[target] = nil
+            esports_core.save_nicknames()
+            local tp = core.get_player_by_name(target)
+            if tp then tp:set_properties({ nametag = target }) end
+            core.chat_send_player(name, "LOBBY: Reset " .. target .. "'s nickname to default.")
+        end
+        esports_core.lobby.show(player)
+        return
+    end
+
     if fields.sel_round_dropdown then
         local r_num = tonumber(fields.sel_round_dropdown:match("Round (%d+)"))
         if r_num then
@@ -1181,6 +1227,13 @@ core.register_on_player_receive_fields(function(player, formname, fields)
     if fields.sel_match_list then
         local event = core.explode_textlist_event(fields.sel_match_list)
         player_settings[name].sel_match_idx = event.index
+        esports_core.lobby.show(player)
+        return
+    end
+
+    if fields.admin_nicks_list then
+        local event = core.explode_textlist_event(fields.admin_nicks_list)
+        player_settings[name].sel_nick_idx = event.index
         esports_core.lobby.show(player)
         return
     end
