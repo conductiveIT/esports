@@ -1,16 +1,30 @@
 # esports
 
-This is a fast-paced hitscan Team Deathmatch base game for Luanti with building and storm mechanics.
+This is a fast-paced hitscan team combat base game for Luanti with building, storm mechanics, and full league management.
 
 > [!IMPORTANT]
 > This game is currently in **active development** and in a **beta state**. Features, APIs, and mechanics are subject to change.
+
+## Key Features
+
+### Game Modes
+- **Team Deathmatch (TDM)**: Fast-paced hitscan combat where teams build, loot, and fight to reach the highest elimination score.
+- **Capture the Flag (CTF)**: Objective-based mode where teams defend their home base flag stand while attempting to carry the enemy flag to victory.
+- **PvE Bot Practice**: Solo or cooperative training matches playing against difficulty-scaled AI sentries who navigate, loot, and shoot or melee through structural blockades.
+
+### League Management System
+- **Automated Round-Robin Scheduler**: Circles through all registered teams to dynamically build a complete regular season fixture schedule (supporting BYEs for odd team counts).
+- **Standings & Tie-Breakers**: Real-time leaderboards sorted by Wins, then Round Differential (Kills Scored - Deaths Conceded), then total kills.
+- **Match History Logging**: Persistent scrolling scroll log recording date, scores, home/away setups, and match MVP awards.
+- **Single-Elimination Playoffs**: Automated seeding of the top 4 teams into a tournament bracket (Semifinals -> Grand Finals) to crown the season Champion.
+- **Offseason Archiving**: Clean reset commands that serialize the finished season standings to history archives and prepare the league for a new cycle.
 
 Note: this was built using Antigravity with Gemini 3 Pro. If you don't want to use AI generated content then this is not the mod for you.
 
 ## How to Install & Play
 
 1. **Copy to Games Directory**
-   Move this entire folder (`Luanti Deathmatch`) into your Luanti `games` directory.
+   Move this entire folder into your Luanti `games` directory.
    - On Windows: `Luanti/games/`
    - On Mac/Linux: `~/.minetest/games/` or `~/.luanti/games/`
 
