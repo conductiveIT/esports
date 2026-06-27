@@ -258,49 +258,53 @@ local function get_formspec(name)
                 
             -- Team Inspector Panel
             if selected and esports_league.teams[selected] then
-                local data = esports_league.teams[selected]
-                
-                local roster_items = {}
-                for _, mname in ipairs(data.members) do
-                    local stats = esports_league.player_stats[mname] or {kills=0, deaths=0, captures=0}
-                    local k = stats.kills or 0
-                    local d = stats.deaths or 0
-                    local c = stats.captures or 0
-                    local rating = k - d + (c * 10)
-                    local kd = "0.0"
-                    if d > 0 then
-                        local val = math.floor((k / d) * 10)
-                        kd = tostring(math.floor(val / 10)) .. "." .. tostring(val % 10)
-                    else
-                        kd = tostring(k) .. ".0"
-                    end
-                    table.insert(roster_items, string.format("%s (R:%d KD:%s)", mname, rating, kd))
-                end
-
-                local leader_display = data.leader
-                if not leader_display or leader_display == "" then
-                    leader_display = "None"
-                end
-
-                if is_admin then
-                    -- Admin Team Inspector Panel: Roster + Join Requests + Set Owner + Approve/Deny
-                    local requests = esports_league.requests[selected] or {}
-                    fs = fs ..
-                        "box[7.0,4.6;6.5,4.4;#222222aa]" ..
-                        "label[7.2,4.9;TEAM: " .. selected:upper() .. "]" ..
-                        "label[7.2,5.3;Leader: " .. leader_display .. "]" ..
-                        "label[7.2,5.8;ROSTER:]" ..
-                        "textlist[7.2,6.1;6.1,1.2;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
-                        "label[7.2,7.4;JOIN REQUESTS:]"
-                    
-                    if #requests > 0 then
-                        fs = fs ..
-                            "textlist[7.2,7.7;3.5,1.1;sel_request;" .. table.concat(requests, ",") .. ";;false]" ..
-                            "button[10.9,7.7;2.2,0.5;accept_request;APPROVE]" ..
-                            "button[10.9,8.3;2.2,0.5;deny_request;DENY]"
-                    else
-                        fs = fs .. "label[7.2,7.9;No pending requests.]"
-                    end
+                 local data = esports_league.teams[selected]
+                 
+                 local roster_items = {}
+                 for _, mname in ipairs(data.members) do
+                     local stats = esports_league.player_stats[mname] or {kills=0, deaths=0, captures=0}
+                     local k = stats.kills or 0
+                     local d = stats.deaths or 0
+                     local c = stats.captures or 0
+                     local rating = k - d + (c * 10)
+                     local kd = "0.0"
+                     if d > 0 then
+                         local val = math.floor((k / d) * 10)
+                         kd = tostring(math.floor(val / 10)) .. "." .. tostring(val % 10)
+                     else
+                         kd = tostring(k) .. ".0"
+                     end
+                     table.insert(roster_items, string.format("%s (R:%d KD:%s)", esports_core.get_nick(mname), rating, kd))
+                 end
+ 
+                 local leader_display = esports_core.get_nick(data.leader or "")
+                 if leader_display == "" then
+                     leader_display = "None"
+                 end
+ 
+                 if is_admin then
+                     -- Admin Team Inspector Panel: Roster + Join Requests + Set Owner + Approve/Deny
+                     local requests = esports_league.requests[selected] or {}
+                     local req_items = {}
+                     for _, req_name in ipairs(requests) do
+                         table.insert(req_items, esports_core.get_nick(req_name))
+                     end
+                     fs = fs ..
+                         "box[7.0,4.6;6.5,4.4;#222222aa]" ..
+                         "label[7.2,4.9;TEAM: " .. selected:upper() .. "]" ..
+                         "label[7.2,5.3;Leader: " .. leader_display .. "]" ..
+                         "label[7.2,5.8;ROSTER:]" ..
+                         "textlist[7.2,6.1;6.1,1.2;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
+                         "label[7.2,7.4;JOIN REQUESTS:]"
+                     
+                     if #requests > 0 then
+                         fs = fs ..
+                             "textlist[7.2,7.7;3.5,1.1;sel_request;" .. table.concat(req_items, ",") .. ";;false]" ..
+                             "button[10.9,7.7;2.2,0.5;accept_request;APPROVE]" ..
+                             "button[10.9,8.3;2.2,0.5;deny_request;DENY]"
+                     else
+                         fs = fs .. "label[7.2,7.9;No pending requests.]"
+                     end
                     
                     fs = fs ..
                         "button[7.0,9.2;3.0,0.8;unselect_team;BACK]" ..
@@ -541,7 +545,7 @@ local function get_formspec(name)
             
             fs = fs ..
                 "label[0.5,3.8;TEAM ROSTER: " .. p_team_name:upper() .. "]" ..
-                "label[0.5,4.3;Leader: " .. (team_data.leader ~= "" and team_data.leader or "None") .. "]"
+                "label[0.5,4.3;Leader: " .. (team_data.leader ~= "" and esports_core.get_nick(team_data.leader) or "None") .. "]"
                 
             local roster_items = {}
             for _, mname in ipairs(team_data.members) do
@@ -550,7 +554,7 @@ local function get_formspec(name)
                 local d = stats.deaths or 0
                 local c = stats.captures or 0
                 local rating = k - d + (c * 10)
-                table.insert(roster_items, string.format("%s (R:%d K:%d D:%d C:%d)", mname, rating, k, d, c))
+                table.insert(roster_items, string.format("%s (R:%d K:%d D:%d C:%d)", esports_core.get_nick(mname), rating, k, d, c))
             end
             
             fs = fs .. "textlist[0.5,4.8;6.0,4.0;roster_list;" .. table.concat(roster_items, ",") .. ";;false]"
@@ -561,8 +565,12 @@ local function get_formspec(name)
                     "label[7.2,4.8;JOIN REQUESTS]"
                     
                 local requests = esports_league.requests[p_team_name] or {}
+                local req_items = {}
+                for _, req_name in ipairs(requests) do
+                    table.insert(req_items, esports_core.get_nick(req_name))
+                end
                 if #requests > 0 then
-                    fs = fs .. "textlist[7.2,5.3;6.1,2.5;sel_request;" .. table.concat(requests, ",") .. ";;false]" ..
+                    fs = fs .. "textlist[7.2,5.3;6.1,2.5;sel_request;" .. table.concat(req_items, ",") .. ";;false]" ..
                         "button[7.2,8.0;3.0,0.6;accept_request;APPROVE]" ..
                         "button[10.3,8.0;3.0,0.6;deny_request;DENY]"
                 else
