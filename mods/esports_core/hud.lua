@@ -18,24 +18,34 @@ esports_core.hud.init_hud = function(player)
 
     
     -- Score HUD
+    local default_score = "Red 0 - 0 Blue"
+    local r_text = esports_core.get_team_logo(esports_core.teams.active_team_names.red, "esports_logo_red.png")
+    local b_text = esports_core.get_team_logo(esports_core.teams.active_team_names.blue, "esports_logo_blue.png")
+    
+    if esports_core.match.is_ffa then
+        local l_name, l_kills = esports_core.match.get_ffa_leader()
+        local leader_display = l_name == "None" and "None" or esports_core.get_nick(l_name)
+        local my_kills = (esports_core.match.player_stats[player_name] and esports_core.match.player_stats[player_name].kills) or 0
+        default_score = string.format("KILLS: %d | LEADER: %s (%d)", my_kills, leader_display, l_kills)
+        r_text = "esports_hud_bar.png^[colorize:#00000000"
+        b_text = "esports_hud_bar.png^[colorize:#00000000"
+    end
+
     huds.scores = player:hud_add({
         hud_elem_type = "text",
         position = {x = 0.5, y = 0.05},
         alignment = {x = 0, y = 0},
         number = 0xFFFFFF,
-        text = "Red 0 - 0 Blue",
+        text = default_score,
     })
     
     -- Scoreboard Logos (Dynamic Team Logos)
-    local r_team_active = esports_core.teams.active_team_names.red
-    local b_team_active = esports_core.teams.active_team_names.blue
-    
     huds.logo_red = player:hud_add({
         hud_elem_type = "image",
         position = {x = 0.44, y = 0.05},
         scale = {x = 0.05, y = 0.05},
         alignment = {x = 0, y = 0},
-        text = esports_core.get_team_logo(r_team_active, "esports_logo_red.png"),
+        text = r_text,
     })
     
     huds.logo_blue = player:hud_add({
@@ -43,7 +53,7 @@ esports_core.hud.init_hud = function(player)
         position = {x = 0.56, y = 0.05},
         scale = {x = 0.05, y = 0.05},
         alignment = {x = 0, y = 0},
-        text = esports_core.get_team_logo(b_team_active, "esports_logo_blue.png"),
+        text = b_text,
     })
 
     -- Match Timer (Top Center, below scores)
@@ -59,12 +69,18 @@ esports_core.hud.init_hud = function(player)
     if not esports_core.is_spectator(player_name) then
         local team = esports_core.teams.get_player_team(player_name)
         local color = 0xFF0000
-        if team == "blue" then color = 0x0000FF end
+        local text_display = "Team: " .. (team or "None")
+        if esports_core.match.is_ffa or team == "ffa" then
+            color = 0xFFD700
+            text_display = "FREE FOR ALL"
+        elseif team == "blue" then
+            color = 0x0000FF
+        end
         huds.team = player:hud_add({
             hud_elem_type = "text",
             position = {x = 0.05, y = 0.95},
             offset = {x = 0, y = 0},
-            text = "Team: " .. (team or "None"),
+            text = text_display,
             alignment = {x = 1, y = 0},
             scale = {x = 100, y = 100},
             number = color,
