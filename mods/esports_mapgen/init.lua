@@ -73,7 +73,7 @@ function esports_mapgen.reset_island()
     core.clear_objects({mode = "full"})
     
     -- 2. WIPE the island nodes back to their default state
-    local map_radius = 110 -- slightly larger than island to be sure
+    local map_radius = 180 -- extended to clear storm columns spawned with randomized offsets
     local minp = {x=-map_radius, y=-20, z=-map_radius}
     local maxp = {x=map_radius, y=20, z=map_radius}
     
