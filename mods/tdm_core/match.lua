@@ -139,19 +139,84 @@ core.register_globalstep(function(dtime)
                 win_color = "red"
                 win_team_id = r_name
                 if tdm_league and r_name and b_name and not tdm_core.match.is_pve then
-                    tdm_league.teams[r_name].wins = tdm_league.teams[r_name].wins + 1
-                    tdm_league.teams[b_name].losses = tdm_league.teams[b_name].losses + 1
-                    tdm_league.save()
+                    tdm_league.teams[r_name].wins = (tdm_league.teams[r_name].wins or 0) + 1
+                    tdm_league.teams[b_name].losses = (tdm_league.teams[b_name].losses or 0) + 1
                 end
             elseif tdm_core.teams.scores.blue > tdm_core.teams.scores.red then
                 winner_name = (b_name or "Blue Team") .. " Victory"
                 win_color = "blue"
                 win_team_id = b_name
                 if tdm_league and r_name and b_name and not tdm_core.match.is_pve then
-                    tdm_league.teams[b_name].wins = tdm_league.teams[b_name].wins + 1
-                    tdm_league.teams[r_name].losses = tdm_league.teams[r_name].losses + 1
-                    tdm_league.save()
+                    tdm_league.teams[b_name].wins = (tdm_league.teams[b_name].wins or 0) + 1
+                    tdm_league.teams[r_name].losses = (tdm_league.teams[r_name].losses or 0) + 1
                 end
+            end
+
+            -- Update Standings kills/deaths statistics
+            if tdm_league and r_name and b_name and not tdm_core.match.is_pve then
+                local red_score = tdm_core.teams.scores.red
+                local blue_score = tdm_core.teams.scores.blue
+                
+                tdm_league.teams[r_name].kills_scored = (tdm_league.teams[r_name].kills_scored or 0) + red_score
+                tdm_league.teams[r_name].deaths_conceded = (tdm_league.teams[r_name].deaths_conceded or 0) + blue_score
+                tdm_league.teams[b_name].kills_scored = (tdm_league.teams[b_name].kills_scored or 0) + blue_score
+                tdm_league.teams[b_name].deaths_conceded = (tdm_league.teams[b_name].deaths_conceded or 0) + red_score
+                
+                -- Process Scheduled Match Context
+                local ctx = tdm_core.match.scheduled_context
+                if ctx then
+                    if ctx.type == "regular_season" then
+                        local round = ctx.round
+                        local idx = ctx.index
+                        local fixture = tdm_league.fixtures[round] and tdm_league.fixtures[round][idx]
+                        if fixture then
+                            fixture.status = "completed"
+                            fixture.score.home = red_score
+                            fixture.score.away = blue_score
+                        end
+                    elseif ctx.type == "playoff_semifinal" then
+                        local idx = ctx.index
+                        local sf = tdm_league.playoffs.semifinals[idx]
+                        if sf then
+                            sf.status = "completed"
+                            sf.score1 = red_score
+                            sf.score2 = blue_score
+                            if sf.score1 > sf.score2 then
+                                sf.winner = sf.team1
+                            elseif sf.score2 > sf.score1 then
+                                sf.winner = sf.team2
+                            else
+                                sf.winner = sf.team1
+                            end
+                            
+                            -- Advance to final if both semifinals are completed
+                            local sf1 = tdm_league.playoffs.semifinals[1]
+                            local sf2 = tdm_league.playoffs.semifinals[2]
+                            if sf1.status == "completed" and sf2.status == "completed" then
+                                tdm_league.playoffs.finals.team1 = sf1.winner
+                                tdm_league.playoffs.finals.team2 = sf2.winner
+                                tdm_league.playoffs.finals.status = "pending"
+                            end
+                        end
+                    elseif ctx.type == "playoff_final" then
+                        local fn = tdm_league.playoffs.finals
+                        if fn then
+                            fn.status = "completed"
+                            fn.score1 = red_score
+                            fn.score2 = blue_score
+                            if fn.score1 > fn.score2 then
+                                fn.winner = fn.team1
+                            elseif fn.score2 > fn.score1 then
+                                fn.winner = fn.team2
+                            else
+                                fn.winner = fn.team1
+                            end
+                            core.chat_send_all(">> CHAMPIONS: Team '" .. fn.winner .. "' has won the Grand Finals!")
+                        end
+                    end
+                    tdm_core.match.scheduled_context = nil
+                end
+                tdm_league.save()
             end
             
             -- GATHER SCOREBOARD DATA & MVP
@@ -180,6 +245,19 @@ core.register_globalstep(function(dtime)
                 
                 -- Freeze players for Outro
                 p:set_physics_override({speed = 0, jump = 0})
+            end
+            
+            -- Record completed match to History log
+            if tdm_league and r_name and b_name and not tdm_core.match.is_pve then
+                table.insert(tdm_league.history, {
+                    time = os.time(),
+                    home = r_name,
+                    away = b_name,
+                    home_score = tdm_core.teams.scores.red,
+                    away_score = tdm_core.teams.scores.blue,
+                    mvp = mvp.name
+                })
+                tdm_league.save()
             end
             
             -- SORT BY PERFORMANCE (Captures if CTF, otherwise Kills)

@@ -183,7 +183,7 @@ function tdm_core.ctf.score(pname, team)
     
     -- Win condition check
     if tdm_core.teams.scores[team] >= 5 then
-        tdm_core.match.state = "over"
+        tdm_core.match.timer = 0
     end
 end
 

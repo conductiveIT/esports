@@ -75,7 +75,8 @@ local function get_formspec(name)
         player_settings[name] = { 
             count = "5", diff = "medium", red = "", blue = "", pve = "", 
             match_dur = "5m", match_tod = "Day", match_mode = "TDM",
-            map_size = "Large"
+            map_size = "Large",
+            league_subtab = "standings", sel_round = 1, sel_match_idx = 1
         }
     end
     local settings = player_settings[name]
@@ -192,146 +193,318 @@ local function get_formspec(name)
                 "button[0.8,10.4;12.4,0.5;stop_match;STOP MATCH]"
         end
     elseif tab == "league" then
-        local sorted = {}
-        for tname, _ in pairs(tdm_league.teams) do
-            table.insert(sorted, tname)
-        end
-        table.sort(sorted, function(a, b)
-            local wa = tdm_league.teams[a].wins or 0
-            local wb = tdm_league.teams[b].wins or 0
-            return wa > wb
-        end)
+        local league_subtab = settings.league_subtab or "standings"
         
-        local list_items = {}
-        for _, tname in ipairs(sorted) do
-            local d = tdm_league.teams[tname]
-            table.insert(list_items, tname .. " (W: " .. d.wins .. " L: " .. d.losses .. ")")
-        end
+        -- Style active sub-tab button
+        local active_sub_btn = ""
+        if league_subtab == "standings" then active_sub_btn = "league_tab_standings"
+        elseif league_subtab == "schedule" then active_sub_btn = "league_tab_schedule"
+        elseif league_subtab == "history" then active_sub_btn = "league_tab_history"
+        elseif league_subtab == "playoffs" then active_sub_btn = "league_tab_playoffs" end
         
-        local selected = settings.selected_team
-        local selected_idx = 0
-        local list_name = "teams_list"
-        if selected then
-            for idx, tname in ipairs(sorted) do
-                if tname == selected then
-                    selected_idx = idx
-                    break
-                end
-            end
-        else
-            list_name = "teams_list_clear"
+        if active_sub_btn ~= "" then
+            fs = fs .. "style[" .. active_sub_btn .. ";bgcolor=#0077dd;textcolor=white]"
         end
         
         fs = fs ..
-            "label[0.5,4;LEAGUE STANDINGS]" ..
-            "textlist[0.5,4.5;6.0,4.5;" .. list_name .. ";" .. table.concat(list_items, ",") .. ";" .. selected_idx .. ";false]"
-            
-        -- Team Inspector Panel
-        if selected and tdm_league.teams[selected] then
-            local data = tdm_league.teams[selected]
-            
-            local roster_items = {}
-            for _, mname in ipairs(data.members) do
-                local stats = tdm_league.player_stats[mname] or {kills=0, deaths=0, captures=0}
-                local k = stats.kills or 0
-                local d = stats.deaths or 0
-                local c = stats.captures or 0
-                local rating = k - d + (c * 10)
-                local kd = "0.0"
-                if d > 0 then
-                    local val = math.floor((k / d) * 10)
-                    kd = tostring(math.floor(val / 10)) .. "." .. tostring(val % 10)
-                else
-                    kd = tostring(k) .. ".0"
-                end
-                table.insert(roster_items, string.format("%s (R:%d KD:%s)", mname, rating, kd))
-            end
+            "button[0.5,3.4;3.0,0.6;league_tab_standings;STANDINGS]" ..
+            "button[3.8,3.4;3.0,0.6;league_tab_schedule;SCHEDULE]" ..
+            "button[7.1,3.4;3.0,0.6;league_tab_history;HISTORY]" ..
+            "button[10.4,3.4;3.0,0.6;league_tab_playoffs;PLAYOFFS]"
 
-            local leader_display = data.leader
-            if not leader_display or leader_display == "" then
-                leader_display = "None"
+        if league_subtab == "standings" then
+            local sorted = {}
+            for tname, _ in pairs(tdm_league.teams) do
+                table.insert(sorted, tname)
             end
-
-            if is_admin then
-                -- Admin Team Inspector Panel: Roster + Join Requests + Set Owner + Approve/Deny
-                local requests = tdm_league.requests[selected] or {}
-                fs = fs ..
-                    "box[7.0,4.5;6.5,4.6;#222222aa]" ..
-                    "label[7.2,4.9;TEAM: " .. selected:upper() .. "]" ..
-                    "label[7.2,5.3;Leader: " .. leader_display .. "]" ..
-                    "label[7.2,5.8;ROSTER:]" ..
-                    "textlist[7.2,6.1;6.1,1.2;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
-                    "label[7.2,7.5;JOIN REQUESTS:]"
+            table.sort(sorted, function(a, b)
+                local da = tdm_league.teams[a]
+                local db = tdm_league.teams[b]
+                local wa = da.wins or 0
+                local wb = db.wins or 0
+                if wa ~= wb then return wa > wb end
                 
-                if #requests > 0 then
-                    fs = fs ..
-                        "textlist[7.2,7.8;3.5,1.1;sel_request;" .. table.concat(requests, ",") .. ";;false]" ..
-                        "button[10.9,7.8;2.2,0.5;accept_request;APPROVE]" ..
-                        "button[10.9,8.4;2.2,0.5;deny_request;DENY]"
-                else
-                    fs = fs .. "label[7.2,8.1;No pending requests.]"
-                end
+                local diffa = (da.kills_scored or 0) - (da.deaths_conceded or 0)
+                local diffb = (db.kills_scored or 0) - (db.deaths_conceded or 0)
+                if diffa ~= diffb then return diffa > diffb end
                 
-                fs = fs ..
-                    "button[7.0,9.2;3.0,0.8;unselect_team;BACK]" ..
-                    "button[10.2,9.2;3.3,0.8;set_owner;SET OWNER]"
-            else
-                -- Normal Team Inspector Panel
-                fs = fs ..
-                    "box[7.0,4.5;6.5,4.5;#222222aa]" ..
-                    "label[7.2,5;TEAM: " .. selected:upper() .. "]" ..
-                    "label[7.2,5.5;Leader: " .. leader_display .. "]" ..
-                    "label[7.2,6.2;ROSTER:]" ..
-                    "textlist[7.2,6.6;6.1,1.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
-                    "button[7.2,8.2;6.1,0.6;unselect_team;Show Global Leaderboard]"
-            end
-        else
-            -- Sort players for Global Leaderboard
-            local sorted_players = {}
-            for pname, stats in pairs(tdm_league.player_stats) do
-                local k = stats.kills or 0
-                local d = stats.deaths or 0
-                local c = stats.captures or 0
-                local rating = k - d + (c * 10)
-                table.insert(sorted_players, {
-                    name = pname,
-                    kills = k,
-                    deaths = d,
-                    captures = c,
-                    rating = rating
-                })
-            end
-            
-            table.sort(sorted_players, function(a, b)
-                if a.rating ~= b.rating then return a.rating > b.rating end
-                if a.kills ~= b.kills then return a.kills > b.kills end
-                return a.deaths < b.deaths
+                return (da.kills_scored or 0) > (db.kills_scored or 0)
             end)
             
-            local board_items = {}
-            for i, p in ipairs(sorted_players) do
-                if i > 50 then break end -- Show top 50
-                table.insert(board_items, string.format("%d. %s (R:%d K:%d D:%d C:%d)", i, p.name, p.rating, p.kills, p.deaths, p.captures))
+            local list_items = {}
+            for _, tname in ipairs(sorted) do
+                local d = tdm_league.teams[tname]
+                local diff = (d.kills_scored or 0) - (d.deaths_conceded or 0)
+                table.insert(list_items, string.format("%s (W:%d L:%d D:%+d)", tname, d.wins or 0, d.losses or 0, diff))
             end
-            if #board_items == 0 then
-                table.insert(board_items, "No player stats recorded yet")
+            
+            local selected = settings.selected_team
+            local selected_idx = 0
+            local list_name = "teams_list"
+            if selected then
+                for idx, tname in ipairs(sorted) do
+                    if tname == selected then
+                        selected_idx = idx
+                        break
+                    end
+                end
+            else
+                list_name = "teams_list_clear"
             end
             
             fs = fs ..
-                "box[7.0,4.5;6.5,4.5;#222222aa]" ..
-                "label[7.2,5;GLOBAL LEADERBOARD]" ..
-                "textlist[7.2,5.4;6.1,3.3;global_leaderboard;" .. table.concat(board_items, ",") .. ";;false]"
-        end
-        
-        if is_admin then
-            if not selected then
-                fs = fs .. "field[0.5,9.2;4.5,0.8;new_team;New Team Name;]" ..
-                "button[5.2,9.2;3.5,0.8;create_team;CREATE TEAM]"
+                "label[0.5,4.1;LEAGUE STANDINGS]" ..
+                "textlist[0.5,4.6;6.0,4.4;" .. list_name .. ";" .. table.concat(list_items, ",") .. ";" .. selected_idx .. ";false]"
+                
+            -- Team Inspector Panel
+            if selected and tdm_league.teams[selected] then
+                local data = tdm_league.teams[selected]
+                
+                local roster_items = {}
+                for _, mname in ipairs(data.members) do
+                    local stats = tdm_league.player_stats[mname] or {kills=0, deaths=0, captures=0}
+                    local k = stats.kills or 0
+                    local d = stats.deaths or 0
+                    local c = stats.captures or 0
+                    local rating = k - d + (c * 10)
+                    local kd = "0.0"
+                    if d > 0 then
+                        local val = math.floor((k / d) * 10)
+                        kd = tostring(math.floor(val / 10)) .. "." .. tostring(val % 10)
+                    else
+                        kd = tostring(k) .. ".0"
+                    end
+                    table.insert(roster_items, string.format("%s (R:%d KD:%s)", mname, rating, kd))
+                end
+
+                local leader_display = data.leader
+                if not leader_display or leader_display == "" then
+                    leader_display = "None"
+                end
+
+                if is_admin then
+                    -- Admin Team Inspector Panel: Roster + Join Requests + Set Owner + Approve/Deny
+                    local requests = tdm_league.requests[selected] or {}
+                    fs = fs ..
+                        "box[7.0,4.6;6.5,4.4;#222222aa]" ..
+                        "label[7.2,4.9;TEAM: " .. selected:upper() .. "]" ..
+                        "label[7.2,5.3;Leader: " .. leader_display .. "]" ..
+                        "label[7.2,5.8;ROSTER:]" ..
+                        "textlist[7.2,6.1;6.1,1.2;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
+                        "label[7.2,7.4;JOIN REQUESTS:]"
+                    
+                    if #requests > 0 then
+                        fs = fs ..
+                            "textlist[7.2,7.7;3.5,1.1;sel_request;" .. table.concat(requests, ",") .. ";;false]" ..
+                            "button[10.9,7.7;2.2,0.5;accept_request;APPROVE]" ..
+                            "button[10.9,8.3;2.2,0.5;deny_request;DENY]"
+                    else
+                        fs = fs .. "label[7.2,7.9;No pending requests.]"
+                    end
+                    
+                    fs = fs ..
+                        "button[7.0,9.2;3.0,0.8;unselect_team;BACK]" ..
+                        "button[10.2,9.2;3.3,0.8;set_owner;SET OWNER]"
+                else
+                    -- Normal Team Inspector Panel
+                    fs = fs ..
+                        "box[7.0,4.6;6.5,4.4;#222222aa]" ..
+                        "label[7.2,5;TEAM: " .. selected:upper() .. "]" ..
+                        "label[7.2,5.5;Leader: " .. leader_display .. "]" ..
+                        "label[7.2,6.2;ROSTER:]" ..
+                        "textlist[7.2,6.6;6.1,1.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]" ..
+                        "button[7.2,8.2;6.1,0.6;unselect_team;Show Global Leaderboard]"
+                end
+            else
+                -- Sort players for Global Leaderboard
+                local sorted_players = {}
+                for pname, stats in pairs(tdm_league.player_stats) do
+                    local k = stats.kills or 0
+                    local d = stats.deaths or 0
+                    local c = stats.captures or 0
+                    local rating = k - d + (c * 10)
+                    table.insert(sorted_players, {
+                        name = pname,
+                        kills = k,
+                        deaths = d,
+                        captures = c,
+                        rating = rating
+                    })
+                end
+                
+                table.sort(sorted_players, function(a, b)
+                    if a.rating ~= b.rating then return a.rating > b.rating end
+                    if a.kills ~= b.kills then return a.kills > b.kills end
+                    return a.deaths < b.deaths
+                end)
+                
+                local board_items = {}
+                for i, p in ipairs(sorted_players) do
+                    if i > 50 then break end -- Show top 50
+                    table.insert(board_items, string.format("%d. %s (R:%d K:%d D:%d C:%d)", i, p.name, p.rating, p.kills, p.deaths, p.captures))
+                end
+                if #board_items == 0 then
+                    table.insert(board_items, "No player stats recorded yet")
+                end
+                
+                fs = fs ..
+                    "box[7.0,4.6;6.5,4.4;#222222aa]" ..
+                    "label[7.2,5.0;GLOBAL LEADERBOARD]" ..
+                    "textlist[7.2,5.4;6.1,3.3;global_leaderboard;" .. table.concat(board_items, ",") .. ";;false]"
             end
-        else
-            fs = fs .. "label[0.5,9.2;Registration handled by administrators.]"
+            
+            if is_admin then
+                if not selected then
+                    fs = fs .. "field[0.5,9.2;4.5,0.8;new_team;New Team Name;]" ..
+                    "button[5.2,9.2;3.5,0.8;create_team;CREATE TEAM]"
+                end
+            else
+                fs = fs .. "label[0.5,9.2;Registration handled by administrators.]"
+            end
+
+        elseif league_subtab == "schedule" then
+            if not tdm_league.fixtures or #tdm_league.fixtures == 0 then
+                fs = fs .. "label[0.5,4.6;No regular season schedule has been generated yet.]"
+                if is_admin then
+                    fs = fs .. "button[0.5,5.3;5.0,0.8;btn_generate_schedule;GENERATE SCHEDULE]"
+                end
+            else
+                local round_count = #tdm_league.fixtures
+                local round_options = {}
+                for r = 1, round_count do
+                    table.insert(round_options, "Round " .. r)
+                end
+                
+                local sel_round = settings.sel_round or 1
+                if sel_round > round_count then sel_round = round_count end
+                
+                fs = fs ..
+                    "label[0.5,4.3;SELECT ROUND:]" ..
+                    "dropdown[3.2,4.0;2.0,0.6;sel_round_dropdown;" .. table.concat(round_options, ",") .. ";" .. sel_round .. "]"
+                
+                local round_matches = tdm_league.fixtures[sel_round] or {}
+                local match_items = {}
+                for idx, m in ipairs(round_matches) do
+                    local status_str = m.status == "completed" and ("(W: " .. m.score.home .. "-" .. m.score.away .. ")") or "(Pending)"
+                    table.insert(match_items, string.format("%d. %s vs %s %s", idx, m.home, m.away, status_str))
+                end
+                
+                local sel_match_idx = settings.sel_match_idx or 1
+                if sel_match_idx > #match_items then sel_match_idx = #match_items end
+                if #match_items == 0 then
+                    table.insert(match_items, "No matches this round")
+                end
+                
+                fs = fs ..
+                    "label[0.5,4.8;MATCHUPS IN SELECTED ROUND:]" ..
+                    "textlist[0.5,5.3;6.0,3.8;sel_match_list;" .. table.concat(match_items, ",") .. ";" .. sel_match_idx .. ";false]"
+                
+                local selected_match = round_matches[sel_match_idx]
+                if selected_match then
+                    fs = fs ..
+                        "box[7.0,5.3;6.5,3.8;#222222aa]" ..
+                        "label[7.2,5.7;MATCH DETAILS]" ..
+                        "label[7.2,6.3;Home: " .. selected_match.home .. "]" ..
+                        "label[7.2,6.8;Away: " .. selected_match.away .. "]" ..
+                        "label[7.2,7.3;Status: " .. selected_match.status:upper() .. "]"
+                    
+                    if selected_match.status == "completed" then
+                        fs = fs .. "label[7.2,7.8;Score: " .. selected_match.score.home .. " - " .. selected_match.score.away .. "]"
+                    elseif is_admin and not match_active then
+                        fs = fs .. "button[7.2,7.8;6.1,0.8;start_scheduled_match;START MATCH]"
+                    end
+                end
+            end
+
+        elseif league_subtab == "history" then
+            local history_items = {}
+            for idx = #tdm_league.history, 1, -1 do
+                local entry = tdm_league.history[idx]
+                local date_str = os.date("%Y-%m-%d %H:%M", entry.time or 0)
+                table.insert(history_items, string.format("[%s] %s %d - %d %s (MVP: %s)", date_str, entry.home, entry.home_score, entry.away_score, entry.away, entry.mvp or "None"))
+            end
+            
+            if #history_items == 0 then
+                fs = fs .. "label[0.5,4.6;No match history recorded yet.]"
+            else
+                fs = fs ..
+                    "label[0.5,4.2;RECENT MATCH HISTORY:]" ..
+                    "textlist[0.5,4.7;13.0,5.2;history_list;" .. table.concat(history_items, ",") .. ";;false]"
+            end
+
+        elseif league_subtab == "playoffs" then
+            if tdm_league.season_state ~= "playoffs" then
+                fs = fs .. "label[0.5,4.6;Playoffs have not started yet.]"
+                
+                local all_done = true
+                local has_fixtures = (tdm_league.fixtures and #tdm_league.fixtures > 0)
+                if has_fixtures then
+                    for _, round in ipairs(tdm_league.fixtures) do
+                        for _, m in ipairs(round) do
+                            if m.status == "pending" then
+                                all_done = false
+                                break
+                            end
+                        end
+                    end
+                else
+                    all_done = false
+                end
+                
+                if has_fixtures and all_done then
+                    fs = fs .. "label[0.5,5.1;All regular season matches are completed!]"
+                    if is_admin then
+                        fs = fs .. "button[0.5,5.7;5.0,0.8;btn_start_playoffs;START PLAYOFFS]"
+                    end
+                end
+            else
+                local p = tdm_league.playoffs
+                local sf1 = p.semifinals[1]
+                local sf2 = p.semifinals[2]
+                local fn = p.finals
+                
+                fs = fs ..
+                    "box[0.5,4.5;13.0,4.8;#222222aa]" ..
+                    "label[0.7,4.8;SEMIFINALS]" ..
+                    "label[8.0,4.8;GRAND FINALS]"
+                
+                local sf1_winner_text = sf1.winner ~= "" and (" (Winner: " .. sf1.winner .. ")") or ""
+                local sf1_score_text = sf1.status == "completed" and (" [" .. sf1.score1 .. "-" .. sf1.score2 .. "]") or ""
+                fs = fs ..
+                    "label[0.7,5.5;SF 1: " .. sf1.team1 .. " vs " .. sf1.team2 .. sf1_score_text .. sf1_winner_text .. "]"
+                
+                local sf2_winner_text = sf2.winner ~= "" and (" (Winner: " .. sf2.winner .. ")") or ""
+                local sf2_score_text = sf2.status == "completed" and (" [" .. sf2.score1 .. "-" .. sf2.score2 .. "]") or ""
+                fs = fs ..
+                    "label[0.7,6.3;SF 2: " .. sf2.team1 .. " vs " .. sf2.team2 .. sf2_score_text .. sf2_winner_text .. "]"
+                
+                local fn_team1 = fn.team1 ~= "" and fn.team1 or "(TBD)"
+                local fn_team2 = fn.team2 ~= "" and fn.team2 or "(TBD)"
+                local fn_winner_text = fn.winner ~= "" and (" (CHAMPION: " .. fn.winner .. ")") or ""
+                local fn_score_text = fn.status == "completed" and (" [" .. fn.score1 .. "-" .. fn.score2 .. "]") or ""
+                fs = fs ..
+                    "label[8.0,5.9;FINAL: " .. fn_team1 .. " vs " .. fn_team2 .. fn_score_text .. fn_winner_text .. "]"
+                
+                if is_admin and not match_active then
+                    fs = fs .. "label[0.7,7.3;ADMIN CONTROL PANEL:]"
+                    if sf1.status == "pending" then
+                        fs = fs .. "button[0.7,7.8;4.0,0.8;start_sf1;START SEMIFINAL 1]"
+                    elseif sf2.status == "pending" then
+                        fs = fs .. "button[0.7,7.8;4.0,0.8;start_sf2;START SEMIFINAL 2]"
+                    elseif fn.status == "pending" and fn.team1 ~= "" and fn.team2 ~= "" then
+                        fs = fs .. "button[0.7,7.8;4.0,0.8;start_final;START GRAND FINAL]"
+                    elseif fn.status == "completed" then
+                        fs = fs .. "button[0.7,7.8;4.0,0.8;archive_season;ARCHIVE & END SEASON]"
+                    end
+                end
+            end
         end
         
+        -- Error display at the bottom of the league tab
+        if settings.err_msg then
+            fs = fs .. "style[err_lbl;textcolor=#ff3333;font=bold]" ..
+                       "label[0.5,10.2;ERROR: " .. settings.err_msg .. "]"
+        end
     elseif tab == "team" then
         local p_team_name = tdm_league.get_team(name)
         
@@ -505,6 +678,9 @@ core.register_on_player_receive_fields(function(player, formname, fields)
     if not player_settings[name] then
         player_settings[name] = { count = "5", diff = "medium" }
     end
+    if not fields.quit then
+        player_settings[name].err_msg = nil
+    end
 
     -- Disconnect Logic
     if fields.exit_server then
@@ -518,6 +694,172 @@ core.register_on_player_receive_fields(function(player, formname, fields)
     if fields.tab_team then player_tabs[name] = "team" end
     if fields.tab_locker then player_tabs[name] = "locker" end
     if fields.tab_settings and is_admin then player_tabs[name] = "settings" end
+
+    -- League Sub-Tab Switching
+    if fields.league_tab_standings then
+        player_settings[name].league_subtab = "standings"
+        tdm_core.lobby.show(player)
+        return
+    end
+    if fields.league_tab_schedule then
+        player_settings[name].league_subtab = "schedule"
+        tdm_core.lobby.show(player)
+        return
+    end
+    if fields.league_tab_history then
+        player_settings[name].league_subtab = "history"
+        tdm_core.lobby.show(player)
+        return
+    end
+    if fields.league_tab_playoffs then
+        player_settings[name].league_subtab = "playoffs"
+        tdm_core.lobby.show(player)
+        return
+    end
+
+
+
+    if fields.btn_generate_schedule and is_admin then
+        local ok, msg = tdm_league.generate_fixtures()
+        core.chat_send_player(name, "LOBBY: " .. msg)
+        tdm_core.lobby.show(player)
+        return
+    end
+
+    if fields.start_scheduled_match and is_admin then
+        local sel_round = player_settings[name].sel_round or 1
+        local sel_match_idx = player_settings[name].sel_match_idx or 1
+        local round_matches = tdm_league.fixtures[sel_round] or {}
+        local m_info = round_matches[sel_match_idx]
+        
+        core.log("action", "[TDM League] Match start clicked by " .. name .. 
+            " | round: " .. tostring(sel_round) .. " | match: " .. tostring(sel_match_idx) .. 
+            " | info: " .. (m_info and (m_info.home .. " vs " .. m_info.away .. " status: " .. m_info.status) or "nil"))
+
+        if m_info and m_info.status == "pending" then
+            local red = m_info.home
+            local blue = m_info.away
+            local dur = 300
+            local tod = "day"
+            local mode = "tdm"
+            local map_size = "Large"
+            
+            local my_team = tdm_league.get_team(name)
+            if my_team ~= red and my_team ~= blue then
+                local cmd = core.registered_chatcommands["spectate"]
+                if cmd and not tdm_core.is_spectator(name) then cmd.func(name, "") end
+            end
+            
+            tdm_core.match.scheduled_context = {
+                type = "regular_season",
+                round = sel_round,
+                index = sel_match_idx
+            }
+            
+            local ok, err = tdm_core.match.start(red, blue, dur, false, tod, 0, nil, mode, map_size)
+            if not ok then
+                player_settings[name].err_msg = err or "Could not start match."
+                core.chat_send_player(name, "ERROR: " .. (err or "Could not start match."))
+                tdm_core.lobby.show(player)
+            else
+                core.close_formspec(name, "tdm_core:lobby")
+            end
+            return
+        else
+            player_settings[name].err_msg = "Selected match not found or not pending."
+            core.chat_send_player(name, "ERROR: Selected match not found or not pending.")
+            tdm_core.lobby.show(player)
+            return
+        end
+    end
+
+    if fields.btn_start_playoffs and is_admin then
+        local ok, msg = tdm_league.start_playoffs()
+        core.chat_send_player(name, "LOBBY: " .. msg)
+        tdm_core.lobby.show(player)
+        return
+    end
+
+    if fields.start_sf1 and is_admin then
+        local p = tdm_league.playoffs
+        local sf1 = p.semifinals[1]
+        if sf1 and sf1.status == "pending" then
+            tdm_core.match.scheduled_context = {
+                type = "playoff_semifinal",
+                index = 1
+            }
+            local ok, err = tdm_core.match.start(sf1.team1, sf1.team2, 300, false, "day", 0, nil, "tdm", "Large")
+            if not ok then
+                player_settings[name].err_msg = err or "Could not start match."
+                core.chat_send_player(name, "ERROR: " .. (err or "Could not start match."))
+                tdm_core.lobby.show(player)
+            else
+                core.close_formspec(name, "tdm_core:lobby")
+            end
+            return
+        else
+            player_settings[name].err_msg = "Semifinal 1 not found or not pending."
+            core.chat_send_player(name, "ERROR: Semifinal 1 not found or not pending.")
+            tdm_core.lobby.show(player)
+            return
+        end
+    end
+
+    if fields.start_sf2 and is_admin then
+        local p = tdm_league.playoffs
+        local sf2 = p.semifinals[2]
+        if sf2 and sf2.status == "pending" then
+            tdm_core.match.scheduled_context = {
+                type = "playoff_semifinal",
+                index = 2
+            }
+            local ok, err = tdm_core.match.start(sf2.team1, sf2.team2, 300, false, "day", 0, nil, "tdm", "Large")
+            if not ok then
+                player_settings[name].err_msg = err or "Could not start match."
+                core.chat_send_player(name, "ERROR: " .. (err or "Could not start match."))
+                tdm_core.lobby.show(player)
+            else
+                core.close_formspec(name, "tdm_core:lobby")
+            end
+            return
+        else
+            player_settings[name].err_msg = "Semifinal 2 not found or not pending."
+            core.chat_send_player(name, "ERROR: Seminal 2 not found or not pending.")
+            tdm_core.lobby.show(player)
+            return
+        end
+    end
+
+    if fields.start_final and is_admin then
+        local p = tdm_league.playoffs
+        local fn = p.finals
+        if fn and fn.status == "pending" and fn.team1 ~= "" and fn.team2 ~= "" then
+            tdm_core.match.scheduled_context = {
+                type = "playoff_final"
+            }
+            local ok, err = tdm_core.match.start(fn.team1, fn.team2, 300, false, "day", 0, nil, "tdm", "Large")
+            if not ok then
+                player_settings[name].err_msg = err or "Could not start match."
+                core.chat_send_player(name, "ERROR: " .. (err or "Could not start match."))
+                tdm_core.lobby.show(player)
+            else
+                core.close_formspec(name, "tdm_core:lobby")
+            end
+            return
+        else
+            player_settings[name].err_msg = "Grand Final not found or not pending."
+            core.chat_send_player(name, "ERROR: Grand Final not found or not pending.")
+            tdm_core.lobby.show(player)
+            return
+        end
+    end
+
+    if fields.archive_season and is_admin then
+        local ok, msg = tdm_league.archive_season()
+        core.chat_send_player(name, "LOBBY: " .. msg)
+        tdm_core.lobby.show(player)
+        return
+    end
 
     -- Skin Selection
     local meta = player:get_meta()
@@ -762,8 +1104,14 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 
             local map_size = player_settings[name].map_size or "Large"
 
-            tdm_core.match.start(p_team, "BOTS", dur, true, tod, count, diff, mode, map_size)
-            core.close_formspec(name, "tdm_core:lobby")
+            tdm_core.match.scheduled_context = nil
+            local ok, err = tdm_core.match.start(p_team, "BOTS", dur, true, tod, count, diff, mode, map_size)
+            if not ok then
+                player_settings[name].err_msg = err or "Could not start match."
+                tdm_core.lobby.show(player)
+            else
+                core.close_formspec(name, "tdm_core:lobby")
+            end
             return
         else
             core.chat_send_player(name, "Please select a valid team for PVE practice!")
@@ -793,8 +1141,14 @@ core.register_on_player_receive_fields(function(player, formname, fields)
                 end
 
                 local map_size = player_settings[name].map_size or "Large"
-                tdm_core.match.start(red, blue, dur, false, tod, 0, nil, mode, map_size)
-                core.close_formspec(name, "tdm_core:lobby")
+                tdm_core.match.scheduled_context = nil
+                local ok, err = tdm_core.match.start(red, blue, dur, false, tod, 0, nil, mode, map_size)
+                if not ok then
+                    player_settings[name].err_msg = err or "Could not start match."
+                    tdm_core.lobby.show(player)
+                else
+                    core.close_formspec(name, "tdm_core:lobby")
+                end
                 return
             end
         else
@@ -815,7 +1169,22 @@ core.register_on_player_receive_fields(function(player, formname, fields)
         tdm_core.lobby.show(player)
         return
     end
-    
+    if fields.sel_round_dropdown then
+        local r_num = tonumber(fields.sel_round_dropdown:match("Round (%d+)"))
+        if r_num then
+            player_settings[name].sel_round = r_num
+            tdm_core.lobby.show(player)
+            return
+        end
+    end
+
+    if fields.sel_match_list then
+        local event = core.explode_textlist_event(fields.sel_match_list)
+        player_settings[name].sel_match_idx = event.index
+        tdm_core.lobby.show(player)
+        return
+    end
+
     -- Refresh if not closing
     if not fields.quit then
         tdm_core.lobby.show(player)

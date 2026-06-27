@@ -18,12 +18,33 @@ tdm_league.invites = invites_data ~= "" and core.deserialize(invites_data) or {}
 local requests_data = storage:get_string("requests")
 tdm_league.requests = requests_data ~= "" and core.deserialize(requests_data) or {} -- team -> list of players
 
+-- Persistent League Management Data
+local fixtures_data = storage:get_string("fixtures")
+tdm_league.fixtures = fixtures_data ~= "" and core.deserialize(fixtures_data) or {}
+
+local history_data = storage:get_string("history")
+tdm_league.history = history_data ~= "" and core.deserialize(history_data) or {}
+
+local playoffs_data = storage:get_string("playoffs")
+tdm_league.playoffs = playoffs_data ~= "" and core.deserialize(playoffs_data) or {}
+
+local state_data = storage:get_string("season_state")
+tdm_league.season_state = state_data ~= "" and state_data or "offseason"
+
+local archive_data = storage:get_string("season_archive")
+tdm_league.season_archive = archive_data ~= "" and core.deserialize(archive_data) or {}
+
 function tdm_league.save()
     storage:set_string("teams", core.serialize(tdm_league.teams))
     storage:set_string("players", core.serialize(tdm_league.player_to_team))
     storage:set_string("stats", core.serialize(tdm_league.player_stats))
     storage:set_string("invites", core.serialize(tdm_league.invites))
     storage:set_string("requests", core.serialize(tdm_league.requests))
+    storage:set_string("fixtures", core.serialize(tdm_league.fixtures))
+    storage:set_string("history", core.serialize(tdm_league.history))
+    storage:set_string("playoffs", core.serialize(tdm_league.playoffs))
+    storage:set_string("season_state", tdm_league.season_state)
+    storage:set_string("season_archive", core.serialize(tdm_league.season_archive))
 end
 
 -- PUBLIC API
@@ -34,6 +55,147 @@ end
 function tdm_league.is_owner(player_name, team_name)
     local team = tdm_league.teams[team_name]
     return team and team.leader == player_name
+end
+
+-- LEAGUE MANAGEMENT CORE API
+function tdm_league.generate_fixtures()
+    local team_names = {}
+    for tname in pairs(tdm_league.teams) do
+        table.insert(team_names, tname)
+    end
+    
+    table.sort(team_names)
+    local num_teams = #team_names
+    if num_teams < 2 then return false, "Need at least 2 teams to generate fixtures." end
+    
+    if num_teams % 2 ~= 0 then
+        table.insert(team_names, "BYE")
+        num_teams = num_teams + 1
+    end
+    
+    local rounds = num_teams - 1
+    local matches_per_round = num_teams / 2
+    
+    tdm_league.fixtures = {}
+    
+    for r = 1, rounds do
+        tdm_league.fixtures[r] = {}
+        for m = 1, matches_per_round do
+            local home = team_names[m]
+            local away = team_names[num_teams - m + 1]
+            if home ~= "BYE" and away ~= "BYE" then
+                table.insert(tdm_league.fixtures[r], {
+                    home = home,
+                    away = away,
+                    status = "pending",
+                    score = {home = 0, away = 0}
+                })
+            end
+        end
+        -- Rotate teams (Circle Method, keeping element 1 fixed)
+        local last = team_names[num_teams]
+        for i = num_teams, 3, -1 do
+            team_names[i] = team_names[i - 1]
+        end
+        team_names[2] = last
+    end
+    
+    tdm_league.season_state = "regular_season"
+    tdm_league.playoffs = {}
+    tdm_league.save()
+    return true, "Season fixtures generated."
+end
+
+function tdm_league.start_playoffs()
+    if tdm_league.season_state ~= "regular_season" then
+        return false, "Playoffs can only start from regular season."
+    end
+    
+    -- Get sorted standings
+    local sorted = {}
+    for tname, data in pairs(tdm_league.teams) do
+        local wins = data.wins or 0
+        local losses = data.losses or 0
+        local kills = data.kills_scored or 0
+        local deaths = data.deaths_conceded or 0
+        local diff = kills - deaths
+        table.insert(sorted, {name = tname, wins = wins, diff = diff, kills = kills})
+    end
+    
+    table.sort(sorted, function(a, b)
+        if a.wins ~= b.wins then return a.wins > b.wins end
+        if a.diff ~= b.diff then return a.diff > b.diff end
+        return a.kills > b.kills
+    end)
+    
+    if #sorted < 4 then
+        return false, "Need at least 4 registered teams to start playoffs."
+    end
+    
+    local t1 = sorted[1].name
+    local t2 = sorted[2].name
+    local t3 = sorted[3].name
+    local t4 = sorted[4].name
+    
+    tdm_league.playoffs = {
+        semifinals = {
+            { team1 = t1, team2 = t4, status = "pending", winner = "", score1 = 0, score2 = 0 },
+            { team1 = t2, team2 = t3, status = "pending", winner = "", score1 = 0, score2 = 0 }
+        },
+        finals = { team1 = "", team2 = "", status = "pending", winner = "", score1 = 0, score2 = 0 }
+    }
+    
+    tdm_league.season_state = "playoffs"
+    tdm_league.save()
+    return true, "Playoffs started. Semifinals: " .. t1 .. " vs " .. t4 .. ", and " .. t2 .. " vs " .. t3 .. "."
+end
+
+function tdm_league.archive_season()
+    local sorted = {}
+    for tname, data in pairs(tdm_league.teams) do
+        table.insert(sorted, {
+            name = tname,
+            wins = data.wins or 0,
+            losses = data.losses or 0,
+            kills = data.kills_scored or 0,
+            deaths = data.deaths_conceded or 0
+        })
+    end
+    
+    table.sort(sorted, function(a, b)
+        if a.wins ~= b.wins then return a.wins > b.wins end
+        return (a.kills - a.deaths) > (b.kills - b.deaths)
+    end)
+    
+    local champion = "None"
+    if tdm_league.season_state == "playoffs" and tdm_league.playoffs.finals and tdm_league.playoffs.finals.winner ~= "" then
+        champion = tdm_league.playoffs.finals.winner
+    elseif #sorted > 0 then
+        champion = sorted[1].name
+    end
+    
+    local archive_entry = {
+        season_num = #tdm_league.season_archive + 1,
+        timestamp = os.time(),
+        champion = champion,
+        standings = sorted
+    }
+    table.insert(tdm_league.season_archive, archive_entry)
+    
+    -- Reset team stats
+    for tname, data in pairs(tdm_league.teams) do
+        data.wins = 0
+        data.losses = 0
+        data.kills_scored = 0
+        data.deaths_conceded = 0
+    end
+    
+    tdm_league.fixtures = {}
+    tdm_league.playoffs = {}
+    tdm_league.season_state = "offseason"
+    tdm_league.save()
+    
+    return true, "Season archived. Champion: " .. champion
 end
 
 -- MANAGEMENT API
@@ -301,19 +463,63 @@ core.register_chatcommand("leaguesetleader", {
 
 
 core.register_chatcommand("league", {
-    description = "Show the League Leaderboard",
+    params = "[generate_schedule | start_playoffs | archive_season | reset_all]",
+    description = "League Management and Standings System",
     func = function(name, param)
+        local is_admin = core.check_player_privs(name, {server = true})
+        local cmd = param:match("^(%S+)")
+        
+        if cmd and cmd ~= "" then
+            if not is_admin then return false, "Admin privileges required." end
+            
+            if cmd == "generate_schedule" then
+                local ok, msg = tdm_league.generate_fixtures()
+                return ok, msg
+            elseif cmd == "start_playoffs" then
+                local ok, msg = tdm_league.start_playoffs()
+                return ok, msg
+            elseif cmd == "archive_season" then
+                local ok, msg = tdm_league.archive_season()
+                return ok, msg
+            elseif cmd == "reset_all" then
+                tdm_league.fixtures = {}
+                tdm_league.history = {}
+                tdm_league.playoffs = {}
+                tdm_league.season_state = "offseason"
+                tdm_league.season_archive = {}
+                for tname, data in pairs(tdm_league.teams) do
+                    data.wins = 0
+                    data.losses = 0
+                    data.kills_scored = 0
+                    data.deaths_conceded = 0
+                end
+                tdm_league.save()
+                return true, "League state reset to offseason. All stats cleared."
+            else
+                return false, "Unknown league sub-command. Try /league generate_schedule | start_playoffs | archive_season | reset_all"
+            end
+        end
+        
+        -- Default view (standings)
         local sorted = {}
         for tname, data in pairs(tdm_league.teams) do
-            table.insert(sorted, {name = tname, wins = data.wins, losses = data.losses})
+            local wins = data.wins or 0
+            local losses = data.losses or 0
+            local kills = data.kills_scored or 0
+            local deaths = data.deaths_conceded or 0
+            local diff = kills - deaths
+            table.insert(sorted, {name = tname, wins = wins, losses = losses, diff = diff})
         end
-        table.sort(sorted, function(a, b) return a.wins > b.wins end)
+        table.sort(sorted, function(a, b)
+            if a.wins ~= b.wins then return a.wins > b.wins end
+            return a.diff > b.diff
+        end)
         
         local out = "=== LEAGUE STANDINGS ===\n"
-        out = out .. string.format("%-15s | %-5s | %-5s\n", "Team", "W", "L")
-        out = out .. "---------------------------\n"
+        out = out .. string.format("%-15s | %-3s | %-3s | %-5s\n", "Team", "W", "L", "Diff")
+        out = out .. "-----------------------------------\n"
         for _, t in ipairs(sorted) do
-            out = out .. string.format("%-15s | %-5d | %-5d\n", t.name, t.wins, t.losses)
+            out = out .. string.format("%-15s | %-3d | %-3d | %-+5d\n", t.name, t.wins, t.losses, t.diff)
         end
         return true, out
     end
