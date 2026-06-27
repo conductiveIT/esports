@@ -25,6 +25,7 @@ dofile(modpath .. "/player_anim.lua")
 dofile(modpath .. "/skins.lua")
 dofile(modpath .. "/lobby.lua")
 dofile(modpath .. "/ctf.lua")
+dofile(modpath .. "/koth.lua")
 
 -- High-Performance Combat Settings for Hands (Testing & Gameplay)
 core.override_item("", {
@@ -221,6 +222,20 @@ core.register_entity("esports_core:capture_ring", {
         mesh = "character.b3d", -- Temporary: Use flat circle if possible, but mesh with scale works
         textures = {"esports_hud_bar.png^[colorize:#FFFF00:150"}, -- Glowing yellow circle
         visual_size = {x=2, y=0.1, z=2},
+        physical = false,
+        pointable = false,
+        glow = 14,
+        static_save = false,
+    },
+})
+
+-- Visual indicator for the KOTH capture hill
+core.register_entity("esports_core:koth_ring", {
+    initial_properties = {
+        visual = "mesh",
+        mesh = "character.b3d",
+        textures = {"esports_hud_bar.png^[colorize:#FFFFFF:150"},
+        visual_size = {x=6, y=0.1, z=6},
         physical = false,
         pointable = false,
         glow = 14,

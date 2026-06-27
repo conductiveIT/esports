@@ -186,14 +186,15 @@ local function get_formspec(name)
         
         local mode_idx = 1
         if settings.match_mode == "CTF" then mode_idx = 2
-        elseif settings.match_mode == "FFA" then mode_idx = 3 end
+        elseif settings.match_mode == "FFA" then mode_idx = 3
+        elseif settings.match_mode == "KOTH" then mode_idx = 4 end
  
         fs = fs .. "box[0.8,8.0;12.4,1.2;#333333]" ..
         "label[1.0,8.2;ARENA CONFIGURATION]" ..
         "label[1.0,8.8;Dur:]" ..
         "dropdown[2.0,8.5;1.5,0.6;sel_dur;1m,5m,10m,15m,20m,30m;2]" ..
         "label[3.9,8.8;Mode:]" ..
-        "dropdown[4.9,8.5;1.8,0.6;sel_mode;TDM,CTF,FFA;" .. mode_idx .. "]" ..
+        "dropdown[4.9,8.5;1.8,0.6;sel_mode;TDM,CTF,FFA,KOTH;" .. mode_idx .. "]" ..
         "label[7.2,8.8;Time:]" ..
         "dropdown[8.2,8.5;1.8,0.6;sel_tod;Day,Night;1]" ..
         "label[10.5,8.8;Size:]" ..
@@ -283,11 +284,12 @@ local function get_formspec(name)
                  
                  local roster_items = {}
                  for _, mname in ipairs(data.members) do
-                     local stats = esports_league.player_stats[mname] or {kills=0, deaths=0, captures=0}
+                     local stats = esports_league.player_stats[mname] or {kills=0, deaths=0, captures=0, hill_time=0}
                      local k = stats.kills or 0
                      local d = stats.deaths or 0
                      local c = stats.captures or 0
-                     local rating = k - d + (c * 10)
+                     local h = stats.hill_time or 0
+                     local rating = k - d + (c * 10) + math.floor(h / 10)
                      local kd = "0.0"
                      if d > 0 then
                          local val = math.floor((k / d) * 10)
@@ -295,7 +297,7 @@ local function get_formspec(name)
                      else
                          kd = tostring(k) .. ".0"
                      end
-                     table.insert(roster_items, string.format("%s (R:%d KD:%s)", esports_core.get_nick(mname), rating, kd))
+                     table.insert(roster_items, string.format("%s (R:%d KD:%s H:%ds)", esports_core.get_nick(mname), rating, kd, h))
                  end
  
                  local leader_display = esports_core.get_nick(data.leader or "")
@@ -347,12 +349,14 @@ local function get_formspec(name)
                     local k = stats.kills or 0
                     local d = stats.deaths or 0
                     local c = stats.captures or 0
-                    local rating = k - d + (c * 10)
+                    local h = stats.hill_time or 0
+                    local rating = k - d + (c * 10) + math.floor(h / 10)
                     table.insert(sorted_players, {
                         name = pname,
                         kills = k,
                         deaths = d,
                         captures = c,
+                        hill_time = h,
                         rating = rating
                     })
                 end
@@ -366,7 +370,7 @@ local function get_formspec(name)
                 local board_items = {}
                 for i, p in ipairs(sorted_players) do
                     if i > 50 then break end -- Show top 50
-                    table.insert(board_items, string.format("%d. %s (R:%d K:%d D:%d C:%d)", i, p.name, p.rating, p.kills, p.deaths, p.captures))
+                    table.insert(board_items, string.format("%d. %s (R:%d K:%d D:%d C:%d H:%ds)", i, p.name, p.rating, p.kills, p.deaths, p.captures, p.hill_time))
                 end
                 if #board_items == 0 then
                     table.insert(board_items, "No player stats recorded yet")
@@ -570,12 +574,13 @@ local function get_formspec(name)
                 
             local roster_items = {}
             for _, mname in ipairs(team_data.members) do
-                local stats = esports_league.player_stats[mname] or {kills=0, deaths=0, captures=0}
+                local stats = esports_league.player_stats[mname] or {kills=0, deaths=0, captures=0, hill_time=0}
                 local k = stats.kills or 0
                 local d = stats.deaths or 0
                 local c = stats.captures or 0
-                local rating = k - d + (c * 10)
-                table.insert(roster_items, string.format("%s (R:%d K:%d D:%d C:%d)", esports_core.get_nick(mname), rating, k, d, c))
+                local h = stats.hill_time or 0
+                local rating = k - d + (c * 10) + math.floor(h / 10)
+                table.insert(roster_items, string.format("%s (R:%d K:%d D:%d C:%d H:%ds)", esports_core.get_nick(mname), rating, k, d, c, h))
             end
             
             fs = fs .. "textlist[0.5,4.8;6.0,4.0;roster_list;" .. table.concat(roster_items, ",") .. ";;false]"

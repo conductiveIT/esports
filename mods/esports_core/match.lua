@@ -134,6 +134,10 @@ core.register_globalstep(function(dtime)
     elseif esports_core.match.state == "active" then
         esports_core.match.timer = esports_core.match.timer - 1
         
+        if esports_core.match.is_koth then
+            esports_core.koth.update(1.0)
+        end
+        
         local mins = math.floor(esports_core.match.timer / 60)
         local secs = esports_core.match.timer % 60
         local is_critical = esports_core.match.timer < 30
@@ -296,18 +300,32 @@ core.register_globalstep(function(dtime)
             
             for _, p in ipairs(core.get_connected_players()) do
                 local pname = p:get_player_name()
-                local stats = esports_core.match.player_stats[pname] or {kills=0, deaths=0, captures=0}
+                local stats = esports_core.match.player_stats[pname] or {kills=0, deaths=0, captures=0, hill_time=0}
                 local p_team = esports_core.teams.get_player_team(pname)
                 
                 if p_team == "red" then 
-                    table.insert(red_list, {name=pname, k=stats.kills, d=stats.deaths, c=stats.captures})
+                    table.insert(red_list, {name=pname, k=stats.kills, d=stats.deaths, c=stats.captures, h=(stats.hill_time or 0)})
                 elseif p_team == "blue" then
-                    table.insert(blue_list, {name=pname, k=stats.kills, d=stats.deaths, c=stats.captures})
+                    table.insert(blue_list, {name=pname, k=stats.kills, d=stats.deaths, c=stats.captures, h=(stats.hill_time or 0)})
                 end
                 
-                -- Determine MVP (Humans only) - prioritized by captures in CTF
+                -- Save hill_time stats to persistent database (PVP ONLY!)
+                if esports_league and not esports_core.match.is_pve and not esports_core.match.is_ffa then
+                    if stats.hill_time and stats.hill_time > 0 then
+                        if not esports_league.player_stats[pname] then
+                            esports_league.player_stats[pname] = {kills = 0, deaths = 0, captures = 0, hill_time = 0}
+                        end
+                        esports_league.player_stats[pname].hill_time = (esports_league.player_stats[pname].hill_time or 0) + stats.hill_time
+                    end
+                end
+                
+                -- Determine MVP (Humans only) - prioritized by captures in CTF, hill time in KOTH
                 local score = stats.kills
-                if esports_core.match.is_ctf then score = (stats.captures * 10) + stats.kills end
+                if esports_core.match.is_ctf then 
+                    score = (stats.captures * 10) + stats.kills 
+                elseif esports_core.match.is_koth then
+                    score = math.floor((stats.hill_time or 0) / 10) + stats.kills
+                end
                 
                 if score > mvp.kills and not esports_core.is_spectator(pname) then
                     mvp = {name=pname, kills=score}
@@ -330,10 +348,12 @@ core.register_globalstep(function(dtime)
                 esports_league.save()
             end
             
-            -- SORT BY PERFORMANCE (Captures if CTF, otherwise Kills)
+            -- SORT BY PERFORMANCE (Captures if CTF, Hill Time if KOTH, otherwise Kills)
             local sort_fn = function(a, b) 
                 if esports_core.match.is_ctf then
                     if a.c ~= b.c then return a.c > b.c end
+                elseif esports_core.match.is_koth then
+                    if a.h ~= b.h then return a.h > b.h end
                 end
                 return a.k > b.k 
             end
@@ -347,6 +367,7 @@ core.register_globalstep(function(dtime)
                 mvp = mvp.name,
                 mvp_kills = mvp.kills,
                 is_ctf = esports_core.match.is_ctf,
+                is_koth = esports_core.match.is_koth,
                 win_team = win_team_id,
                 red_team = r_name,
                 blue_team = b_name,
@@ -883,8 +904,10 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
     -- 4. Mode Configuration
     local is_pve = (pve_mode == true)
     local is_ffa = (game_mode == "ffa")
+    local is_koth = (game_mode == "koth")
     esports_core.match.is_pve = is_pve
     esports_core.match.is_ffa = is_ffa
+    esports_core.match.is_koth = is_koth
     esports_core.match.is_ctf = (game_mode == "ctf")
     esports_core.teams.scores = {red = 0, blue = 0}
 
@@ -1005,6 +1028,14 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
         esports_core.ctf.reset()
         esports_core.ctf.spawn_flags()
     end
+
+    if esports_core.match.is_koth then
+        if esports_core.koth.placed_ring and esports_core.koth.placed_ring:get_luaentity() then
+            esports_core.koth.placed_ring:remove()
+        end
+        esports_core.koth.placed_ring = nil
+        esports_core.koth.spawn_new_hill()
+    end
     
     if esports_storm then
         esports_storm.current_radius = 100
@@ -1119,6 +1150,18 @@ core.register_chatcommand("botmatch", {
         local team, count_str, diff, time_mode = param:match("^(%S+)%s+(%d+)%s*(%S*)%s*(%S*)$")
         if not team or not count_str then return false, "Usage: /botmatch <team> <number> [easy/medium/hard] [day/night]" end
         return esports_core.match.start(team, "BOTS", 300, true, time_mode, tonumber(count_str), diff)
+    end
+})
+
+core.register_chatcommand("kothmatch", {
+    params = "<team1> <team2> [duration] [day/night] [map_size]",
+    description = "Start a competitive King of the Hill match (Admin only).",
+    privs = {server = true},
+    func = function(name, param)
+        local t1, t2, dur, time_mode, map_size = param:match("^(%S+)%s+(%S+)%s*(%d*)%s*(%S*)%s*(%S*)$")
+        if not t1 or not t2 then return false, "Usage: /kothmatch <Team1> <Team2> [duration] [day/night] [map_size]" end
+        esports_core.match.friendly_fire = false
+        return esports_core.match.start(t1, t2, dur, false, time_mode, nil, nil, "koth", map_size)
     end
 })
 

@@ -65,6 +65,16 @@ esports_core.hud.init_hud = function(player)
         text = "05:00",
     })
     
+    if esports_core.match.is_koth then
+        huds.koth_status = player:hud_add({
+            hud_elem_type = "text",
+            position = {x = 0.5, y = 0.14},
+            alignment = {x = 0, y = 0},
+            number = 0x00FF00, -- Green
+            text = "HILL ROTATION: 60s | OWNER: NONE",
+        })
+    end
+    
     -- Team assignment indicator (Only for combatants)
     if not esports_core.is_spectator(player_name) then
         local team = esports_core.teams.get_player_team(player_name)
@@ -172,6 +182,36 @@ esports_core.hud.update_scores = function()
         end
     end
     
+    -- Update KOTH HUD if needed
+    if esports_core.match.is_koth then
+        local owner = esports_core.koth.hill_owner or "none"
+        local timer = esports_core.koth.timer or 60
+        local contested = esports_core.koth.contested
+        
+        local status_text = string.format("HILL ROTATION: %ds | OWNER: %s", timer, owner:upper())
+        if contested then
+            status_text = string.format("HILL ROTATION: %ds | OWNER: CONTESTED!", timer)
+        end
+        
+        for _, p in ipairs(core.get_connected_players()) do
+            local pname = p:get_player_name()
+            local huds = esports_core.hud.player_huds[pname]
+            if huds and huds.koth_status then
+                p:hud_change(huds.koth_status, "text", status_text)
+                
+                local color = 0x00FF00 -- Green
+                if contested then
+                    color = 0xFFFF00 -- Yellow
+                elseif owner == "red" then
+                    color = 0xFF4444 -- Red
+                elseif owner == "blue" then
+                    color = 0x4444FF -- Blue
+                end
+                p:hud_change(huds.koth_status, "number", color)
+            end
+        end
+    end
+
     -- Update CTF HUD if needed
     if esports_core.match.is_ctf then
         local r_state = esports_core.ctf.states.red:upper()
@@ -484,7 +524,12 @@ function esports_core.hud.show_outro(player, data)
         "button[0,0;8,1.5;return_lobby;RETURN TO LOBBY]")
     
     -- 4. MVP Highlight (Gold Text)
-    local mvp_label = data.is_ctf and "POINTS" or "KILLS"
+    local mvp_label = "KILLS"
+    if data.is_ctf then
+        mvp_label = "POINTS"
+    elseif data.is_koth then
+        mvp_label = "RATING POINTS"
+    end
     local mvp_txt = "MVP: " .. esports_core.get_nick(data.mvp) .. " (" .. data.mvp_kills .. " " .. mvp_label .. ")"
     huds.outro_mvp = player:hud_add({
         hud_elem_type = "text",
@@ -499,6 +544,8 @@ function esports_core.hud.show_outro(player, data)
     local red_scores = (data.red_team or "RED TEAM STANDINGS") .. "\n"
     if data.is_ctf then
         red_scores = red_scores .. "PLAYER               | C | K | D\n" .. string.rep("-", 38) .. "\n"
+    elseif data.is_koth then
+        red_scores = red_scores .. "PLAYER               | H    | K | D\n" .. string.rep("-", 39) .. "\n"
     else
         red_scores = red_scores .. "PLAYER               | K | D\n" .. string.rep("-", 30) .. "\n"
     end
@@ -507,6 +554,8 @@ function esports_core.hud.show_outro(player, data)
         local display_name = esports_core.get_nick(p.name)
         if data.is_ctf then
             red_scores = red_scores .. string.format("%-20s |%2d |%2d |%2d\n", display_name:sub(1,15), p.c, p.k, p.d)
+        elseif data.is_koth then
+            red_scores = red_scores .. string.format("%-20s |%3ds |%2d |%2d\n", display_name:sub(1,15), p.h or 0, p.k, p.d)
         else
             red_scores = red_scores .. string.format("%-20s |%2d |%2d\n", display_name:sub(1,15), p.k, p.d)
         end
@@ -524,6 +573,8 @@ function esports_core.hud.show_outro(player, data)
     local blue_scores = (data.blue_team or "BLUE TEAM STANDINGS") .. "\n"
     if data.is_ctf then
         blue_scores = blue_scores .. "PLAYER               | C | K | D\n" .. string.rep("-", 38) .. "\n"
+    elseif data.is_koth then
+        blue_scores = blue_scores .. "PLAYER               | H    | K | D\n" .. string.rep("-", 39) .. "\n"
     else
         blue_scores = blue_scores .. "PLAYER               | K | D\n" .. string.rep("-", 30) .. "\n"
     end
@@ -532,6 +583,8 @@ function esports_core.hud.show_outro(player, data)
         local display_name = esports_core.get_nick(p.name)
         if data.is_ctf then
             blue_scores = blue_scores .. string.format("%-20s |%2d |%2d |%2d\n", display_name:sub(1,15), p.c, p.k, p.d)
+        elseif data.is_koth then
+            blue_scores = blue_scores .. string.format("%-20s |%3ds |%2d |%2d\n", display_name:sub(1,15), p.h or 0, p.k, p.d)
         else
             blue_scores = blue_scores .. string.format("%-20s |%2d |%2d\n", display_name:sub(1,15), p.k, p.d)
         end
