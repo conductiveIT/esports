@@ -11,6 +11,7 @@ This is a fast-paced hitscan team combat base game for Luanti with building, sto
 ### Game Modes
 - **Team Deathmatch (TDM)**: Fast-paced hitscan combat where teams build, loot, and fight to reach the highest elimination score.
 - **Capture the Flag (CTF)**: Objective-based mode where teams defend their home base flag stand while attempting to carry the enemy flag to victory.
+- **Free For All (FFA)**: Solo deathmatch mode. Every player for themselves with randomized island spawns and friendly fire always enabled. Matches require no team registrations and have no impact on team standings or league history/player stats.
 - **PvE Bot Practice**: Solo or cooperative training matches playing against difficulty-scaled AI sentries who navigate, loot, and shoot or melee through structural blockades.
 
 ### League Management System
@@ -50,6 +51,7 @@ This is a fast-paced hitscan team combat base game for Luanti with building, sto
 *   `/match <team1> <team2> [duration] [off] [day/night]`: Starts a competitive match between two registered league teams. Optional parameters include match duration in seconds, `off` to disable friendly fire, and `day` or `night` to control match time (Admin only).
 *   `/matchdebug <team1> <team2> [off] [day/night]`: Starts a debug match instantly with all standard weapons and ammo provided immediately. Optional parameters include `off` to disable friendly fire, and `day` or `night` to control match time (Admin only).
 *   `/botmatch <team> <bot_count> [easy/medium/hard] [day/night]`: Starts a PVE match for a team against a specified number of AI bots. Bots replace the opposing team. Optional parameters include difficulty and `day` or `night` match time (Admin only).
+*   `/ffamatch [duration] [day/night] [map_size]`: Starts a Free For All (Solo Deathmatch) match. Friendly fire is forced on, spawns are randomized, and statistics do not affect teams or league standings (Admin only).
 
 ### Player Commands
 *   `/spectate [player_name]`: Toggles spectator mode for yourself or another player. Spectators are invisible, can't take damage, have no inventory, and have flight/noclip privileges enabled (Admin only).

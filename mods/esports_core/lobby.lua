@@ -150,41 +150,62 @@ local function get_formspec(name)
             if v == settings.pve then pve_idx = i end
         end
 
-        fs = fs .. 
-            "label[0.8,3.8;COMPETITIVE MATCH]" ..
-            "label[0.8,4.3;Choose the competing teams:]" ..
+        local match_mode = settings.match_mode or "TDM"
+        
+        if match_mode == "FFA" then
+            fs = fs ..
+                "label[0.8,3.8;FREE FOR ALL (SOLO DEATHMATCH)]" ..
+                "label[0.8,4.3;No teams. Every player for themselves!]" ..
+                "label[0.8,5.0;Rules:]" ..
+                "label[0.8,5.5;- Friendly fire is always enabled.]" ..
+                "label[0.8,6.0;- Spawn points are randomized across the island.]" ..
+                "label[0.8,6.5;- Match standings and leaderboards are NOT affected.]"
+        else
+            fs = fs .. 
+                "label[0.8,3.8;COMPETITIVE MATCH]" ..
+                "label[0.8,4.3;Choose the competing teams:]" ..
+                
+                "label[0.8,5.2;Red Team:]" ..
+                "dropdown[0.8,5.6;5.4,0.6;sel_red;" .. teams_str .. ";" .. red_idx .. "]" ..
+                
+                "label[0.8,6.8;Blue Team:]" ..
+                "dropdown[0.8,7.2;5.4,0.6;sel_blue;" .. teams_str .. ";" .. blue_idx .. "]" ..
+                
+                "box[6.95,3.8;0.1,4.0;#ffffff]" .. -- Divider (Shortened to avoid Arena overlap)
+                
+                "label[7.4,3.8;BOT PRACTICE (PVE)]" ..
+                "label[7.4,4.3;Current Setup: " .. settings.count .. " Bots, " .. settings.diff .. " difficulty]" ..
+                
+                "label[7.4,5.2;Player Team:]" ..
+                "dropdown[7.4,5.6;5.8,0.6;sel_pve;" .. teams_str .. ";" .. pve_idx .. "]"
+        end
             
-            "label[0.8,5.2;Red Team:]" ..
-            "dropdown[0.8,5.6;5.4,0.6;sel_red;" .. teams_str .. ";" .. red_idx .. "]" ..
-            
-            "label[0.8,6.8;Blue Team:]" ..
-            "dropdown[0.8,7.2;5.4,0.6;sel_blue;" .. teams_str .. ";" .. blue_idx .. "]"
-            
-        fs = fs .. "box[6.95,3.8;0.1,4.0;#ffffff]" .. -- Divider (Shortened to avoid Arena overlap)
-            
-            "label[7.4,3.8;BOT PRACTICE (PVE)]" ..
-            "label[7.4,4.3;Current Setup: " .. settings.count .. " Bots, " .. settings.diff .. " difficulty]" ..
-            
-            "label[7.4,5.2;Player Team:]" ..
-            "dropdown[7.4,5.6;5.8,0.6;sel_pve;" .. teams_str .. ";" .. pve_idx .. "]"
-            
-            local size_list = {"Small","Medium","Large"}
-            local size_idx = 3
-            for i, v in ipairs(size_list) do if v == settings.map_size then size_idx = i break end end
+        local size_list = {"Small","Medium","Large"}
+        local size_idx = 3
+        for i, v in ipairs(size_list) do if v == settings.map_size then size_idx = i break end end
+        
+        local mode_idx = 1
+        if settings.match_mode == "CTF" then mode_idx = 2
+        elseif settings.match_mode == "FFA" then mode_idx = 3 end
  
-            fs = fs .. "box[0.8,8.0;12.4,1.2;#333333]" ..
-            "label[1.0,8.2;ARENA CONFIGURATION]" ..
-            "label[1.0,8.8;Dur:]" ..
-            "dropdown[2.0,8.5;1.5,0.6;sel_dur;1m,5m,10m,15m,20m,30m;2]" ..
-            "label[3.9,8.8;Mode:]" ..
-            "dropdown[4.9,8.5;1.8,0.6;sel_mode;TDM,CTF;" .. (settings.match_mode == "CTF" and 2 or 1) .. "]" ..
-            "label[7.2,8.8;Time:]" ..
-            "dropdown[8.2,8.5;1.8,0.6;sel_tod;Day,Night;1]" ..
-            "label[10.5,8.8;Size:]" ..
-            "dropdown[11.5,8.5;1.5,0.6;sel_map_size;Small,Medium,Large;" .. size_idx .. "]" ..
+        fs = fs .. "box[0.8,8.0;12.4,1.2;#333333]" ..
+        "label[1.0,8.2;ARENA CONFIGURATION]" ..
+        "label[1.0,8.8;Dur:]" ..
+        "dropdown[2.0,8.5;1.5,0.6;sel_dur;1m,5m,10m,15m,20m,30m;2]" ..
+        "label[3.9,8.8;Mode:]" ..
+        "dropdown[4.9,8.5;1.8,0.6;sel_mode;TDM,CTF,FFA;" .. mode_idx .. "]" ..
+        "label[7.2,8.8;Time:]" ..
+        "dropdown[8.2,8.5;1.8,0.6;sel_tod;Day,Night;1]" ..
+        "label[10.5,8.8;Size:]" ..
+        "dropdown[11.5,8.5;1.5,0.6;sel_map_size;Small,Medium,Large;" .. size_idx .. "]"
  
-            "button[0.8,9.4;5.4,0.8;" .. start_comp_name .. ";START TEAM BATTLE]" ..
-            "button[7.8,9.4;5.4,0.8;" .. start_pve_name .. ";START PVE MATCH]"
+        if match_mode == "FFA" then
+            fs = fs .. "button[0.8,9.4;12.4,0.8;start_ffa;START FREE FOR ALL]"
+        else
+            fs = fs ..
+                "button[0.8,9.4;5.4,0.8;" .. start_comp_name .. ";START TEAM BATTLE]" ..
+                "button[7.8,9.4;5.4,0.8;" .. start_pve_name .. ";START PVE MATCH]"
+        end
             
         if match_active then
             fs = fs .. 
@@ -1165,6 +1186,25 @@ core.register_on_player_receive_fields(function(player, formname, fields)
         end
     end
     
+    if fields.start_ffa and is_admin then
+        local dur_str = player_settings[name].match_dur or "5m"
+        local dur = tonumber(dur_str:match("%d+")) * 60
+        local tod = (player_settings[name].match_tod or "Day"):lower()
+        local map_size = player_settings[name].map_size or "Large"
+        
+        esports_core.match.scheduled_context = nil
+        esports_core.match.friendly_fire = true
+        
+        local ok, err = esports_core.match.start(nil, nil, dur, false, tod, nil, nil, "ffa", map_size)
+        if not ok then
+            player_settings[name].err_msg = err or "Could not start Free For All."
+            esports_core.lobby.show(player)
+        else
+            core.close_formspec(name, "esports_core:lobby")
+        end
+        return
+    end
+
     if fields.start_comp and is_admin then
         local red_raw = player_settings[name].red
         local blue_raw = player_settings[name].blue

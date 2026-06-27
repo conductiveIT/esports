@@ -461,7 +461,7 @@ function esports_core.hud.show_outro(player, data)
     })
     
     -- 5. Detailed Scores (Two Columns)
-    local red_scores = "RED TEAM STANDINGS\n"
+    local red_scores = (data.red_team or "RED TEAM STANDINGS") .. "\n"
     if data.is_ctf then
         red_scores = red_scores .. "PLAYER               | C | K | D\n" .. string.rep("-", 38) .. "\n"
     else
@@ -486,7 +486,7 @@ function esports_core.hud.show_outro(player, data)
         alignment = {x = 0, y = 0},
     })
     
-    local blue_scores = "BLUE TEAM STANDINGS\n"
+    local blue_scores = (data.blue_team or "BLUE TEAM STANDINGS") .. "\n"
     if data.is_ctf then
         blue_scores = blue_scores .. "PLAYER               | C | K | D\n" .. string.rep("-", 38) .. "\n"
     else

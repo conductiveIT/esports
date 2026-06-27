@@ -8,6 +8,20 @@ esports_core.match.last_attacker = {} -- [victim] = {name=killer, time=os.time()
 esports_core.match.friendly_fire = true
 esports_core.match.is_debug = false
 esports_core.match.player_sides = {} -- [name] = "red" or "blue" (Temporary overrides)
+esports_core.match.is_ffa = false
+
+function esports_core.match.get_ffa_leader()
+    local leader_name = "None"
+    local max_kills = -1
+    for pname, stats in pairs(esports_core.match.player_stats) do
+        local kills = stats.kills or 0
+        if kills > max_kills then
+            max_kills = kills
+            leader_name = pname
+        end
+    end
+    return leader_name, (max_kills >= 0 and max_kills or 0)
+end
 
 
 
@@ -54,9 +68,10 @@ core.register_globalstep(function(dtime)
                 local a = (show_name and is_alive) and 255 or 0
                 local r, g, b = 200, 200, 200
                 if team == "red" then r, g, b = 255, 50, 50
-                elseif team == "blue" then r, g, b = 50, 50, 255 end
+                elseif team == "blue" then r, g, b = 50, 50, 255
+                elseif team == "ffa" then r, g, b = 255, 200, 50 end
                 
-                local tag_text = string.format("%s (%d HP)", pname, hp)
+                local tag_text = string.format("%s (%d HP)", esports_core.get_nick(pname), hp)
                 
                 p:set_nametag_attributes({
                     text = tag_text,
@@ -127,6 +142,61 @@ core.register_globalstep(function(dtime)
         if esports_core.match.timer <= 0 then
             esports_core.match.state = "over"
             esports_core.match.timer = 0 -- Reset for safety watchdog
+            
+            if esports_core.match.is_ffa then
+                local ffa_leader, ffa_kills = esports_core.match.get_ffa_leader()
+                local winner_name = "Match Draw"
+                local win_color = "white"
+                
+                if ffa_leader ~= "None" then
+                    winner_name = esports_core.get_nick(ffa_leader) .. " Victory"
+                    win_color = "gold"
+                end
+                
+                local mvp = {name = ffa_leader, kills = ffa_kills}
+                
+                local players_list = {}
+                for _, p in ipairs(core.get_connected_players()) do
+                    local pname = p:get_player_name()
+                    local stats = esports_core.match.player_stats[pname] or {kills=0, deaths=0, captures=0}
+                    if not esports_core.is_spectator(pname) then
+                        table.insert(players_list, {name=pname, k=stats.kills, d=stats.deaths, c=0})
+                    end
+                    p:set_physics_override({speed = 0, jump = 0})
+                end
+                
+                table.sort(players_list, function(a, b) return a.k > b.k end)
+                
+                local red_list = {}
+                local blue_list = {}
+                for idx, p in ipairs(players_list) do
+                    if idx % 2 == 1 then
+                        table.insert(red_list, p)
+                    else
+                        table.insert(blue_list, p)
+                    end
+                end
+                
+                local outro_data = {
+                    title = winner_name:upper(),
+                    color = win_color,
+                    mvp = mvp.name,
+                    mvp_kills = mvp.kills,
+                    is_ctf = false,
+                    win_team = nil,
+                    red_team = "LEADERBOARD (A)",
+                    blue_team = "LEADERBOARD (B)",
+                    red_roster = red_list,
+                    blue_roster = blue_list
+                }
+                
+                for _, player in ipairs(core.get_connected_players()) do
+                    esports_core.hud.show_outro(player, outro_data)
+                end
+                
+                core.chat_send_all(">> MATCH OVER! " .. winner_name:upper())
+                return
+            end
             
             local r_name = esports_core.match.active_teams.red
             local b_name = esports_core.match.active_teams.blue
@@ -436,8 +506,8 @@ function esports_core.match.add_kill(name)
         esports_core.hud.update_scoreboard()
     end
     
-    -- Persist to league (PVP ONLY!)
-    if not esports_core.match.is_pve then
+    -- Persist to league (PVP ONLY, NO FFA!)
+    if not esports_core.match.is_pve and not esports_core.match.is_ffa then
         if esports_league and esports_league.player_stats then
             if not esports_league.player_stats[name] then
                 esports_league.player_stats[name] = {kills = 0, deaths = 0, captures = 0}
@@ -459,8 +529,8 @@ function esports_core.match.add_death(name)
         esports_core.hud.update_scoreboard()
     end
     
-    -- Persist to league (PVP ONLY!)
-    if not esports_core.match.is_pve then
+    -- Persist to league (PVP ONLY, NO FFA!)
+    if not esports_core.match.is_pve and not esports_core.match.is_ffa then
         if esports_league and esports_league.player_stats then
             if not esports_league.player_stats[name] then
                 esports_league.player_stats[name] = {kills = 0, deaths = 0, captures = 0}
@@ -812,7 +882,9 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 
     -- 4. Mode Configuration
     local is_pve = (pve_mode == true)
+    local is_ffa = (game_mode == "ffa")
     esports_core.match.is_pve = is_pve
+    esports_core.match.is_ffa = is_ffa
     esports_core.match.is_ctf = (game_mode == "ctf")
     esports_core.teams.scores = {red = 0, blue = 0}
 
@@ -848,7 +920,15 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
     local t1_online = {}
     local t2_online = {}
     
-    if is_pve then
+    if is_ffa then
+        -- FFA: All online non-spectator players participate
+        for _, p in ipairs(players) do
+            local pname = p:get_player_name()
+            if not esports_core.is_spectator(pname) then
+                table.insert(t1_online, p)
+            end
+        end
+    elseif is_pve then
         -- PVE: Team 1 is players, Team 2 is Bots
         for _, p in ipairs(players) do
             local pname = p:get_player_name()
@@ -869,7 +949,11 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
         end
     end
 
-    if not is_pve and (#t1_online < 1 or #t2_online < 1) then
+    if is_ffa then
+        if #t1_online < 1 then
+            return false, "Need at least 1 player online to start Free For All."
+        end
+    elseif not is_pve and (#t1_online < 1 or #t2_online < 1) then
         return false, "Each team needs at least 1 player online. (Found: " .. t1 .. ": " .. #t1_online .. ", " .. t2 .. ": " .. #t2_online .. ")"
     end
     if is_pve and #t1_online < 1 then
@@ -877,7 +961,9 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
     end
     
     -- Start match (with countdown)
-    if is_pve then
+    if is_ffa then
+        esports_core.match.active_teams = {red = "FFA", blue = "FFA"}
+    elseif is_pve then
         -- PVE SPECIFIC: Team 1 (Players) is always BLUE, Team 2 (Bots) is always RED
         esports_core.match.active_teams = {red = t2, blue = t1}
     else
@@ -943,7 +1029,19 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
                 esports_core.match.player_sides[pname] = "red"
             end
 
-            if my_team == t1 or my_team == t2 then
+            if is_ffa and not esports_core.is_spectator(pname) then
+                esports_core.match.player_sides[pname] = "ffa"
+                esports_core.teams.players[pname] = "ffa"
+                esports_core.reset_player(p, esports_core.match.is_debug)
+                p:set_pos(esports_core.get_safe_spawn_pos("ffa"))
+                esports_core.hud.init_hud(p)
+                
+                -- Close lobby and hide blackout on match start
+                if esports_core.lobby and esports_core.lobby.blackout_hide then
+                    esports_core.lobby.blackout_hide(p)
+                end
+                core.close_formspec(pname, "esports_core:lobby")
+            elseif my_team == t1 or my_team == t2 then
                 local side
                 if is_pve then
                     side = "blue" -- Everyone online is on the player side
@@ -965,7 +1063,9 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
             end
         end
     
-    if is_pve then
+    if is_ffa then
+        core.chat_send_all("FREE FOR ALL MATCH STARTED! EVERY PLAYER FOR THEMSELVES!")
+    elseif is_pve then
         -- Spawn Bots
         esports_core.bots.clear_all()
         core.after(5, function()
@@ -1018,6 +1118,17 @@ core.register_chatcommand("botmatch", {
         local team, count_str, diff, time_mode = param:match("^(%S+)%s+(%d+)%s*(%S*)%s*(%S*)$")
         if not team or not count_str then return false, "Usage: /botmatch <team> <number> [easy/medium/hard] [day/night]" end
         return esports_core.match.start(team, "BOTS", 300, true, time_mode, tonumber(count_str), diff)
+    end
+})
+
+core.register_chatcommand("ffamatch", {
+    params = "[duration] [day/night] [map_size]",
+    description = "Start a Free For All (Solo Deathmatch) match (Admin only).",
+    privs = {server = true},
+    func = function(name, param)
+        local dur, time_mode, map_size = param:match("^(%d*)%s*(%S*)%s*(%S*)$")
+        esports_core.match.friendly_fire = true
+        return esports_core.match.start(nil, nil, dur, false, time_mode, nil, nil, "ffa", map_size)
     end
 })
 
