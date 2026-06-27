@@ -27,8 +27,8 @@ esports_core.hud.init_hud = function(player)
         local leader_display = l_name == "None" and "None" or esports_core.get_nick(l_name)
         local my_kills = (esports_core.match.player_stats[player_name] and esports_core.match.player_stats[player_name].kills) or 0
         default_score = string.format("KILLS: %d | LEADER: %s (%d)", my_kills, leader_display, l_kills)
-        r_text = "esports_hud_bar.png^[colorize:#00000000"
-        b_text = "esports_hud_bar.png^[colorize:#00000000"
+        r_text = ""
+        b_text = ""
     end
 
     huds.scores = player:hud_add({
@@ -135,6 +135,25 @@ esports_core.hud.init_hud = function(player)
 end
 
 esports_core.hud.update_scores = function()
+    if esports_core.match.is_ffa then
+        local l_name, l_kills = esports_core.match.get_ffa_leader()
+        local leader_display = l_name == "None" and "None" or esports_core.get_nick(l_name)
+        
+        for _, player in ipairs(core.get_connected_players()) do
+            local pname = player:get_player_name()
+            local my_kills = (esports_core.match.player_stats[pname] and esports_core.match.player_stats[pname].kills) or 0
+            local score_text = string.format("KILLS: %d | LEADER: %s (%d)", my_kills, leader_display, l_kills)
+            
+            local huds = esports_core.hud.player_huds[pname]
+            if huds and huds.scores then
+                player:hud_change(huds.scores, "text", score_text)
+                player:hud_change(huds.logo_red, "text", "")
+                player:hud_change(huds.logo_blue, "text", "")
+            end
+        end
+        return
+    end
+
     local r_name = esports_core.teams.active_team_names.red
     local b_name = esports_core.teams.active_team_names.blue
     local score_text = string.format("%s %d - %d %s", r_name, esports_core.teams.scores.red, esports_core.teams.scores.blue, b_name)

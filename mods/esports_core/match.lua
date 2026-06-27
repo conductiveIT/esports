@@ -1032,6 +1032,7 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
             if is_ffa and not esports_core.is_spectator(pname) then
                 esports_core.match.player_sides[pname] = "ffa"
                 esports_core.teams.players[pname] = "ffa"
+                esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0}
                 esports_core.reset_player(p, esports_core.match.is_debug)
                 p:set_pos(esports_core.get_safe_spawn_pos("ffa"))
                 esports_core.hud.init_hud(p)
