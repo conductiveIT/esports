@@ -410,9 +410,9 @@ core.register_on_dieplayer(function(player, reason)
 
     if killer_name and killer_name ~= "" then
         esports_core.match.add_kill(killer_name)
-        core.chat_send_all(">> " .. victim .. " was eliminated by " .. killer_name .. "!")
+        core.chat_send_all(">> " .. esports_core.get_nick(victim) .. " was eliminated by " .. esports_core.get_nick(killer_name) .. "!")
     else
-        core.chat_send_all(">> " .. victim .. " was eliminated!")
+        core.chat_send_all(">> " .. esports_core.get_nick(victim) .. " was eliminated!")
     end
     
     -- Clear attacker state

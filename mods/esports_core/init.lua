@@ -1,6 +1,18 @@
 esports_core = {}
 local modpath = core.get_modpath("esports_core")
 
+-- Persistent Nicknames System
+local storage = core.get_mod_storage()
+esports_core.nicknames = core.deserialize(storage:get_string("nicknames")) or {}
+
+function esports_core.save_nicknames()
+    storage:set_string("nicknames", core.serialize(esports_core.nicknames))
+end
+
+function esports_core.get_nick(name)
+    return esports_core.nicknames[name] or name
+end
+
 dofile(modpath .. "/teams.lua")
 dofile(modpath .. "/hud.lua")
 dofile(modpath .. "/match.lua")
@@ -71,8 +83,86 @@ core.register_on_joinplayer(function(player)
     privs.zoom = true
     core.set_player_privs(name, privs)
     
-    -- Physics and interact distance are now handled per-state in match.lua
+    -- Apply nickname to nametag if exists
+    local nick = esports_core.get_nick(name)
+    if nick ~= name then
+        player:set_properties({ nametag = nick })
+    end
 end)
+
+-- Chat Nickname Formatter
+core.register_on_chat_message(function(name, message)
+    if message:sub(1, 1) == "/" then return false end
+    local nick = esports_core.get_nick(name)
+    core.chat_send_all("<" .. nick .. "> " .. message)
+    return true
+end)
+
+-- Nickname Command
+core.register_chatcommand("nick", {
+    params = "[player] <nickname>",
+    description = "Set your nickname or another player's nickname (Admin only)",
+    func = function(name, param)
+        local is_admin = core.check_player_privs(name, {server = true})
+        local target_name, new_nick
+        
+        -- Parse arguments
+        local args = {}
+        for w in param:gmatch("%S+") do
+            table.insert(args, w)
+        end
+        
+        if #args == 0 then
+            return false, "Usage: /nick <nickname> (or /nick <player> <nickname> as Admin)"
+        elseif #args == 1 then
+            target_name = name
+            new_nick = args[1]
+        else
+            if is_admin then
+                target_name = args[1]
+                new_nick = table.concat(args, " ", 2)
+            else
+                target_name = name
+                new_nick = table.concat(args, " ")
+            end
+        end
+        
+        -- Reset mechanism
+        if new_nick:lower() == "reset" or new_nick:lower() == "clear" then
+            esports_core.nicknames[target_name] = nil
+            esports_core.save_nicknames()
+            local target_player = core.get_player_by_name(target_name)
+            if target_player then
+                target_player:set_properties({ nametag = target_name })
+            end
+            if target_name == name then
+                return true, "Your nickname has been reset to your default username."
+            else
+                return true, "Reset " .. target_name .. "'s nickname to default."
+            end
+        end
+        
+        -- Sanitize nickname: max 15 chars, alphanumeric/spaces
+        new_nick = new_nick:gsub("[^%w%s%-%_]", ""):sub(1, 15)
+        if new_nick == "" then
+            return false, "Invalid nickname."
+        end
+        
+        esports_core.nicknames[target_name] = new_nick
+        esports_core.save_nicknames()
+        
+        local target_player = core.get_player_by_name(target_name)
+        if target_player then
+            target_player:set_properties({ nametag = new_nick })
+        end
+        
+        if target_name == name then
+            return true, "Your nickname has been set to: " .. new_nick
+        else
+            return true, "Set " .. target_name .. "'s nickname to: " .. new_nick
+        end
+    end,
+})
 
 -- CTF ASSETS: Flag Stands and Carrying Entity
 core.register_node("esports_core:flag_stand_red", {

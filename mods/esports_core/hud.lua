@@ -145,8 +145,8 @@ esports_core.hud.update_scores = function()
         local r_carrier = esports_core.ctf.get_carrier("red")
         local b_carrier = esports_core.ctf.get_carrier("blue")
         
-        if r_carrier then r_state = "TAKEN BY " .. r_carrier end
-        if b_carrier then b_state = "TAKEN BY " .. b_carrier end
+        if r_carrier then r_state = "TAKEN BY " .. esports_core.get_nick(r_carrier) end
+        if b_carrier then b_state = "TAKEN BY " .. esports_core.get_nick(b_carrier) end
         
         local status_text = "RED FLAG: " .. r_state .. "\nBLUE FLAG: " .. b_state
         
@@ -184,9 +184,9 @@ function esports_core.hud.add_kill_event(killer, k_team, victim, v_team, weapon)
     elseif weapon == "pickaxe" then icon = "esports_feed_pickaxe.png" end
 
     table.insert(esports_core.hud.kill_feed_events, 1, {
-        killer = killer or "Unknown",
+        killer = esports_core.get_nick(killer or "Unknown"),
         k_col = k_col,
-        victim = victim or "Unknown",
+        victim = esports_core.get_nick(victim or "Unknown"),
         v_col = v_col,
         icon = icon,
         age = 5.0
@@ -450,7 +450,7 @@ function esports_core.hud.show_outro(player, data)
     
     -- 4. MVP Highlight (Gold Text)
     local mvp_label = data.is_ctf and "POINTS" or "KILLS"
-    local mvp_txt = "MVP: " .. data.mvp .. " (" .. data.mvp_kills .. " " .. mvp_label .. ")"
+    local mvp_txt = "MVP: " .. esports_core.get_nick(data.mvp) .. " (" .. data.mvp_kills .. " " .. mvp_label .. ")"
     huds.outro_mvp = player:hud_add({
         hud_elem_type = "text",
         position = {x = 0.5, y = 0.50},
@@ -469,10 +469,11 @@ function esports_core.hud.show_outro(player, data)
     end
     
     for _, p in ipairs(data.red_roster) do
+        local display_name = esports_core.get_nick(p.name)
         if data.is_ctf then
-            red_scores = red_scores .. string.format("%-20s |%2d |%2d |%2d\n", p.name:sub(1,15), p.c, p.k, p.d)
+            red_scores = red_scores .. string.format("%-20s |%2d |%2d |%2d\n", display_name:sub(1,15), p.c, p.k, p.d)
         else
-            red_scores = red_scores .. string.format("%-20s |%2d |%2d\n", p.name:sub(1,15), p.k, p.d)
+            red_scores = red_scores .. string.format("%-20s |%2d |%2d\n", display_name:sub(1,15), p.k, p.d)
         end
     end
     
@@ -493,10 +494,11 @@ function esports_core.hud.show_outro(player, data)
     end
     
     for _, p in ipairs(data.blue_roster) do
+        local display_name = esports_core.get_nick(p.name)
         if data.is_ctf then
-            blue_scores = blue_scores .. string.format("%-20s |%2d |%2d |%2d\n", p.name:sub(1,15), p.c, p.k, p.d)
+            blue_scores = blue_scores .. string.format("%-20s |%2d |%2d |%2d\n", display_name:sub(1,15), p.c, p.k, p.d)
         else
-            blue_scores = blue_scores .. string.format("%-20s |%2d |%2d\n", p.name:sub(1,15), p.k, p.d)
+            blue_scores = blue_scores .. string.format("%-20s |%2d |%2d\n", display_name:sub(1,15), p.k, p.d)
         end
     end
     

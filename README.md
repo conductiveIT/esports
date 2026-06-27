@@ -4,6 +4,7 @@ This is a fast-paced hitscan team combat base game for Luanti with building, sto
 
 > [!IMPORTANT]
 > This game is currently in **active development** and in a **beta state**. Features, APIs, and mechanics are subject to change.
+> Note: this was built using Antigravity with Gemini 3 Pro. If you don't want to use AI generated content then this is not the mod for you.
 
 ## Key Features
 
@@ -19,7 +20,7 @@ This is a fast-paced hitscan team combat base game for Luanti with building, sto
 - **Single-Elimination Playoffs**: Automated seeding of the top 4 teams into a tournament bracket (Semifinals -> Grand Finals) to crown the season Champion.
 - **Offseason Archiving**: Clean reset commands that serialize the finished season standings to history archives and prepare the league for a new cycle.
 
-Note: this was built using Antigravity with Gemini 3 Pro. If you don't want to use AI generated content then this is not the mod for you.
+
 
 ## How to Install & Play
 
@@ -54,6 +55,7 @@ Note: this was built using Antigravity with Gemini 3 Pro. If you don't want to u
 *   `/spectate [player_name]`: Toggles spectator mode for yourself or another player. Spectators are invisible, can't take damage, have no inventory, and have flight/noclip privileges enabled (Admin only).
 *   `/follow [player_name] | off`: Follow a player cinematically while in spectator mode. Leave blank to open the follow menu, or use `off` to stop following.
 *   `/skin reset | #RRGGBB`: Tints your character skin with a hex color code, or resets it to the default (Admin only).
+*   `/nick [player_name] <nickname>`: Change your floating nametag, chat display name, and scoreboard name (alpha-numeric only, max 15 characters). Admins can target other players. Use `reset` or `clear` to restore the default name.
 
 ### League & Team Administration
 *   `/team create <name> | invite <player> | join | leave | logo <eagle/lion/dragon/skull> | list`: Manage your TDM League team.
