@@ -593,10 +593,12 @@ local function get_formspec(name)
             "label[0.5,6.2;AI Difficulty:]" ..
             "dropdown[0.5,6.6;3,0.8;bot_diff;" .. table.concat(diff_list, ",") .. ";" .. diff_idx .. "]" ..
             
-            "label[0.5,7.7;TIPS]" ..
-            "label[0.5,8.2;- Bots spawn with 0 ammo.]" ..
-            "label[0.5,8.6;- They hunt crates to reload.]" ..
-            "label[0.5,9.0;- Hard bots move faster/hit harder.]"
+            "checkbox[0.5,7.4;chk_allow_nicks;Allow player nickname changes;" .. (esports_core.allow_nicks and "true" or "false") .. "]" ..
+            
+            "label[0.5,8.1;TIPS]" ..
+            "label[0.5,8.6;- Bots spawn with 0 ammo.]" ..
+            "label[0.5,9.0;- They hunt crates to reload.]" ..
+            "label[0.5,9.4;- Hard bots move faster/hit harder.]"
 
         -- Nicknames mappings display for admins
         local mapping_items = {}
@@ -663,7 +665,18 @@ local function get_formspec(name)
             end
  
             fs = fs .. 
-                "label[1,10.0;Team colors will overlay these choices during a match.]"
+                "label[1,9.4;Team colors will overlay these choices during a match.]"
+        end
+
+        -- Nickname Editor at the very bottom
+        local is_admin = core.check_player_privs(name, {server = true})
+        if esports_core.allow_nicks or is_admin then
+            fs = fs ..
+                "field[1.0,10.0;5.0,0.8;txt_nickname;Lobby Nickname;" .. esports_core.get_nick(name) .. "]" ..
+                "button[6.2,10.0;3.0,0.8;btn_set_nickname;UPDATE NICKNAME]" ..
+                "button[9.4,10.0;2.0,0.8;btn_clear_nickname;RESET]"
+        else
+            fs = fs .. "label[1.0,10.0;Nickname changes are currently disabled by an administrator. (Current: " .. esports_core.get_nick(name) .. ")]"
         end
     end
     
@@ -1211,6 +1224,45 @@ core.register_on_player_receive_fields(function(player, formname, fields)
             if tp then tp:set_properties({ nametag = target }) end
             core.chat_send_player(name, "LOBBY: Reset " .. target .. "'s nickname to default.")
         end
+        esports_core.lobby.show(player)
+        return
+    end
+
+    if fields.chk_allow_nicks then
+        esports_core.allow_nicks = (fields.chk_allow_nicks == "true")
+        local storage = core.get_mod_storage()
+        storage:set_string("allow_nicks", esports_core.allow_nicks and "true" or "false")
+        esports_core.lobby.show(player)
+        return
+    end
+
+    if fields.btn_set_nickname and fields.txt_nickname then
+        if not esports_core.allow_nicks and not is_admin then
+            player_settings[name].err_msg = "Nickname changes are currently disabled by an administrator."
+            esports_core.lobby.show(player)
+            return
+        end
+        
+        local new_nick = fields.txt_nickname:gsub("[^%w%s%-%_]", ""):sub(1, 15)
+        if new_nick == "" then
+            player_settings[name].err_msg = "Invalid nickname (alpha-numeric only, max 15 chars)."
+            esports_core.lobby.show(player)
+            return
+        end
+        
+        esports_core.nicknames[name] = new_nick
+        esports_core.save_nicknames()
+        player:set_properties({ nametag = new_nick })
+        player_settings[name].err_msg = nil
+        esports_core.lobby.show(player)
+        return
+    end
+
+    if fields.btn_clear_nickname then
+        esports_core.nicknames[name] = nil
+        esports_core.save_nicknames()
+        player:set_properties({ nametag = name })
+        player_settings[name].err_msg = nil
         esports_core.lobby.show(player)
         return
     end

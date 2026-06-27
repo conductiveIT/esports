@@ -80,3 +80,5 @@ This is a fast-paced hitscan team combat base game for Luanti with building, sto
    - **Schedule**: View round fixtures and launch scheduled matches (Admin only).
    - **History**: Persistent log displaying completed scores and MVPs.
    - **Playoffs**: Visual single-elimination tree tracking Semifinals and Finals.
+   - **Locker**: Choose character outfits and skins. Also includes the nickname editor interface for players to change their display names.
+   - **Admin**: Configure bot match properties, view game rules, toggle the nickname system permissions for non-admins, and inspect/reset active player nickname mappings (Admin only).

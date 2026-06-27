@@ -4,9 +4,11 @@ local modpath = core.get_modpath("esports_core")
 -- Persistent Nicknames System
 local storage = core.get_mod_storage()
 esports_core.nicknames = core.deserialize(storage:get_string("nicknames")) or {}
+esports_core.allow_nicks = (storage:get_string("allow_nicks") ~= "false")
 
 function esports_core.save_nicknames()
     storage:set_string("nicknames", core.serialize(esports_core.nicknames))
+    storage:set_string("allow_nicks", esports_core.allow_nicks and "true" or "false")
 end
 
 function esports_core.get_nick(name)
@@ -104,6 +106,9 @@ core.register_chatcommand("nick", {
     description = "Set your nickname or another player's nickname (Admin only)",
     func = function(name, param)
         local is_admin = core.check_player_privs(name, {server = true})
+        if not esports_core.allow_nicks and not is_admin then
+            return false, "ERROR: Nickname changes are currently disabled by an administrator."
+        end
         local target_name, new_nick
         
         -- Parse arguments
