@@ -133,17 +133,18 @@ function esports_core.koth.update(dtime)
         texture = "esports_hud_bar.png^[colorize:#FFFF33:200"
     else
         -- Unoccupied Hill
+        new_owner = "none"
         esports_core.koth.contested = false
-        if esports_core.koth.hill_owner == "red" then
-            texture = "esports_hud_bar.png^[colorize:#FF8888:150"
-        elseif esports_core.koth.hill_owner == "blue" then
-            texture = "esports_hud_bar.png^[colorize:#8888FF:150"
-        end
+        texture = "esports_hud_bar.png^[colorize:#FFFFFF:150"
     end
 
     if new_owner ~= esports_core.koth.hill_owner then
         esports_core.koth.hill_owner = new_owner
-        core.chat_send_all(">> KOTH: The Hill is now controlled by " .. new_owner:upper() .. "!")
+        if new_owner == "none" then
+            core.chat_send_all(">> KOTH: The Hill is now unoccupied.")
+        else
+            core.chat_send_all(">> KOTH: The Hill is now controlled by " .. new_owner:upper() .. "!")
+        end
     end
 
     if esports_core.koth.placed_ring and esports_core.koth.placed_ring:get_luaentity() then
