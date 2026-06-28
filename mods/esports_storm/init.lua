@@ -72,8 +72,8 @@ local function draw_circular_storm(center, R)
     end
     esports_storm.placed_nodes = {}
     
-    -- If match is not active or is KOTH, don't draw new ones
-    if esports_core.match.state ~= "active" or esports_core.match.is_koth then
+    -- If match is not active, don't draw new ones
+    if esports_core.match.state ~= "active" then
         return
     end
 
@@ -111,9 +111,9 @@ core.register_globalstep(function(dtime)
     if dtime_accumulator < 1 then return end
     dtime_accumulator = dtime_accumulator - 1
     
-    if esports_core.match.state == "active" and not esports_core.match.is_koth then
+    if esports_core.match.state == "active" then
         -- Shrink logic (PVP TDM ONLY)
-        if not esports_core.match.is_pve and not esports_core.match.is_ctf then
+        if not esports_core.match.is_pve and not esports_core.match.is_ctf and not esports_core.match.is_koth then
             local shrink_speed = 0.5 -- units per second
             local min_radius = 27 -- tightness of endgame
             
