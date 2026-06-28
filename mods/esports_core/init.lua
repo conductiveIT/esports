@@ -235,7 +235,7 @@ core.register_entity("esports_core:koth_ring", {
         visual = "mesh",
         mesh = "character.b3d",
         textures = {"esports_hud_bar.png^[colorize:#FFFFFF:150"},
-        visual_size = {x=6, y=0.1, z=6},
+        visual_size = {x=12, y=0.1, z=12},
         physical = false,
         pointable = false,
         glow = 14,

@@ -71,7 +71,7 @@ esports_core.hud.init_hud = function(player)
             position = {x = 0.5, y = 0.14},
             alignment = {x = 0, y = 0},
             number = 0x00FF00, -- Green
-            text = "HILL ROTATION: 60s | OWNER: NONE",
+            text = "HILL ROTATION: 120s | OWNER: NONE",
         })
     end
     

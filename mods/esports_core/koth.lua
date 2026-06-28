@@ -1,8 +1,8 @@
 esports_core.koth = {}
 esports_core.koth.hill_center = nil
-esports_core.koth.hill_radius = 6
+esports_core.koth.hill_radius = 12
 esports_core.koth.hill_owner = "none" -- "red", "blue", or "none"
-esports_core.koth.timer = 60
+esports_core.koth.timer = 120
 esports_core.koth.placed_ring = nil
 esports_core.koth.contested = false
 
@@ -40,7 +40,7 @@ function esports_core.koth.spawn_new_hill()
     esports_core.koth.hill_center = {x = target_x, y = 1.0, z = target_z}
     esports_core.koth.hill_owner = "none"
     esports_core.koth.contested = false
-    esports_core.koth.timer = 60
+    esports_core.koth.timer = 120
 
     -- Spawn ring entity slightly above the ground to prevent z-fighting
     local pos = {x = target_x, y = 0.55, z = target_z}
@@ -51,7 +51,7 @@ function esports_core.koth.spawn_new_hill()
         })
     end
 
-    core.chat_send_all(">> KOTH: The Hill has rotated to (" .. target_x .. ", " .. target_z .. ")!")
+    core.chat_send_all(">> KOTH: The Hill has rotated!")
 
     if esports_core.hud and esports_core.hud.update_scores then
         esports_core.hud.update_scores()
