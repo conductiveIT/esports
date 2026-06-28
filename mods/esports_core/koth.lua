@@ -47,6 +47,7 @@ function esports_core.koth.spawn_new_hill()
     esports_core.koth.placed_ring = core.add_entity(pos, "esports_core:koth_ring")
     if esports_core.koth.placed_ring then
         esports_core.koth.placed_ring:set_properties({
+            visual_size = {x=12, y=0.1, z=12},
             textures = {"esports_hud_bar.png^[colorize:#FFFFFF:150"} -- Unclaimed initially
         })
     end
@@ -149,6 +150,7 @@ function esports_core.koth.update(dtime)
 
     if esports_core.koth.placed_ring and esports_core.koth.placed_ring:get_luaentity() then
         esports_core.koth.placed_ring:set_properties({
+            visual_size = {x=12, y=0.1, z=12},
             textures = {texture}
         })
     end
