@@ -75,7 +75,7 @@ local function get_formspec(name)
         player_settings[name] = { 
             count = "5", diff = "medium", red = "", blue = "", pve = "", 
             match_dur = "5m", match_tod = "Day", match_mode = "TDM",
-            map_size = "Large",
+            map_size = "Small",
             league_subtab = "standings", sel_round = 1, sel_match_idx = 1
         }
     end
@@ -181,7 +181,7 @@ local function get_formspec(name)
         end
             
         local size_list = {"Small","Medium","Large"}
-        local size_idx = 3
+        local size_idx = 1
         for i, v in ipairs(size_list) do if v == settings.map_size then size_idx = i break end end
         
         local mode_idx = 1
@@ -815,7 +815,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
             local dur = 300
             local tod = "day"
             local mode = "tdm"
-            local map_size = "Large"
+            local map_size = "Small"
             
             local my_team = esports_league.get_team(name)
             if my_team ~= red and my_team ~= blue then
@@ -1175,7 +1175,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
                 if cmd and not esports_core.is_spectator(name) then cmd.func(name, "") end
             end
 
-            local map_size = player_settings[name].map_size or "Large"
+            local map_size = player_settings[name].map_size or "Small"
 
             esports_core.match.scheduled_context = nil
             local ok, err = esports_core.match.start(p_team, "BOTS", dur, true, tod, count, diff, mode, map_size)
@@ -1195,7 +1195,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
         local dur_str = player_settings[name].match_dur or "5m"
         local dur = tonumber(dur_str:match("%d+")) * 60
         local tod = (player_settings[name].match_tod or "Day"):lower()
-        local map_size = player_settings[name].map_size or "Large"
+        local map_size = player_settings[name].map_size or "Small"
         
         esports_core.match.scheduled_context = nil
         esports_core.match.friendly_fire = true
@@ -1232,7 +1232,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
                     if cmd and not esports_core.is_spectator(name) then cmd.func(name, "") end
                 end
 
-                local map_size = player_settings[name].map_size or "Large"
+                local map_size = player_settings[name].map_size or "Small"
                 esports_core.match.scheduled_context = nil
                 local ok, err = esports_core.match.start(red, blue, dur, false, tod, 0, nil, mode, map_size)
                 if not ok then

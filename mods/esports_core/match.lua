@@ -893,7 +893,7 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
     
     -- 2. Map Scaling
     local scales = {Small = 0.5, Medium = 0.75, Large = 1.0}
-    local scale = scales[map_size or "Large"] or 1.0
+    local scale = scales[map_size or "Small"] or 0.5
     esports_core.match.current_map_scale = scale
     
     -- 3. Apply Scaling to Environment & CTF Data
