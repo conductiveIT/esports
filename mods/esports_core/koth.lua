@@ -1,166 +1,207 @@
 esports_core.koth = {}
 esports_core.koth.hill_center = nil
 esports_core.koth.hill_radius = 12
-esports_core.koth.hill_owner = "none" -- "red", "blue", or "none"
+esports_core.koth.hill_owner = "none"  -- "red", "blue", or "none"
 esports_core.koth.timer = 120
 esports_core.koth.placed_ring = nil
 esports_core.koth.contested = false
 
 function esports_core.koth.spawn_new_hill()
-    -- Clear the old ring
-    if esports_core.koth.placed_ring and esports_core.koth.placed_ring:get_luaentity() then
-        esports_core.koth.placed_ring:remove()
-    end
-    esports_core.koth.placed_ring = nil
+	-- Clear the old ring
+	if esports_core.koth.placed_ring and esports_core.koth.placed_ring:get_luaentity() then
+		esports_core.koth.placed_ring:remove()
+	end
+	esports_core.koth.placed_ring = nil
 
-    local center = esports_storm.center or {x=0, y=0, z=0}
-    local radius = esports_storm.current_radius or 100
+	local center = esports_storm.center or {x=0, y=0, z=0}
+	local radius = esports_storm.current_radius or 100
 
-    local attempts = 0
-    local target_x, target_z
-    while attempts < 100 do
-        local angle = math.random() * math.pi * 2
-        local dist = math.random() * (radius * 0.7) -- Keep it within the storm boundary
-        target_x = math.floor(center.x + math.cos(angle) * dist + 0.5)
-        target_z = math.floor(center.z + math.sin(angle) * dist + 0.5)
+	local attempts = 0
+	local target_x, target_z
+	while attempts < 100 do
+		local angle = math.random() * math.pi * 2
+		local dist = math.random() * (radius * 0.7)  -- Keep it within the storm boundary
+		target_x = math.floor(center.x + math.cos(angle) * dist + 0.5)
+		target_z = math.floor(center.z + math.sin(angle) * dist + 0.5)
 
-        -- Check if it is on the playable island surface
-        local dist_to_island = math.sqrt(target_x^2 + target_z^2)
-        if dist_to_island < 90 then
-            break
-        end
-        attempts = attempts + 1
-    end
+		-- Check if it is on the playable island surface (not air or ignore)
+		local node = core.get_node({x = target_x, y = 0, z = target_z})
+		if node.name ~= "air" and node.name ~= "ignore" then
+			break
+		end
+		attempts = attempts + 1
+	end
 
-    if not target_x then
-        target_x = 0
-        target_z = 0
-    end
+	if not target_x then
+		target_x = 0
+		target_z = 0
+	end
 
-    esports_core.koth.hill_center = {x = target_x, y = 1.0, z = target_z}
-    esports_core.koth.hill_owner = "none"
-    esports_core.koth.contested = false
-    esports_core.koth.timer = 120
+	esports_core.koth.hill_center = {x = target_x, y = 1.0, z = target_z}
+	esports_core.koth.hill_owner = "none"
+	esports_core.koth.contested = false
+	esports_core.koth.timer = 120
 
-    -- Spawn ring entity slightly above the ground to prevent z-fighting
-    local pos = {x = target_x, y = 0.55, z = target_z}
-    esports_core.koth.placed_ring = core.add_entity(pos, "esports_core:koth_ring")
-    if esports_core.koth.placed_ring then
-        esports_core.koth.placed_ring:set_properties({
-            visual_size = {x=12, y=0.1, z=12},
-            textures = {"esports_hud_bar.png^[colorize:#FFFFFF:150"} -- Unclaimed initially
-        })
-    end
+	-- Clear any blocks currently on the hill to make it accessible
+	local rad = esports_core.koth.hill_radius
+	local broke_any = false
+	for x = target_x - rad, target_x + rad do
+		for z = target_z - rad, target_z + rad do
+			local dist = math.sqrt((x - target_x)^2 + (z - target_z)^2)
+			if dist <= rad then
+				for y = 1, 4 do
+					local p = {x = x, y = y, z = z}
+					local name = core.get_node(p).name
+					if name ~= "air" and name ~= "ignore" then
+						core.remove_node(p)
+						broke_any = true
+					end
+				end
+			end
+		end
+	end
+	if broke_any then
+		core.sound_play("esports_break_crate", {pos = {x = target_x, y = 1, z = target_z}, max_hear_distance = 32, gain = 1.0})
+	end
 
-    core.chat_send_all(">> KOTH: The Hill has rotated!")
+	-- Spawn ring entity slightly above the ground to prevent z-fighting
+	local pos = {x = target_x, y = 0.55, z = target_z}
+	esports_core.koth.placed_ring = core.add_entity(pos, "esports_core:koth_ring")
+	if esports_core.koth.placed_ring then
+		esports_core.koth.placed_ring:set_properties({
+			visual_size = {x=12, y=0.1, z=12},
+			textures = {"esports_hud_bar.png^[colorize:#FFFFFF:150"}  -- Unclaimed initially
+		})
+	end
 
-    if esports_core.hud and esports_core.hud.update_scores then
-        esports_core.hud.update_scores()
-    end
+	core.chat_send_all(">> KOTH: The Hill has rotated!")
+
+	if esports_core.hud and esports_core.hud.update_scores then
+		esports_core.hud.update_scores()
+	end
 end
 
 function esports_core.koth.update(dtime)
-    local center = esports_core.koth.hill_center
-    if not center then return end
+	local center = esports_core.koth.hill_center
+	if not center then return end
 
-    local red_players = 0
-    local blue_players = 0
-    local red_names = {}
-    local blue_names = {}
+	local red_players = 0
+	local blue_players = 0
+	local red_names = {}
+	local blue_names = {}
 
-    for _, p in ipairs(core.get_connected_players()) do
-        local pname = p:get_player_name()
-        if not esports_core.is_spectator(pname) and p:get_hp() > 0 then
-            local pos = p:get_pos()
-            local dist = math.sqrt((pos.x - center.x)^2 + (pos.z - center.z)^2)
-            -- Within 6 meters horizontally and 3 meters vertically
-            if dist <= esports_core.koth.hill_radius and math.abs(pos.y - center.y) <= 3 then
-                local team = esports_core.teams.get_player_team(pname)
-                if team == "red" then
-                    red_players = red_players + 1
-                    table.insert(red_names, pname)
-                elseif team == "blue" then
-                    blue_players = blue_players + 1
-                    table.insert(blue_names, pname)
-                end
-            end
-        end
-    end
+	for _, p in ipairs(core.get_connected_players()) do
+		local pname = p:get_player_name()
+		if not esports_core.is_spectator(pname) and p:get_hp() > 0 then
+			local pos = p:get_pos()
+			local dist = math.sqrt((pos.x - center.x)^2 + (pos.z - center.z)^2)
+			-- Within 6 meters horizontally and 3 meters vertically
+			if dist <= esports_core.koth.hill_radius and math.abs(pos.y - center.y) <= 3 then
+				local team = esports_core.teams.get_player_team(pname)
+				if team == "red" then
+					red_players = red_players + 1
+					table.insert(red_names, pname)
+				elseif team == "blue" then
+					blue_players = blue_players + 1
+					table.insert(blue_names, pname)
+				end
+			end
+		end
+	end
 
-    local new_owner = esports_core.koth.hill_owner
-    local texture = "esports_hud_bar.png^[colorize:#FFFFFF:150"
+	local new_owner = esports_core.koth.hill_owner
+	local texture = "esports_hud_bar.png^[colorize:#FFFFFF:150"
 
-    if red_players > 0 and blue_players == 0 then
-        -- Red team uncontested control
-        esports_core.teams.scores.red = esports_core.teams.scores.red + 1
-        new_owner = "red"
-        esports_core.koth.contested = false
-        texture = "esports_hud_bar.png^[colorize:#FF3333:200"
+	if red_players > 0 and blue_players == 0 then
+		-- Red team uncontested control
+		esports_core.teams.scores.red = esports_core.teams.scores.red + 1
+		new_owner = "red"
+		esports_core.koth.contested = false
+		texture = "esports_hud_bar.png^[colorize:#FF3333:200"
 
-        for _, pname in ipairs(red_names) do
-            if not esports_core.match.player_stats[pname] then
-                esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0, hill_time = 0}
-            end
-            esports_core.match.player_stats[pname].hill_time = (esports_core.match.player_stats[pname].hill_time or 0) + 1
-        end
+		for _, pname in ipairs(red_names) do
+			if not esports_core.match.player_stats[pname] then
+				esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0, hill_time = 0}
+			end
+			esports_core.match.player_stats[pname].hill_time = (esports_core.match.player_stats[pname].hill_time or 0) + 1
+		end
 
-        if math.random() > 0.8 then
-            for _, pname in ipairs(red_names) do
-                core.sound_play("esports_pickup", {to_player = pname, gain = 0.5})
-            end
-        end
-    elseif blue_players > 0 and red_players == 0 then
-        -- Blue team uncontested control
-        esports_core.teams.scores.blue = esports_core.teams.scores.blue + 1
-        new_owner = "blue"
-        esports_core.koth.contested = false
-        texture = "esports_hud_bar.png^[colorize:#3333FF:200"
+		if math.random() > 0.8 then
+			for _, pname in ipairs(red_names) do
+				core.sound_play("esports_pickup", {to_player = pname, gain = 0.5})
+			end
+		end
+	elseif blue_players > 0 and red_players == 0 then
+		-- Blue team uncontested control
+		esports_core.teams.scores.blue = esports_core.teams.scores.blue + 1
+		new_owner = "blue"
+		esports_core.koth.contested = false
+		texture = "esports_hud_bar.png^[colorize:#3333FF:200"
 
-        for _, pname in ipairs(blue_names) do
-            if not esports_core.match.player_stats[pname] then
-                esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0, hill_time = 0}
-            end
-            esports_core.match.player_stats[pname].hill_time = (esports_core.match.player_stats[pname].hill_time or 0) + 1
-        end
+		for _, pname in ipairs(blue_names) do
+			if not esports_core.match.player_stats[pname] then
+				esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0, hill_time = 0}
+			end
+			esports_core.match.player_stats[pname].hill_time = (esports_core.match.player_stats[pname].hill_time or 0) + 1
+		end
 
-        if math.random() > 0.8 then
-            for _, pname in ipairs(blue_names) do
-                core.sound_play("esports_pickup", {to_player = pname, gain = 0.5})
-            end
-        end
-    elseif red_players > 0 and blue_players > 0 then
-        -- Contested Hill
-        esports_core.koth.contested = true
-        texture = "esports_hud_bar.png^[colorize:#FFFF33:200"
-    else
-        -- Unoccupied Hill
-        new_owner = "none"
-        esports_core.koth.contested = false
-        texture = "esports_hud_bar.png^[colorize:#FFFFFF:150"
-    end
+		if math.random() > 0.8 then
+			for _, pname in ipairs(blue_names) do
+				core.sound_play("esports_pickup", {to_player = pname, gain = 0.5})
+			end
+		end
+	elseif red_players > 0 and blue_players > 0 then
+		-- Contested Hill
+		esports_core.koth.contested = true
+		texture = "esports_hud_bar.png^[colorize:#FFFF33:200"
+	else
+		-- Unoccupied Hill
+		new_owner = "none"
+		esports_core.koth.contested = false
+		texture = "esports_hud_bar.png^[colorize:#FFFFFF:150"
+	end
 
-    if new_owner ~= esports_core.koth.hill_owner then
-        esports_core.koth.hill_owner = new_owner
-        if new_owner == "none" then
-            core.chat_send_all(">> KOTH: The Hill is now unoccupied.")
-        else
-            core.chat_send_all(">> KOTH: The Hill is now controlled by " .. new_owner:upper() .. "!")
-        end
-    end
+	if new_owner ~= esports_core.koth.hill_owner then
+		esports_core.koth.hill_owner = new_owner
+		if new_owner == "none" then
+			core.chat_send_all(">> KOTH: The Hill is now unoccupied.")
+		else
+			core.chat_send_all(">> KOTH: The Hill is now controlled by " .. new_owner:upper() .. "!")
+		end
+	end
 
-    if esports_core.koth.placed_ring and esports_core.koth.placed_ring:get_luaentity() then
-        esports_core.koth.placed_ring:set_properties({
-            visual_size = {x=12, y=0.1, z=12},
-            textures = {texture}
-        })
-    end
+	if esports_core.koth.placed_ring and esports_core.koth.placed_ring:get_luaentity() then
+		esports_core.koth.placed_ring:set_properties({
+			visual_size = {x=12, y=0.1, z=12},
+			textures = {texture}
+		})
+	end
 
-    esports_core.koth.timer = esports_core.koth.timer - 1
-    if esports_core.koth.timer <= 0 then
-        esports_core.koth.spawn_new_hill()
-    else
-        if esports_core.hud and esports_core.hud.update_scores then
-            esports_core.hud.update_scores()
-        end
-    end
+	esports_core.koth.timer = esports_core.koth.timer - 1
+	if esports_core.koth.timer <= 0 then
+		esports_core.koth.spawn_new_hill()
+	else
+		if esports_core.hud and esports_core.hud.update_scores then
+			esports_core.hud.update_scores()
+		end
+	end
 end
+
+-- Block building on the hill
+core.register_on_placenode(function(pos, newnode, placer, oldnode, itemstack, pointed_thing)
+	if not esports_core.match.is_koth or not esports_core.koth.hill_center then return end
+	if not placer or not placer:is_player() then return end
+
+	local pname = placer:get_player_name()
+	if core.check_player_privs(pname, {server=true}) or core.check_player_privs(pname, {admin=true}) then
+		return  -- Admin bypass
+	end
+
+	local center = esports_core.koth.hill_center
+	local dist = math.sqrt((pos.x - center.x)^2 + (pos.z - center.z)^2)
+	if dist <= esports_core.koth.hill_radius and math.abs(pos.y - center.y) <= 3 then
+		core.chat_send_player(pname, core.colorize("#FF4444", "STRATEGIC OVERRIDE: Building is prohibited within the Hill zone!"))
+		core.set_node(pos, oldnode)
+		return true
+	end
+end)
