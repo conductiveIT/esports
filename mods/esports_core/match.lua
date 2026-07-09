@@ -669,6 +669,9 @@ core.register_on_dieplayer(function(player, reason)
 
 	local v_team = esports_core.match.get_player_match_side(victim)
 	esports_core.hud.add_kill_event((killer_name and killer_name ~= "") and killer_name or "Environment", k_team, victim, v_team, weapon)
+	if esports_core.announcer then
+		esports_core.announcer.on_kill(killer_name, victim)
+	end
 
 	if killer_name and killer_name ~= "" then
 		esports_core.match.add_kill(killer_name)
