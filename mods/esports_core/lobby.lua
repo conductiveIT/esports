@@ -493,26 +493,33 @@ local function get_formspec(name)
 						table.insert(req_items, esports_core.get_nick(req_name))
 					end
 					table.insert(fs, "box[8.5,4.6;8.5,6.8;#222222aa]")
-					table.insert(fs, "label[8.7,4.9;TEAM: " .. selected:upper() .. "]")
+					table.insert(fs, "label[8.7,4.9;TEAM: " .. selected:upper() .. " [" .. (data.tag or "???") .. "]]")
 					table.insert(fs, "label[8.7,5.3;Leader: " .. leader_display .. "]")
-					table.insert(fs, "label[8.7,5.8;ROSTER:]")
-					table.insert(fs, "textlist[8.7,6.1;8.1,2.0;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]")
-					table.insert(fs, "label[8.7,8.4;JOIN REQUESTS:]")
+					table.insert(fs, "label[8.7,5.7;ROSTER:]")
+					table.insert(fs, "textlist[8.7,6.0;8.1,1.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]")
+					table.insert(fs, "label[8.7,7.9;JOIN REQUESTS:]")
 
 					if #requests > 0 then
-						table.insert(fs, "textlist[8.7,8.8;4.5,1.8;sel_request;" .. table.concat(req_items, ",") .. ";;false]")
-						table.insert(fs, "button[13.5,8.8;3.0,0.8;accept_request;APPROVE]")
-						table.insert(fs, "button[13.5,9.8;3.0,0.8;deny_request;DENY]")
+						table.insert(fs, "textlist[8.7,8.2;4.5,1.2;sel_request;" .. table.concat(req_items, ",") .. ";;false]")
+						table.insert(fs, "button[13.5,8.2;3.0,0.5;accept_request;APPROVE]")
+						table.insert(fs, "button[13.5,8.8;3.0,0.5;deny_request;DENY]")
 					else
-						table.insert(fs, "label[8.7,9.0;No pending requests.]")
+						table.insert(fs, "label[8.7,8.3;No pending requests.]")
 					end
 
-					table.insert(fs, "button[8.5,11.8;4.0,0.8;unselect_team;BACK]")
-					table.insert(fs, "button[13.0,11.8;4.0,0.8;set_owner;SET OWNER]")
+					table.insert(fs, "field[8.7,9.9;5.0,0.5;rename_val;New Team Name;]")
+					table.insert(fs, "button[13.9,9.9;2.8,0.5;rename_team;RENAME]")
+
+					table.insert(fs, "field[8.7,10.7;5.0,0.5;tag_val;New Tag (3 letters);]")
+					table.insert(fs, "button[13.9,10.7;2.8,0.5;change_tag;SET TAG]")
+
+					table.insert(fs, "button[8.5,11.8;2.6,0.8;unselect_team;BACK]")
+					table.insert(fs, "button[11.3,11.8;2.6,0.8;unset_owner;UNSET LEADER]")
+					table.insert(fs, "button[14.1,11.8;2.6,0.8;set_owner;SET OWNER]")
 				else
 					-- Normal Team Inspector Panel
 					table.insert(fs, "box[8.5,4.6;8.5,6.8;#222222aa]")
-					table.insert(fs, "label[8.7,5;TEAM: " .. selected:upper() .. "]")
+					table.insert(fs, "label[8.7,5;TEAM: " .. selected:upper() .. " [" .. (data.tag or "???") .. "]]")
 					table.insert(fs, "label[8.7,5.5;Leader: " .. leader_display .. "]")
 					table.insert(fs, "label[8.7,6.2;ROSTER:]")
 					table.insert(fs, "textlist[8.7,6.6;8.1,3.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]")
@@ -1263,6 +1270,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				if fields.accept_request then
 					table.insert(esports_league.teams[target_team].members, target)
 					esports_league.player_to_team[target] = target_team
+					esports_league.update_player_nametag(target)
 					core.chat_send_player(target, "LOBBY: Your request to join '" .. target_team .. "' was approved!")
 					core.chat_send_player(name, "LOBBY: Accepted " .. target .. " into the team.")
 				else
@@ -1288,6 +1296,48 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				core.chat_send_player(name, "LOBBY: " .. msg)
 				esports_core.lobby.show(player)
 			end
+		end
+	end
+
+	-- Unset Leader (Admin)
+	if fields.unset_owner and is_admin then
+		local selected_team = player_settings[name].selected_team
+		if selected_team then
+			local ok, msg = esports_league.unset_owner(name, selected_team)
+			core.chat_send_player(name, "LOBBY: " .. msg)
+			esports_core.lobby.show(player)
+		end
+	end
+
+	-- Rename Team (Admin)
+	if fields.rename_team and is_admin then
+		local selected_team = player_settings[name].selected_team
+		local new_name = fields.rename_val
+		if selected_team and new_name and new_name ~= "" then
+			local ok, msg = esports_league.rename_team(name, selected_team, new_name)
+			core.chat_send_player(name, "LOBBY: " .. msg)
+			if ok then
+				player_settings[name].selected_team = new_name
+			end
+			esports_core.lobby.show(player)
+		else
+			core.chat_send_player(name, "LOBBY: Please enter a valid team name.")
+		end
+	end
+
+	-- Change Team Tag (Admin)
+	if fields.change_tag and is_admin then
+		local selected_team = player_settings[name].selected_team
+		local new_tag = fields.tag_val
+		if selected_team and new_tag and new_tag ~= "" then
+			local cmd_def = core.registered_chatcommands["leaguesettag"]
+			if cmd_def then
+				local ok, msg = cmd_def.func(name, selected_team .. " " .. new_tag)
+				core.chat_send_player(name, "LOBBY: " .. msg)
+			end
+			esports_core.lobby.show(player)
+		else
+			core.chat_send_player(name, "LOBBY: Please enter a valid team tag.")
 		end
 	end
 

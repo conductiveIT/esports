@@ -210,6 +210,7 @@ function esports_league.add_request(player_name, team_name)
 		team.leader = player_name
 		esports_league.player_to_team[player_name] = team_name
 		esports_league.save()
+		esports_league.update_player_nametag(player_name)
 		core.chat_send_all("LOBBY: " .. player_name .. " has revived team '" .. team_name .. "' and is now the leader!")
 		return true, "Team '" .. team_name .. "' was empty! You have been auto-approved and promoted to LEADER."
 	end
@@ -249,6 +250,7 @@ function esports_league.kick_member(owner_name, target_name)
 			table.remove(team.members, i)
 			esports_league.player_to_team[target_name] = nil
 			esports_league.save()
+			esports_league.update_player_nametag(target_name)
 			core.chat_send_player(target_name, "LOBBY: You have been removed from team '" .. team_name .. "'.")
 			return true, "Player " .. target_name .. " kicked."
 		end
@@ -273,6 +275,110 @@ function esports_league.set_owner(admin_name, team_name, new_owner_name)
 	return true, "Ownership transferred to " .. new_owner_name
 end
 
+function esports_league.unset_owner(admin_name, team_name)
+	if not core.check_player_privs(admin_name, {server = true}) then return false, "Admin only." end
+	local team = esports_league.teams[team_name]
+	if not team then return false, "Team does not exist." end
+
+	local old_leader = team.leader
+	team.leader = ""
+	esports_league.save()
+
+	if old_leader and old_leader ~= "" then
+		core.chat_send_player(old_leader, "Admin " .. admin_name .. " has removed you as the leader of team '" .. team_name .. "'.")
+	end
+	core.chat_send_all("LOBBY: Team '" .. team_name .. "' has had its leader unset by admin " .. admin_name .. ".")
+	return true, "Leader of '" .. team_name .. "' has been unset."
+end
+
+function esports_league.rename_team(admin_name, old_name, new_name)
+	if not core.check_player_privs(admin_name, {server = true}) then return false, "Admin only." end
+	if not old_name or old_name == "" or not new_name or new_name == "" then
+		return false, "Invalid team name arguments."
+	end
+	if not esports_league.teams[old_name] then return false, "Team '" .. old_name .. "' does not exist." end
+	if esports_league.teams[new_name] then return false, "Team name '" .. new_name .. "' is already taken." end
+
+	-- 1. Move team data
+	local team_data = esports_league.teams[old_name]
+	esports_league.teams[new_name] = team_data
+	esports_league.teams[old_name] = nil
+
+	-- 2. Update player_to_team mapping
+	for _, member in ipairs(team_data.members) do
+		esports_league.player_to_team[member] = new_name
+	end
+
+	-- 3. Update join requests
+	if esports_league.requests[old_name] then
+		esports_league.requests[new_name] = esports_league.requests[old_name]
+		esports_league.requests[old_name] = nil
+	end
+
+	-- 4. Update invites
+	for player, tname in pairs(esports_league.invites) do
+		if tname == old_name then
+			esports_league.invites[player] = new_name
+		end
+	end
+
+	-- 5. Update fixtures
+	if esports_league.fixtures then
+		for _, round in ipairs(esports_league.fixtures) do
+			for _, match in ipairs(round) do
+				if match.home == old_name then match.home = new_name end
+				if match.away == old_name then match.away = new_name end
+			end
+		end
+	end
+
+	-- 6. Update playoffs
+	if esports_league.playoffs then
+		if esports_league.playoffs.semifinals then
+			for _, match in ipairs(esports_league.playoffs.semifinals) do
+				if match.team1 == old_name then match.team1 = new_name end
+				if match.team2 == old_name then match.team2 = new_name end
+				if match.winner == old_name then match.winner = new_name end
+			end
+		end
+		if esports_league.playoffs.finals then
+			local match = esports_league.playoffs.finals
+			if match.team1 == old_name then match.team1 = new_name end
+			if match.team2 == old_name then match.team2 = new_name end
+			if match.winner == old_name then match.winner = new_name end
+		end
+	end
+
+	-- 7. Update history
+	if esports_league.history then
+		for _, entry in ipairs(esports_league.history) do
+			if entry.home == old_name then entry.home = new_name end
+			if entry.away == old_name then entry.away = new_name end
+		end
+	end
+
+	esports_league.save()
+	esports_league.update_team_nametags(new_name)
+	core.chat_send_all("LOBBY: Team '" .. old_name .. "' has been renamed to '" .. new_name .. "' by admin " .. admin_name .. ".")
+	return true, "Team '" .. old_name .. "' successfully renamed to '" .. new_name .. "'."
+end
+
+function esports_league.update_player_nametag(player_name)
+	local p = core.get_player_by_name(player_name)
+	if p then
+		local nick = esports_core.get_nick(player_name)
+		p:set_properties({nametag = nick})
+	end
+end
+
+function esports_league.update_team_nametags(team_name)
+	local team = esports_league.teams[team_name]
+	if not team then return end
+	for _, mname in ipairs(team.members) do
+		esports_league.update_player_nametag(mname)
+	end
+end
+
 function esports_league.get_team_members(team_name)
 	if not esports_league.teams[team_name] then return {} end
 	return esports_league.teams[team_name].members
@@ -280,7 +386,7 @@ end
 
 -- COMMANDS
 core.register_chatcommand("team", {
-	params = "create <name> | invite <player> | join | leave | list",
+	params = "create <name> <3_letter_tag> | invite <player> | join | leave | list",
 	description = "Manage your TDM League team",
 	func = function(name, param)
 		local cmd, arg = param:match("^(%w+)%s*(.*)$")
@@ -291,29 +397,46 @@ core.register_chatcommand("team", {
 			if esports_league.player_to_team[name] and not is_admin then
 				return false, "You are already in a team!"
 			end
-			if arg == "" then return false, "Please specify a team name." end
-			if esports_league.teams[arg] then return false, "Team name already taken." end
+			local team_name, tag = arg:match("^(%S+)%s+(%S+)$")
+			if not team_name or not tag then
+				return false, "Usage: /team create <team_name> <3_letter_tag>"
+			end
+			tag = tag:upper()
+			if #tag ~= 3 or not tag:match("^[A-Z0-9]+$") then
+				return false, "Team tag must be exactly 3 alphanumeric characters."
+			end
+			if esports_league.teams[team_name] then return false, "Team name already taken." end
+
+			-- Check if tag is unique
+			for tname, tdata in pairs(esports_league.teams) do
+				if tdata.tag == tag then
+					return false, "Team tag '" .. tag .. "' is already taken by team '" .. tname .. "'."
+				end
+			end
 
 			if is_admin then
 				-- Admin creates a team: empty leader, empty members, admin does not join
-				esports_league.teams[arg] = {
+				esports_league.teams[team_name] = {
 					leader = "",
 					members = {},
 					wins = 0,
-					losses = 0
+					losses = 0,
+					tag = tag
 				}
 				esports_league.save()
-				return true, "Team '" .. arg .. "' created by Administrator."
+				return true, "Team '" .. team_name .. "' with tag [" .. tag .. "] created by Administrator."
 			else
-				esports_league.teams[arg] = {
+				esports_league.teams[team_name] = {
 					leader = name,
 					members = {name},
 					wins = 0,
-					losses = 0
+					losses = 0,
+					tag = tag
 				}
-				esports_league.player_to_team[name] = arg
+				esports_league.player_to_team[name] = team_name
 				esports_league.save()
-				return true, "Team '" .. arg .. "' created! You are the leader."
+				esports_league.update_player_nametag(name)
+				return true, "Team '" .. team_name .. "' with tag [" .. tag .. "] created! You are the leader."
 			end
 
 		elseif cmd == "invite" then
@@ -337,6 +460,7 @@ core.register_chatcommand("team", {
 			esports_league.player_to_team[name] = team_name
 			esports_league.invites[name] = nil
 			esports_league.save()
+			esports_league.update_player_nametag(name)
 			return true, "You have joined '" .. team_name .. "'!"
 
 		elseif cmd == "leave" then
@@ -367,6 +491,7 @@ core.register_chatcommand("team", {
 			end
 
 			esports_league.save()
+			esports_league.update_player_nametag(name)
 			return true, "You have left the team."
 
 		elseif cmd == "logo" then
@@ -458,6 +583,65 @@ core.register_chatcommand("leaguesetleader", {
 		esports_league.save()
 		core.chat_send_player(player_name, "Admin " .. name .. " has assigned you as the LEADER of team '" .. team_name .. "'.")
 		return true, "Leadership of '" .. team_name .. "' transferred to " .. player_name
+	end
+})
+
+core.register_chatcommand("leagueunsetleader", {
+	params = "<team_name>",
+	description = "Unset the leader of a team (Admin only)",
+	privs = {server = true},
+	func = function(name, param)
+		if param == "" then return false, "Usage: /leagueunsetleader <team_name>" end
+		return esports_league.unset_owner(name, param)
+	end
+})
+
+core.register_chatcommand("leaguerename", {
+	params = "<old_name> <new_name>",
+	description = "Rename a team in the league (Admin only)",
+	privs = {server = true},
+	func = function(name, param)
+		local old_name, new_name = param:match("^(%S+)%s+(%S+)$")
+		if not old_name or not new_name then
+			return false, "Usage: /leaguerename <old_name> <new_name>"
+		end
+		return esports_league.rename_team(name, old_name, new_name)
+	end
+})
+
+core.register_chatcommand("leaguesettag", {
+	params = "<team_name> <tag>",
+	description = "Change/set a team's 3-letter tag (Admin only)",
+	privs = {server = true},
+	func = function(name, param)
+		local team_name, tag = param:match("^(%S+)%s+(%S+)$")
+		if not team_name or not tag then
+			return false, "Usage: /leaguesettag <team_name> <tag>"
+		end
+		tag = tag:upper()
+		if #tag ~= 3 or not tag:match("^[A-Z0-9]+$") then
+			return false, "Team tag must be exactly 3 alphanumeric characters."
+		end
+
+		local team = esports_league.teams[team_name]
+		if not team then return false, "Team '" .. team_name .. "' not found." end
+
+		-- Check if tag is unique
+		for tname, tdata in pairs(esports_league.teams) do
+			if tname ~= team_name and tdata.tag == tag then
+				return false, "Team tag '" .. tag .. "' is already taken by team '" .. tname .. "'."
+			end
+		end
+
+		local old_tag = team.tag or "none"
+		team.tag = tag
+		esports_league.save()
+
+		-- Update all online members' nametags
+		esports_league.update_team_nametags(team_name)
+
+		core.chat_send_all("LOBBY: Team '" .. team_name .. "' tag changed to [" .. tag .. "] by admin " .. name .. ".")
+		return true, "Team '" .. team_name .. "' tag changed from [" .. old_tag .. "] to [" .. tag .. "]."
 	end
 })
 

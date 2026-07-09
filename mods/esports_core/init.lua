@@ -17,7 +17,17 @@ function esports_core.save_nicknames()
 end
 
 function esports_core.get_nick(name)
-	return esports_core.nicknames[name] or name
+	local display = esports_core.nicknames[name] or name
+	if esports_league and esports_league.player_to_team and esports_league.teams then
+		local tname = esports_league.player_to_team[name]
+		if tname then
+			local team = esports_league.teams[tname]
+			if team and team.tag and team.tag ~= "" then
+				return "[" .. team.tag .. "] " .. display
+			end
+		end
+	end
+	return display
 end
 
 dofile(modpath .. "/teams.lua")
