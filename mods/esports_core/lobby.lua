@@ -156,7 +156,7 @@ function esports_core.lobby.get_live_scoreboard_formspec(name)
 		"style_type[button;bgcolor=#333333;textcolor=white;font=bold]",
 		"style_type[label;textcolor=white;font=bold]",
 		
-		"label[0.5,0.8;LUANTI ESPORTS - LIVE SCOREBOARD]",
+		"label[0.5,0.8;LUANTI ESPORTS - LIVE SCOREBOARD v" .. esports_core.version .. " (build " .. esports_core.build .. ")]",
 		"label[0.5,1.3;Mode: " .. mode_name .. " | Remaining: " .. time_str .. "]",
 		"style[exit_server;bgcolor=#770000;textcolor=white]",
 		"button[14.0,0.8;3.0,0.8;exit_server;DISCONNECT]"
@@ -252,7 +252,7 @@ local function get_formspec(name)
 
 		-- Header (Dynamic Team Logo)
 		"image[0.5,0.2;2,2;" .. esports_core.get_team_logo(p_team, "esports_logo_red.png") .. "]",
-		"label[2.5,1;LUANTI ESPORTS - MAIN LOBBY]",
+		"label[2.5,1;LUANTI ESPORTS - MAIN LOBBY v" .. esports_core.version .. " (build " .. esports_core.build .. ")]",
 		"label[2.5,1.5;Current Team: " .. p_team .. "]",
 		"style[exit_server;bgcolor=#770000;textcolor=white]",
 		"button[14.0,1.3;3.0,0.9;exit_server;DISCONNECT]"
@@ -515,7 +515,7 @@ local function get_formspec(name)
 
 					table.insert(fs, "button[8.5,12.0;2.6,0.8;unselect_team;BACK]")
 					table.insert(fs, "button[11.3,12.0;2.6,0.8;unset_owner;UNSET LEADER]")
-					table.insert(fs, "button[14.1,12.0;2.6,0.8;set_owner;SET OWNER]")
+					table.insert(fs, "button[14.1,12.0;2.6,0.8;set_owner;SET LEADER]")
 				else
 					-- Normal Team Inspector Panel
 					table.insert(fs, "box[8.5,4.6;8.5,6.8;#222222aa]")
@@ -802,13 +802,13 @@ local function get_formspec(name)
 		table.insert(fs, "label[0.5,6.2;AI Difficulty:]")
 		table.insert(fs, "dropdown[0.5,6.6;4.5,0.8;bot_diff;" .. table.concat(diff_list, ",") .. ";" .. diff_idx .. "]")
 
-		table.insert(fs, "checkbox[0.5,7.5;chk_allow_nicks;Allow Nickname Changes;" .. (esports_core.allow_nicks and "true" or "false") .. "]")
-		table.insert(fs, "checkbox[0.5,8.1;chk_allow_team_create;Allow Team Creation;" .. (esports_league.allow_team_creation and "true" or "false") .. "]")
+		table.insert(fs, "checkbox[0.5,7.9;chk_allow_team_create;Allow Team Creation;" .. (esports_league.allow_team_creation and "true" or "false") .. "]")
+		table.insert(fs, "checkbox[0.5,8.5;chk_allow_nicks;Allow Nickname Changes;" .. (esports_core.allow_nicks and "true" or "false") .. "]")
 
-		table.insert(fs, "label[0.5,8.9;TIPS]")
-		table.insert(fs, "label[0.5,9.4;- Bots spawn with 0 ammo.]")
-		table.insert(fs, "label[0.5,9.9;- They hunt crates to reload.]")
-		table.insert(fs, "label[0.5,10.4;- Hard bots move faster/hit harder.]")
+		table.insert(fs, "label[0.5,9.4;TIPS]")
+		table.insert(fs, "label[0.5,9.9;- Bots spawn with 0 ammo.]")
+		table.insert(fs, "label[0.5,10.4;- They hunt crates to reload.]")
+		table.insert(fs, "label[0.5,10.9;- Hard bots move faster/hit harder.]")
 
 		-- Nicknames mappings display for admins
 		local mapping_items = {}
