@@ -58,6 +58,8 @@ This is a fast-paced hitscan team combat base game for Luanti with building, sto
 *   `/follow [player_name] | off`: Follow a player cinematically while in spectator mode. Leave blank to open the follow menu, or use `off` to stop following.
 *   `/skin reset | #RRGGBB`: Tints your character skin with a hex color code, or resets it to the default (Admin only).
 *   `/nick [player_name] <nickname>`: Change your floating nametag, chat display name, and scoreboard name (alpha-numeric only, max 15 characters). Admins can target other players. Use `reset` or `clear` to restore the default name.
+*   `/ping [danger|defend|move]`: Place a 3D tactical ping waypoint visible to all online teammates (lasts 6 seconds).
+*   `/practice`: Teleport to the practice range (Aim Trainer) to practice shooting targets. Type `/lobby` to return to spawn.
 
 ### League & Team Administration
 *   `/team create <name> <3_letter_tag> | invite <player> | join | leave | logo <eagle/lion/dragon/skull> | list`: Manage your TDM League team.

@@ -47,6 +47,9 @@ function esports_core.set_spectator(player, enable)
 		core.set_player_privs(target_name, privs)
 
 		esports_core.hud.init_hud(player)
+		if esports_core.broadcaster then
+			esports_core.broadcaster.clear_hud(player)
+		end
 	end
 end
 

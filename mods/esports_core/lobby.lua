@@ -1731,6 +1731,18 @@ core.register_chatcommand("lobby", {
 			else
 				player_settings[name] = { spectator_view = nil }
 			end
+
+			-- Reset player from practice range if they are inside
+			if esports_core.practice and esports_core.practice.players[name] then
+				esports_core.practice.players[name] = nil
+				player:set_pos({x=0, y=1.5, z=0})
+				player:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1})
+				-- Reset inventory
+				local inv = player:get_inventory()
+				inv:set_list("main", {})
+				inv:set_list("ammo", {})
+			end
+
 			esports_core.lobby.show(player)
 		end
 	end

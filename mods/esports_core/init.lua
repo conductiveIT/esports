@@ -1,6 +1,6 @@
 esports_core = {}
-esports_core.version = "1.4.1"
-esports_core.build = 9
+esports_core.version = "1.5.0"
+esports_core.build = 1
 core.log("action", "====================================================")
 core.log("action", "[TDM Core] Starting Luanti Deathmatch Core v" .. esports_core.version .. " (build " .. esports_core.build .. ")")
 core.log("action", "====================================================")
@@ -34,6 +34,9 @@ dofile(modpath .. "/teams.lua")
 dofile(modpath .. "/hud.lua")
 dofile(modpath .. "/match.lua")
 dofile(modpath .. "/spectator.lua")
+dofile(modpath .. "/broadcaster.lua")
+dofile(modpath .. "/pings.lua")
+dofile(modpath .. "/practice_range.lua")
 dofile(modpath .. "/bots.lua")
 
 dofile(modpath .. "/player_anim.lua")
