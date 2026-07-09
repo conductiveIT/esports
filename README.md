@@ -21,6 +21,13 @@ This is a fast-paced hitscan team combat base game for Luanti with building, sto
 - **Single-Elimination Playoffs**: Automated seeding of the top 4 teams into a tournament bracket (Semifinals -> Grand Finals) to crown the season Champion.
 - **Offseason Archiving**: Clean reset commands that serialize the finished season standings to history archives and prepare the league for a new cycle.
 
+### Competitive & Spectator Features
+- **Broadcaster HUD Overlay**: Spectators automatically see a live feed showing active players' status, weapons, HP, and followed target details.
+- **Tactical Ping & Radio**: Teammates can place temporary 3D HUD markers visible only to their team (`⚠️ DANGER`, `🛡️ DEFEND`, `📍 MOVE HERE`).
+- **Tactical Radar HUD Widget**: Active combatants get a top-right radar widget tracking teammate positions and current objective items (Flags, Hills, Cart, Domination Points) with distances and yaw-relative directional arrows (⬆, ↗, ➡, ↘, ⬇, ↙, ⬅, ↖) optimized for lag-free performance on 20+ player servers.
+- **Aim Trainer Practice Range**: A private practice zone accessible via `/practice` with pop-up target entities, statistics tracking, and custom weapon warmups.
+- **Audio Announcer**: Dynamic sounds and announcements for **Double Kill**, **Triple Kill**, **Shut Down**, and match countdown beeps.
+
 
 
 ## How to Install & Play
