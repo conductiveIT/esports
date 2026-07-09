@@ -454,8 +454,8 @@ local function get_formspec(name)
 				list_name = "teams_list_clear"
 			end
 
-			table.insert(fs, "label[0.5,4.1;LEAGUE STANDINGS]")
-			table.insert(fs, "textlist[0.5,4.6;7.5,6.8;" .. list_name .. ";" .. table.concat(list_items, ",") .. ";" .. selected_idx .. ";false]")
+			table.insert(fs, "label[0.5,4.3;LEAGUE STANDINGS]")
+			table.insert(fs, "textlist[0.5,4.8;7.5,6.8;" .. list_name .. ";" .. table.concat(list_items, ",") .. ";" .. selected_idx .. ";false]")
 
 			-- Team Inspector Panel
 			if selected and esports_league.teams[selected] then
