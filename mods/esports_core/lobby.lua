@@ -142,7 +142,7 @@ function esports_core.lobby.get_live_scoreboard_formspec(name)
 		elseif esports_core.match.is_domination then
 			special_str = ", Points: " .. p.dom_points
 		end
-		table.insert(list_items, string.format("%s (%s) - K: %d, D: %d%s [Rating: %d]", p.nick, p.side:upper(), p.kills, p.deaths, special_str, p.rating))
+		table.insert(list_items, core.formspec_escape(string.format("%s (%s) - K: %d, D: %d%s [Rating: %d]", p.nick, p.side:upper(), p.kills, p.deaths, special_str, p.rating)))
 	end
 
 	if #list_items == 0 then
@@ -477,7 +477,7 @@ local function get_formspec(name)
 					else
 						kd = tostring(k) .. ".0"
 					end
-					table.insert(roster_items, string.format("%s (R:%d KD:%s H:%ds P:%d)", esports_core.get_nick(mname), rating, kd, h, dom))
+					table.insert(roster_items, core.formspec_escape(string.format("%s (R:%d KD:%s H:%ds P:%d)", esports_core.get_nick(mname), rating, kd, h, dom)))
 				end
 
 				local leader_display = esports_core.get_nick(data.leader or "")
@@ -490,11 +490,11 @@ local function get_formspec(name)
 					local requests = esports_league.requests[selected] or {}
 					local req_items = {}
 					for _, req_name in ipairs(requests) do
-						table.insert(req_items, esports_core.get_nick(req_name))
+						table.insert(req_items, core.formspec_escape(esports_core.get_nick(req_name)))
 					end
 					table.insert(fs, "box[8.5,4.6;8.5,6.8;#222222aa]")
-					table.insert(fs, "label[8.7,4.9;TEAM: " .. selected:upper() .. " [" .. (data.tag or "???") .. "]]")
-					table.insert(fs, "label[8.7,5.3;Leader: " .. leader_display .. "]")
+					table.insert(fs, "label[8.7,4.9;TEAM: " .. core.formspec_escape(selected:upper() .. " [" .. (data.tag or "???") .. "]") .. "]")
+					table.insert(fs, "label[8.7,5.3;Leader: " .. core.formspec_escape(leader_display) .. "]")
 					table.insert(fs, "label[8.7,5.7;ROSTER:]")
 					table.insert(fs, "textlist[8.7,6.0;8.1,1.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]")
 					table.insert(fs, "label[8.7,7.9;JOIN REQUESTS:]")
@@ -519,8 +519,8 @@ local function get_formspec(name)
 				else
 					-- Normal Team Inspector Panel
 					table.insert(fs, "box[8.5,4.6;8.5,6.8;#222222aa]")
-					table.insert(fs, "label[8.7,5;TEAM: " .. selected:upper() .. " [" .. (data.tag or "???") .. "]]")
-					table.insert(fs, "label[8.7,5.5;Leader: " .. leader_display .. "]")
+					table.insert(fs, "label[8.7,5;TEAM: " .. core.formspec_escape(selected:upper() .. " [" .. (data.tag or "???") .. "]") .. "]")
+					table.insert(fs, "label[8.7,5.5;Leader: " .. core.formspec_escape(leader_display) .. "]")
 					table.insert(fs, "label[8.7,6.2;ROSTER:]")
 					table.insert(fs, "textlist[8.7,6.6;8.1,3.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]")
 					table.insert(fs, "button[8.7,10.4;8.1,0.6;unselect_team;Show Global Leaderboard]")
@@ -744,8 +744,8 @@ local function get_formspec(name)
 			local is_owner = esports_league.is_owner(name, p_team_name)
 			local team_data = esports_league.teams[p_team_name]
 
-			table.insert(fs, "label[0.5,3.8;TEAM ROSTER: " .. p_team_name:upper() .. "]")
-			table.insert(fs, "label[0.5,4.3;Leader: " .. (team_data.leader ~= "" and esports_core.get_nick(team_data.leader) or "None") .. "]")
+			table.insert(fs, "label[0.5,3.8;TEAM ROSTER: " .. core.formspec_escape(p_team_name:upper()) .. "]")
+			table.insert(fs, "label[0.5,4.3;Leader: " .. core.formspec_escape(team_data.leader ~= "" and esports_core.get_nick(team_data.leader) or "None") .. "]")
 
 			local roster_items = {}
 			for _, mname in ipairs(team_data.members) do
@@ -756,7 +756,7 @@ local function get_formspec(name)
 				local h = stats.hill_time or 0
 				local dom = stats.dom_points or 0
 				local rating = k - d + (c * 10) + math.floor(h / 10) + (dom * 2)
-				table.insert(roster_items, string.format("%s (R:%d K:%d D:%d C:%d H:%ds P:%d)", esports_core.get_nick(mname), rating, k, d, c, h, dom))
+				table.insert(roster_items, core.formspec_escape(string.format("%s (R:%d K:%d D:%d C:%d H:%ds P:%d)", esports_core.get_nick(mname), rating, k, d, c, h, dom)))
 			end
 
 			table.insert(fs, "textlist[0.5,4.8;7.5,6.3;roster_list;" .. table.concat(roster_items, ",") .. ";;false]")
@@ -769,7 +769,7 @@ local function get_formspec(name)
 				local requests = esports_league.requests[p_team_name] or {}
 				local req_items = {}
 				for _, req_name in ipairs(requests) do
-					table.insert(req_items, esports_core.get_nick(req_name))
+					table.insert(req_items, core.formspec_escape(esports_core.get_nick(req_name)))
 				end
 				if #requests > 0 then
 					table.insert(fs, "textlist[8.7,5.3;8.1,4.5;sel_request;" .. table.concat(req_items, ",") .. ";;false]")
@@ -912,11 +912,11 @@ local function get_formspec(name)
 		-- Nickname Editor at the very bottom
 		local is_admin = core.check_player_privs(name, {server = true})
 		if esports_core.allow_nicks or is_admin then
-			table.insert(fs, "field[1.5,12.2;7.0,0.8;txt_nickname;Lobby Nickname;" .. esports_core.get_nick(name) .. "]")
+			table.insert(fs, "field[1.5,12.2;7.0,0.8;txt_nickname;Lobby Nickname;" .. core.formspec_escape(esports_core.get_nick(name)) .. "]")
 			table.insert(fs, "button[8.8,12.2;4.0,0.8;btn_set_nickname;UPDATE NICKNAME]")
 			table.insert(fs, "button[13.1,12.2;3.0,0.8;btn_clear_nickname;RESET]")
 		else
-			table.insert(fs, "label[1.5,12.2;Nickname changes are currently disabled by an administrator. (Current: " .. esports_core.get_nick(name) .. ")]")
+			table.insert(fs, "label[1.5,12.2;Nickname changes are currently disabled by an administrator. (Current: " .. core.formspec_escape(esports_core.get_nick(name)) .. ")]")
 		end
 	end
 
