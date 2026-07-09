@@ -1,7 +1,8 @@
 esports_core = {}
 esports_core.version = "1.3.1"
+esports_core.build = 5
 core.log("action", "====================================================")
-core.log("action", "[TDM Core] Starting Luanti Deathmatch Core v" .. esports_core.version)
+core.log("action", "[TDM Core] Starting Luanti Deathmatch Core v" .. esports_core.version .. " (build " .. esports_core.build .. ")")
 core.log("action", "====================================================")
 local modpath = core.get_modpath("esports_core")
 

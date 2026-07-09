@@ -177,10 +177,14 @@ core.register_globalstep(function(dtime)
 					local base_r2 = base_r * base_r
 					local dist_red2 = (x - 80*scale)*(x - 80*scale) + z*z
 					local dist_blue2 = (x + 80*scale)*(x + 80*scale) + z*z
-					local is_ring = (x*x + z*z >= 20*20 * scale*scale) and (x*x + z*z <= 40*40 * scale*scale)
-					local red_conn = (x >= 25*scale and x <= 60*scale) and (z >= -5*scale and z <= 5*scale)
-					local blue_conn = (x >= -60*scale and x <= -25*scale) and (z >= -5*scale and z <= 5*scale)
-					on_island = (dist_red2 <= base_r2) or (dist_blue2 <= base_r2) or is_ring or red_conn or blue_conn
+
+					local center_r = 25 * scale
+					local center_r2 = center_r * center_r
+					local dist_center2 = x*x + z*z
+
+					local left_bridge = (x >= -60*scale and x <= -20*scale) and (z >= -4*scale and z <= 4*scale)
+					local right_bridge = (x >= 20*scale and x <= 60*scale) and (z >= -4*scale and z <= 4*scale)
+					on_island = (dist_red2 <= base_r2) or (dist_blue2 <= base_r2) or (dist_center2 <= center_r2) or left_bridge or right_bridge
 				end
 
 				if on_island then

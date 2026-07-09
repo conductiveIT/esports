@@ -135,9 +135,17 @@ function esports_mapgen.reset_island(layout_name, scale_val)
 	core.clear_objects({mode = "quick"})
 
 	-- 2. WIPE the island nodes back to their default state
-	-- Expanded: Scan the full possible generation region (-160 to 160 X/Z, -20 to 10 Y) to clean up old chunk leftovers
-	local minp = {x=-160, y=-20, z=-160}
-	local maxp = {x=160, y=10, z=160}
+	-- Optimized dynamically: Scan the region corresponding to the maximum of new and previous scales to avoid leftover blocks,
+	-- instead of always scanning the full 320x30x320 area.
+	local prev_scale = esports_mapgen.current_scale or 1.0
+	local max_s = math.max(scale, prev_scale)
+
+	-- Max layout extent is 110 at scale = 1.0 (80 base center + 30 base radius).
+	-- Add a small buffer to be safe.
+	local max_extent = math.ceil(115 * max_s)
+
+	local minp = {x=-max_extent, y=-20, z=-max_extent}
+	local maxp = {x=max_extent, y=10, z=max_extent}
 
 	local vm = VoxelManip()
 	local emin, emax = vm:read_from_map(minp, maxp)

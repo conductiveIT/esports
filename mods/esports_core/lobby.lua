@@ -151,40 +151,68 @@ function esports_core.lobby.get_live_scoreboard_formspec(name)
 
 	local fs = {
 		"formspec_version[6]",
-		"size[14,11]",
-		"background9[0,0;14,11;esports_hud_bar.png;false;10]",
+		"size[17.5,13.75]",
+		"background9[0,0;17.5,13.75;esports_hud_bar.png;false;10]",
 		"style_type[button;bgcolor=#333333;textcolor=white;font=bold]",
 		"style_type[label;textcolor=white;font=bold]",
 		
 		"label[0.5,0.8;LUANTI ESPORTS - LIVE SCOREBOARD]",
 		"label[0.5,1.3;Mode: " .. mode_name .. " | Remaining: " .. time_str .. "]",
 		"style[exit_server;bgcolor=#770000;textcolor=white]",
-		"button[10.5,0.8;3.0,0.8;exit_server;DISCONNECT]"
+		"button[14.0,0.8;3.0,0.8;exit_server;DISCONNECT]"
 	}
 
 	if esports_core.match.is_ffa then
-		table.insert(fs, "box[0.5,2.0;13.0,1.2;#333333aa]")
-		table.insert(fs, "label[1.0,2.6;FREE FOR ALL MATCH IN PROGRESS]")
+		table.insert(fs, "box[0.5,2.0;16.5,1.5;#333333aa]")
+		table.insert(fs, "label[1.0,2.75;FREE FOR ALL MATCH IN PROGRESS]")
 	else
-		table.insert(fs, "box[0.5,2.0;6.2,1.5;#551111aa]")
+		table.insert(fs, "box[0.5,2.0;8.0;1.8;#551111aa]")
 		table.insert(fs, "label[1.0,2.6;RED: " .. red_team:upper() .. "]")
-		table.insert(fs, "label[1.0,3.1;Score: " .. red_score .. "]")
+		table.insert(fs, "label[1.0,3.2;Score: " .. red_score .. "]")
 
-		table.insert(fs, "box[7.3,2.0;6.2,1.5;#111155aa]")
-		table.insert(fs, "label[7.8,2.6;BLUE: " .. blue_team:upper() .. "]")
-		table.insert(fs, "label[7.8,3.1;Score: " .. blue_score .. "]")
+		table.insert(fs, "box[9.0,2.0;8.0;1.8;#111155aa]")
+		table.insert(fs, "label[9.5,2.6;BLUE: " .. blue_team:upper() .. "]")
+		table.insert(fs, "label[9.5,3.2;Score: " .. blue_score .. "]")
 	end
 
-	table.insert(fs, "label[0.5,4.2;PLAYER STATISTICS (LIVE)]")
-	table.insert(fs, "textlist[0.5,4.7;13.0,4.8;live_stats_list;" .. table.concat(list_items, ",") .. ";;false]")
+	table.insert(fs, "label[0.5,4.4;PLAYER STATISTICS (LIVE)]")
+	table.insert(fs, "textlist[0.5,5.0;16.5,7.0;live_stats_list;" .. table.concat(list_items, ",") .. ";;false]")
 
 	table.insert(fs, "style[stop_match;bgcolor=#770000;textcolor=white]")
-	table.insert(fs, "button[0.5,10.0;6.2,0.7;stop_match;STOP MATCH]")
+	table.insert(fs, "button[0.5,12.5;8.0,0.9;stop_match;STOP MATCH]")
 
 	table.insert(fs, "style[go_spectate;bgcolor=#335533;textcolor=white]")
-	table.insert(fs, "button[7.3,10.0;6.2,0.7;go_spectate;SPECTATE 3D]")
+	table.insert(fs, "button[9.0,12.5;8.0,0.9;go_spectate;SPECTATE 3D]")
 
 	return table.concat(fs)
+end
+
+local function get_recommended_max_players(size, mode, layout)
+	if mode == "SPLEEF" then
+		return "4 - 8 players"
+	end
+
+	local is_lane = (layout == "Choke Point" or layout == "Three Lanes" or layout == "Split Center")
+
+	if size == "Small" then
+		if mode == "FFA" then
+			return is_lane and "4 - 6 players (Solo)" or "6 - 8 players (Solo)"
+		else
+			return is_lane and "2v2 to 3v3 (4 - 6 players)" or "2v2 to 4v4 (4 - 8 players)"
+		end
+	elseif size == "Medium" then
+		if mode == "FFA" then
+			return is_lane and "8 - 10 players (Solo)" or "10 - 14 players (Solo)"
+		else
+			return is_lane and "4v4 to 6v6 (8 - 12 players)" or "5v5 to 8v8 (10 - 16 players)"
+		end
+	else -- Large
+		if mode == "FFA" then
+			return is_lane and "12 - 16 players (Solo)" or "16 - 24 players (Solo)"
+		else
+			return is_lane and "6v6 to 8v8 (12 - 16 players)" or "8v8 to 12v12 (16 - 24 players)"
+		end
+	end
 end
 
 local function get_formspec(name)
@@ -205,7 +233,7 @@ local function get_formspec(name)
 			count = "5", diff = "medium", red = "", blue = "", pve = "",
 			match_dur = "5m", match_tod = "Day", match_mode = "TDM",
 			map_size = "Small", map_layout = "Random", friendly_fire = false, melee_damage = true,
-			league_subtab = "standings", sel_round = 1, sel_match_idx = 1
+			league_subtab = "standings", sel_round = 1, sel_match_idx = 1, sel_spec_idx = 1
 		}
 	end
 	local settings = player_settings[name]
@@ -216,8 +244,8 @@ local function get_formspec(name)
 
 	local fs = {
 		"formspec_version[6]",
-		"size[14,11]",
-		"background9[0,0;14,11;esports_hud_bar.png;false;10]",
+		"size[17.5,13.75]",
+		"background9[0,0;17.5,13.75;esports_hud_bar.png;false;10]",
 		"style_type[button;bgcolor=#333333;textcolor=white;font=bold]",
 		"style_type[label;textcolor=white;font=bold]",
 		"style[btn_disabled;bgcolor=#111111;textcolor=#888888]",
@@ -227,12 +255,12 @@ local function get_formspec(name)
 		"label[2.5,1;LUANTI ESPORTS - MAIN LOBBY]",
 		"label[2.5,1.5;Current Team: " .. p_team .. "]",
 		"style[exit_server;bgcolor=#770000;textcolor=white]",
-		"button[10.5,1.3;3.0,0.9;exit_server;DISCONNECT]"
+		"button[14.0,1.3;3.0,0.9;exit_server;DISCONNECT]"
 	}
 
 	if is_admin then
 		table.insert(fs, "style[exit_lobby;bgcolor=#555555;textcolor=white]")
-		table.insert(fs, "button[8.0,1.3;2.2,0.9;exit_lobby;EXIT]")
+		table.insert(fs, "button[11.5,1.3;2.2,0.9;exit_lobby;EXIT]")
 	end
 
 	-- Dynamic Tab Highlighting Style
@@ -248,15 +276,15 @@ local function get_formspec(name)
 	end
 
 	if is_admin then
-		table.insert(fs, "button[0.5,2.5;2.4,0.8;tab_match;MATCH]")
-		table.insert(fs, "button[3.15,2.5;2.4,0.8;tab_league;LEAGUE]")
-		table.insert(fs, "button[5.8,2.5;2.4,0.8;tab_team;TEAM]")
-		table.insert(fs, "button[8.45,2.5;2.4,0.8;tab_locker;LOCKER]")
-		table.insert(fs, "button[11.1,2.5;2.4,0.8;tab_settings;ADMIN]")
+		table.insert(fs, "button[0.5,2.5;3.1,0.8;tab_match;MATCH]")
+		table.insert(fs, "button[3.85,2.5;3.1,0.8;tab_league;LEAGUE]")
+		table.insert(fs, "button[7.2,2.5;3.1,0.8;tab_team;TEAM]")
+		table.insert(fs, "button[10.55,2.5;3.1,0.8;tab_locker;LOCKER]")
+		table.insert(fs, "button[13.9,2.5;3.1,0.8;tab_settings;ADMIN]")
 	else
-		table.insert(fs, "button[0.5,2.5;4.0,0.8;tab_league;LEAGUE]")
-		table.insert(fs, "button[5.0,2.5;4.0,0.8;tab_team;TEAM]")
-		table.insert(fs, "button[9.5,2.5;4.0,0.8;tab_locker;LOCKER]")
+		table.insert(fs, "button[0.5,2.5;5.1,0.8;tab_league;LEAGUE]")
+		table.insert(fs, "button[6.2,2.5;5.1,0.8;tab_team;TEAM]")
+		table.insert(fs, "button[11.9,2.5;5.1,0.8;tab_locker;LOCKER]")
 	end
 
 	local match_active = (esports_core.match.state == "active")
@@ -282,28 +310,28 @@ local function get_formspec(name)
 
 		if match_mode == "FFA" then
 			table.insert(fs, "label[0.8,3.8;FREE FOR ALL (SOLO DEATHMATCH)]")
-			table.insert(fs, "label[0.8,4.3;No teams. Every player for themselves!]")
-			table.insert(fs, "label[0.8,5.0;Rules:]")
-			table.insert(fs, "label[0.8,5.5;- Friendly fire is always enabled.]")
-			table.insert(fs, "label[0.8,6.0;- Spawn points are randomized across the island.]")
-			table.insert(fs, "label[0.8,6.5;- Match standings and leaderboards are NOT affected.]")
+			table.insert(fs, "label[0.8,4.4;No teams. Every player for themselves!]")
+			table.insert(fs, "label[0.8,5.2;Rules:]")
+			table.insert(fs, "label[0.8,5.8;- Friendly fire is always enabled.]")
+			table.insert(fs, "label[0.8,6.4;- Spawn points are randomized across the island.]")
+			table.insert(fs, "label[0.8,7.0;- Match standings and leaderboards are NOT affected.]")
 		else
 			table.insert(fs, "label[0.8,3.8;COMPETITIVE MATCH]")
-			table.insert(fs, "label[0.8,4.3;Choose the competing teams:]")
+			table.insert(fs, "label[0.8,4.4;Choose the competing teams:]")
 
-			table.insert(fs, "label[0.8,5.2;Red Team:]")
-			table.insert(fs, "dropdown[0.8,5.6;5.4,0.6;sel_red;" .. teams_str .. ";" .. red_idx .. "]")
+			table.insert(fs, "label[0.8,5.3;Red Team:]")
+			table.insert(fs, "dropdown[0.8,5.8;7.5,0.6;sel_red;" .. teams_str .. ";" .. red_idx .. "]")
 
-			table.insert(fs, "label[0.8,6.8;Blue Team:]")
-			table.insert(fs, "dropdown[0.8,7.2;5.4,0.6;sel_blue;" .. teams_str .. ";" .. blue_idx .. "]")
+			table.insert(fs, "label[0.8,7.1;Blue Team:]")
+			table.insert(fs, "dropdown[0.8,7.6;7.5,0.6;sel_blue;" .. teams_str .. ";" .. blue_idx .. "]")
 
-			table.insert(fs, "box[6.95,3.8;0.1,4.0;#ffffff]") -- Divider (Shortened to avoid Arena overlap)
+			table.insert(fs, "box[8.7,3.8;0.1,5.0;#ffffff]") -- Divider (Shortened to avoid Arena overlap)
 
-			table.insert(fs, "label[7.4,3.8;BOT PRACTICE (PVE)]")
-			table.insert(fs, "label[7.4,4.3;Current Setup: " .. settings.count .. " Bots, " .. settings.diff .. " difficulty]")
+			table.insert(fs, "label[9.2,3.8;BOT PRACTICE (PVE)]")
+			table.insert(fs, "label[9.2,4.4;Current Setup: " .. settings.count .. " Bots, " .. settings.diff .. " difficulty]")
 
-			table.insert(fs, "label[7.4,5.2;Player Team:]")
-			table.insert(fs, "dropdown[7.4,5.6;5.8,0.6;sel_pve;" .. teams_str .. ";" .. pve_idx .. "]")
+			table.insert(fs, "label[9.2,5.3;Player Team:]")
+			table.insert(fs, "dropdown[9.2,5.8;7.5,0.6;sel_pve;" .. teams_str .. ";" .. pve_idx .. "]")
 		end
 
 		local dur_list = {"1m","5m","10m","15m","20m","30m"}
@@ -331,38 +359,41 @@ local function get_formspec(name)
 		elseif settings.match_mode == "SPLEEF" then mode_idx = 7
 		elseif settings.match_mode == "DOMINATION" then mode_idx = 8 end
 
-		table.insert(fs, "box[0.8,7.5;12.4,1.8;#333333]")
-		table.insert(fs, "label[1.0,7.8;ARENA CONFIGURATION]")
-		table.insert(fs, "label[1.0,8.4;Dur:]")
-		table.insert(fs, "dropdown[2.0,8.1;1.5,0.6;sel_dur;1m,5m,10m,15m,20m,30m;" .. dur_idx .. "]")
-		table.insert(fs, "label[3.9,8.4;Mode:]")
-		table.insert(fs, "dropdown[4.9,8.1;1.8,0.6;sel_mode;TDM,CTF,FFA,KOTH,PAYLOAD,TAGCTF,SPLEEF,DOMINATION;" .. mode_idx .. "]")
-		table.insert(fs, "label[7.2,8.4;Time:]")
-		table.insert(fs, "dropdown[8.2,8.1;1.8,0.6;sel_tod;Day,Night;" .. tod_idx .. "]")
-		table.insert(fs, "label[10.5,8.4;Size:]")
-		table.insert(fs, "dropdown[11.5,8.1;1.5,0.6;sel_map_size;Small,Medium,Large;" .. size_idx .. "]")
+		table.insert(fs, "box[0.8,9.0;15.9,2.2;#333333]")
+		table.insert(fs, "label[1.0,9.3;ARENA CONFIGURATION]")
+		table.insert(fs, "label[1.0,10.1;Dur:]")
+		table.insert(fs, "dropdown[2.0,9.8;2.0,0.6;sel_dur;1m,5m,10m,15m,20m,30m;" .. dur_idx .. "]")
+		table.insert(fs, "label[4.5,10.1;Mode:]")
+		table.insert(fs, "dropdown[5.5,9.8;2.5,0.6;sel_mode;TDM,CTF,FFA,KOTH,PAYLOAD,TAGCTF,SPLEEF,DOMINATION;" .. mode_idx .. "]")
+		table.insert(fs, "label[8.5,10.1;Time:]")
+		table.insert(fs, "dropdown[9.5,9.8;2.5,0.6;sel_tod;Day,Night;" .. tod_idx .. "]")
+		table.insert(fs, "label[12.5,10.1;Size:]")
+		table.insert(fs, "dropdown[13.5,9.8;2.2,0.6;sel_map_size;Small,Medium,Large;" .. size_idx .. "]")
 
 		if match_mode == "FFA" then
 			table.insert(fs, "style[chk_friendly_fire_dummy;enabled=false]")
-			table.insert(fs, "checkbox[1.0,8.8;chk_friendly_fire_dummy;Friendly Fire (Forced ON);true]")
+			table.insert(fs, "checkbox[1.0,10.6;chk_friendly_fire_dummy;Friendly Fire (Forced ON);true]")
 		else
-			table.insert(fs, "checkbox[1.0,8.8;chk_friendly_fire;Friendly Fire (FF);" .. (settings.friendly_fire and "true" or "false") .. "]")
+			table.insert(fs, "checkbox[1.0,10.6;chk_friendly_fire;Friendly Fire (FF);" .. (settings.friendly_fire and "true" or "false") .. "]")
 		end
-		table.insert(fs, "checkbox[5.2,8.8;chk_melee_damage;Melee Damage;" .. (settings.melee_damage and "true" or "false") .. "]")
-		table.insert(fs, "label[9.5,9.1;Layout:]")
-		table.insert(fs, "dropdown[10.5,8.8;2.3,0.6;sel_map_layout;Random,Classic,Choke Point,Three Lanes,Split Center;" .. layout_idx .. "]")
+		table.insert(fs, "checkbox[6.5,10.6;chk_melee_damage;Melee Damage;" .. (settings.melee_damage and "true" or "false") .. "]")
+		table.insert(fs, "label[11.5,10.9;Layout:]")
+		table.insert(fs, "dropdown[12.5,10.6;3.2,0.6;sel_map_layout;Random,Classic,Choke Point,Three Lanes,Split Center;" .. layout_idx .. "]")
+
+		local rec_players = get_recommended_max_players(settings.map_size or "Small", settings.match_mode or "TDM", settings.map_layout or "Random")
+		table.insert(fs, "label[1.0,11.25;" .. core.colorize("#ffa500", "Recommended Capacity: " .. rec_players) .. "]")
 
 		if match_mode == "FFA" then
-			table.insert(fs, "button[0.8,9.4;12.4,0.8;start_ffa;START FREE FOR ALL]")
+			table.insert(fs, "button[0.8,11.5;15.9,0.8;start_ffa;START FREE FOR ALL]")
 		else
-			table.insert(fs, "button[0.8,9.4;5.4,0.8;" .. start_comp_name .. ";START TEAM BATTLE]")
-			table.insert(fs, "button[7.8,9.4;5.4,0.8;" .. start_pve_name .. ";START PVE MATCH]")
+			table.insert(fs, "button[0.8,11.5;7.5,0.8;" .. start_comp_name .. ";START TEAM BATTLE]")
+			table.insert(fs, "button[9.2,11.5;7.5,0.8;" .. start_pve_name .. ";START PVE MATCH]")
 		end
 
 		if match_active then
 			table.insert(fs, "style[stop_match;bgcolor=#770000;textcolor=white]")
-			table.insert(fs, "label[4.2,10.0;MATCH CURRENTLY IN PROGRESS]")
-			table.insert(fs, "button[0.8,10.4;12.4,0.5;stop_match;STOP MATCH]")
+			table.insert(fs, "label[6.0,12.5;MATCH CURRENTLY IN PROGRESS]")
+			table.insert(fs, "button[0.8,12.9;15.9,0.5;stop_match;STOP MATCH]")
 		end
 	elseif tab == "league" then
 		local league_subtab = settings.league_subtab or "standings"
@@ -378,10 +409,10 @@ local function get_formspec(name)
 			table.insert(fs, "style[" .. active_sub_btn .. ";bgcolor=#0077dd;textcolor=white]")
 		end
 
-		table.insert(fs, "button[0.5,3.4;3.0,0.6;league_tab_standings;STANDINGS]")
-		table.insert(fs, "button[3.8,3.4;3.0,0.6;league_tab_schedule;SCHEDULE]")
-		table.insert(fs, "button[7.1,3.4;3.0,0.6;league_tab_history;HISTORY]")
-		table.insert(fs, "button[10.4,3.4;3.0,0.6;league_tab_playoffs;PLAYOFFS]")
+		table.insert(fs, "button[0.5,3.4;3.9,0.6;league_tab_standings;STANDINGS]")
+		table.insert(fs, "button[4.8,3.4;3.9,0.6;league_tab_schedule;SCHEDULE]")
+		table.insert(fs, "button[9.1,3.4;3.9,0.6;league_tab_history;HISTORY]")
+		table.insert(fs, "button[13.4,3.4;3.9,0.6;league_tab_playoffs;PLAYOFFS]")
 
 		if league_subtab == "standings" then
 			local sorted = {}
@@ -424,7 +455,7 @@ local function get_formspec(name)
 			end
 
 			table.insert(fs, "label[0.5,4.1;LEAGUE STANDINGS]")
-			table.insert(fs, "textlist[0.5,4.6;6.0,4.4;" .. list_name .. ";" .. table.concat(list_items, ",") .. ";" .. selected_idx .. ";false]")
+			table.insert(fs, "textlist[0.5,4.6;7.5,6.8;" .. list_name .. ";" .. table.concat(list_items, ",") .. ";" .. selected_idx .. ";false]")
 
 			-- Team Inspector Panel
 			if selected and esports_league.teams[selected] then
@@ -461,31 +492,31 @@ local function get_formspec(name)
 					for _, req_name in ipairs(requests) do
 						table.insert(req_items, esports_core.get_nick(req_name))
 					end
-					table.insert(fs, "box[7.0,4.6;6.5,4.4;#222222aa]")
-					table.insert(fs, "label[7.2,4.9;TEAM: " .. selected:upper() .. "]")
-					table.insert(fs, "label[7.2,5.3;Leader: " .. leader_display .. "]")
-					table.insert(fs, "label[7.2,5.8;ROSTER:]")
-					table.insert(fs, "textlist[7.2,6.1;6.1,1.2;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]")
-					table.insert(fs, "label[7.2,7.4;JOIN REQUESTS:]")
+					table.insert(fs, "box[8.5,4.6;8.5,6.8;#222222aa]")
+					table.insert(fs, "label[8.7,4.9;TEAM: " .. selected:upper() .. "]")
+					table.insert(fs, "label[8.7,5.3;Leader: " .. leader_display .. "]")
+					table.insert(fs, "label[8.7,5.8;ROSTER:]")
+					table.insert(fs, "textlist[8.7,6.1;8.1,2.0;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]")
+					table.insert(fs, "label[8.7,8.4;JOIN REQUESTS:]")
 
 					if #requests > 0 then
-						table.insert(fs, "textlist[7.2,7.7;3.5,1.1;sel_request;" .. table.concat(req_items, ",") .. ";;false]")
-						table.insert(fs, "button[10.9,7.7;2.2,0.5;accept_request;APPROVE]")
-						table.insert(fs, "button[10.9,8.3;2.2,0.5;deny_request;DENY]")
+						table.insert(fs, "textlist[8.7,8.8;4.5,1.8;sel_request;" .. table.concat(req_items, ",") .. ";;false]")
+						table.insert(fs, "button[13.5,8.8;3.0,0.8;accept_request;APPROVE]")
+						table.insert(fs, "button[13.5,9.8;3.0,0.8;deny_request;DENY]")
 					else
-						table.insert(fs, "label[7.2,7.9;No pending requests.]")
+						table.insert(fs, "label[8.7,9.0;No pending requests.]")
 					end
 
-					table.insert(fs, "button[7.0,9.2;3.0,0.8;unselect_team;BACK]")
-					table.insert(fs, "button[10.2,9.2;3.3,0.8;set_owner;SET OWNER]")
+					table.insert(fs, "button[8.5,11.8;4.0,0.8;unselect_team;BACK]")
+					table.insert(fs, "button[13.0,11.8;4.0,0.8;set_owner;SET OWNER]")
 				else
 					-- Normal Team Inspector Panel
-					table.insert(fs, "box[7.0,4.6;6.5,4.4;#222222aa]")
-					table.insert(fs, "label[7.2,5;TEAM: " .. selected:upper() .. "]")
-					table.insert(fs, "label[7.2,5.5;Leader: " .. leader_display .. "]")
-					table.insert(fs, "label[7.2,6.2;ROSTER:]")
-					table.insert(fs, "textlist[7.2,6.6;6.1,1.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]")
-					table.insert(fs, "button[7.2,8.2;6.1,0.6;unselect_team;Show Global Leaderboard]")
+					table.insert(fs, "box[8.5,4.6;8.5,6.8;#222222aa]")
+					table.insert(fs, "label[8.7,5;TEAM: " .. selected:upper() .. "]")
+					table.insert(fs, "label[8.7,5.5;Leader: " .. leader_display .. "]")
+					table.insert(fs, "label[8.7,6.2;ROSTER:]")
+					table.insert(fs, "textlist[8.7,6.6;8.1,3.5;sel_roster_admin;" .. table.concat(roster_items, ",") .. ";;false]")
+					table.insert(fs, "button[8.7,10.4;8.1,0.6;unselect_team;Show Global Leaderboard]")
 				end
 			else
 				-- Sort players for Global Leaderboard
@@ -523,25 +554,25 @@ local function get_formspec(name)
 					table.insert(board_items, "No player stats recorded yet")
 				end
 
-				table.insert(fs, "box[7.0,4.6;6.5,4.4;#222222aa]")
-				table.insert(fs, "label[7.2,5.0;GLOBAL LEADERBOARD]")
-				table.insert(fs, "textlist[7.2,5.4;6.1,3.3;global_leaderboard;" .. table.concat(board_items, ",") .. ";;false]")
+				table.insert(fs, "box[8.5,4.6;8.5,6.8;#222222aa]")
+				table.insert(fs, "label[8.7,5.0;GLOBAL LEADERBOARD]")
+				table.insert(fs, "textlist[8.7,5.4;8.1,5.5;global_leaderboard;" .. table.concat(board_items, ",") .. ";;false]")
 			end
 
 			if is_admin then
 				if not selected then
-					table.insert(fs, "field[0.5,9.2;4.5,0.8;new_team;New Team Name;]")
-					table.insert(fs, "button[5.2,9.2;3.5,0.8;create_team;CREATE TEAM]")
+					table.insert(fs, "field[0.5,11.8;6.0,0.8;new_team;New Team Name;]")
+					table.insert(fs, "button[7.0,11.8;4.5,0.8;create_team;CREATE TEAM]")
 				end
 			else
-				table.insert(fs, "label[0.5,9.2;Registration handled by administrators.]")
+				table.insert(fs, "label[0.5,11.8;Registration handled by administrators.]")
 			end
 
 		elseif league_subtab == "schedule" then
 			if not esports_league.fixtures or #esports_league.fixtures == 0 then
 				table.insert(fs, "label[0.5,4.6;No regular season schedule has been generated yet.]")
 				if is_admin then
-					table.insert(fs, "button[0.5,5.3;5.0,0.8;btn_generate_schedule;GENERATE SCHEDULE]")
+					table.insert(fs, "button[0.5,5.5;5.0,0.8;btn_generate_schedule;GENERATE SCHEDULE]")
 				end
 			else
 				local round_count = #esports_league.fixtures
@@ -570,20 +601,20 @@ local function get_formspec(name)
 				end
 
 				table.insert(fs, "label[0.5,4.8;MATCHUPS IN SELECTED ROUND:]")
-				table.insert(fs, "textlist[0.5,5.3;6.0,3.8;sel_match_list;" .. table.concat(match_items, ",") .. ";" .. sel_match_idx .. ";false]")
+				table.insert(fs, "textlist[0.5,5.3;7.5,6.5;sel_match_list;" .. table.concat(match_items, ",") .. ";" .. sel_match_idx .. ";false]")
 
 				local selected_match = round_matches[sel_match_idx]
 				if selected_match then
-					table.insert(fs, "box[7.0,5.3;6.5,3.8;#222222aa]")
-					table.insert(fs, "label[7.2,5.7;MATCH DETAILS]")
-					table.insert(fs, "label[7.2,6.3;Home: " .. selected_match.home .. "]")
-					table.insert(fs, "label[7.2,6.8;Away: " .. selected_match.away .. "]")
-					table.insert(fs, "label[7.2,7.3;Status: " .. selected_match.status:upper() .. "]")
+					table.insert(fs, "box[8.5,5.3;8.5,6.5;#222222aa]")
+					table.insert(fs, "label[8.7,5.7;MATCH DETAILS]")
+					table.insert(fs, "label[8.7,6.4;Home: " .. selected_match.home .. "]")
+					table.insert(fs, "label[8.7,7.1;Away: " .. selected_match.away .. "]")
+					table.insert(fs, "label[8.7,7.8;Status: " .. selected_match.status:upper() .. "]")
 
 					if selected_match.status == "completed" then
-						table.insert(fs, "label[7.2,7.8;Score: " .. selected_match.score.home .. " - " .. selected_match.score.away .. "]")
+						table.insert(fs, "label[8.7,8.5;Score: " .. selected_match.score.home .. " - " .. selected_match.score.away .. "]")
 					elseif is_admin and not match_active then
-						table.insert(fs, "button[7.2,7.8;6.1,0.8;start_scheduled_match;START MATCH]")
+						table.insert(fs, "button[8.7,10.6;8.1,0.8;start_scheduled_match;START MATCH]")
 					end
 				end
 			end
@@ -601,7 +632,7 @@ local function get_formspec(name)
 				table.insert(fs, "label[0.5,4.6;No match history recorded yet.]")
 			else
 				table.insert(fs, "label[0.5,4.2;RECENT MATCH HISTORY:]")
-				table.insert(fs, "textlist[0.5,4.7;13.0,5.2;history_list;" .. table.concat(history_items, ",") .. ";;false]")
+				table.insert(fs, "textlist[0.5,4.7;16.5,7.5;history_list;" .. table.concat(history_items, ",") .. ";;false]")
 			end
 
 		elseif league_subtab == "playoffs" then
@@ -635,34 +666,34 @@ local function get_formspec(name)
 				local sf2 = p.semifinals[2]
 				local fn = p.finals
 
-				table.insert(fs, "box[0.5,4.5;13.0,4.8;#222222aa]")
-				table.insert(fs, "label[0.7,4.8;SEMIFINALS]")
-				table.insert(fs, "label[8.0,4.8;GRAND FINALS]")
+				table.insert(fs, "box[0.5,4.5;16.5,7.0;#222222aa]")
+				table.insert(fs, "label[0.7,4.9;SEMIFINALS]")
+				table.insert(fs, "label[9.5,4.9;GRAND FINALS]")
 
 				local sf1_winner_text = sf1.winner ~= "" and (" (Winner: " .. sf1.winner .. ")") or ""
 				local sf1_score_text = sf1.status == "completed" and (" [" .. sf1.score1 .. "-" .. sf1.score2 .. "]") or ""
-				table.insert(fs, "label[0.7,5.5;SF 1: " .. sf1.team1 .. " vs " .. sf1.team2 .. sf1_score_text .. sf1_winner_text .. "]")
+				table.insert(fs, "label[0.7,5.8;SF 1: " .. sf1.team1 .. " vs " .. sf1.team2 .. sf1_score_text .. sf1_winner_text .. "]")
 
 				local sf2_winner_text = sf2.winner ~= "" and (" (Winner: " .. sf2.winner .. ")") or ""
 				local sf2_score_text = sf2.status == "completed" and (" [" .. sf2.score1 .. "-" .. sf2.score2 .. "]") or ""
-				table.insert(fs, "label[0.7,6.3;SF 2: " .. sf2.team1 .. " vs " .. sf2.team2 .. sf2_score_text .. sf2_winner_text .. "]")
+				table.insert(fs, "label[0.7,7.0;SF 2: " .. sf2.team1 .. " vs " .. sf2.team2 .. sf2_score_text .. sf2_winner_text .. "]")
 
 				local fn_team1 = fn.team1 ~= "" and fn.team1 or "(TBD)"
 				local fn_team2 = fn.team2 ~= "" and fn.team2 or "(TBD)"
 				local fn_winner_text = fn.winner ~= "" and (" (CHAMPION: " .. fn.winner .. ")") or ""
 				local fn_score_text = fn.status == "completed" and (" [" .. fn.score1 .. "-" .. fn.score2 .. "]") or ""
-				table.insert(fs, "label[8.0,5.9;FINAL: " .. fn_team1 .. " vs " .. fn_team2 .. fn_score_text .. fn_winner_text .. "]")
+				table.insert(fs, "label[9.5,6.4;FINAL: " .. fn_team1 .. " vs " .. fn_team2 .. fn_score_text .. fn_winner_text .. "]")
 
 				if is_admin and not match_active then
-					table.insert(fs, "label[0.7,7.3;ADMIN CONTROL PANEL:]")
+					table.insert(fs, "label[0.7,8.5;ADMIN CONTROL PANEL:]")
 					if sf1.status == "pending" then
-						table.insert(fs, "button[0.7,7.8;4.0,0.8;start_sf1;START SEMIFINAL 1]")
+						table.insert(fs, "button[0.7,9.2;6.0,0.8;start_sf1;START SEMIFINAL 1]")
 					elseif sf2.status == "pending" then
-						table.insert(fs, "button[0.7,7.8;4.0,0.8;start_sf2;START SEMIFINAL 2]")
+						table.insert(fs, "button[0.7,9.2;6.0,0.8;start_sf2;START SEMIFINAL 2]")
 					elseif fn.status == "pending" and fn.team1 ~= "" and fn.team2 ~= "" then
-						table.insert(fs, "button[0.7,7.8;4.0,0.8;start_final;START GRAND FINAL]")
+						table.insert(fs, "button[0.7,9.2;6.0,0.8;start_final;START GRAND FINAL]")
 					elseif fn.status == "completed" then
-						table.insert(fs, "button[0.7,7.8;4.0,0.8;archive_season;ARCHIVE & END SEASON]")
+						table.insert(fs, "button[0.7,9.2;6.0,0.8;archive_season;ARCHIVE & END SEASON]")
 					end
 				end
 			end
@@ -671,7 +702,7 @@ local function get_formspec(name)
 		-- Error display at the bottom of the league tab
 		if settings.err_msg then
 			table.insert(fs, "style[err_lbl;textcolor=#ff3333;font=bold]")
-			table.insert(fs, "label[0.5,10.2;ERROR: " .. settings.err_msg .. "]")
+			table.insert(fs, "label[0.5,12.8;ERROR: " .. settings.err_msg .. "]")
 		end
 	elseif tab == "team" then
 		local p_team_name = esports_league.get_team(name)
@@ -683,11 +714,11 @@ local function get_formspec(name)
 			table.sort(all_teams)
 
 			table.insert(fs, "label[0.5,3.8;FIND A TEAM]")
-			table.insert(fs, "textlist[0.5,4.3;6.0,4.5;find_teams;" .. table.concat(all_teams, ",") .. ";;false]")
-			table.insert(fs, "button[0.5,9.0;6.0,0.8;request_join;REQUEST TO JOIN]")
+			table.insert(fs, "textlist[0.5,4.3;7.5,6.8;find_teams;" .. table.concat(all_teams, ",") .. ";;false]")
+			table.insert(fs, "button[0.5,11.5;7.5,0.8;request_join;REQUEST TO JOIN]")
 
-			table.insert(fs, "box[7.0,4.3;6.5,4.5;#222222aa]")
-			table.insert(fs, "label[7.2,4.8;PENDING INVITATIONS]")
+			table.insert(fs, "box[8.5,4.3;8.5,6.8;#222222aa]")
+			table.insert(fs, "label[8.7,4.8;PENDING INVITATIONS]")
 
 			local invites = {}
 			for tname, target in pairs(esports_league.invites) do
@@ -695,11 +726,11 @@ local function get_formspec(name)
 			end
 
 			if #invites > 0 then
-				table.insert(fs, "textlist[7.2,5.3;6.1,2.5;sel_invite;" .. table.concat(invites, ",") .. ";;false]")
-				table.insert(fs, "button[7.2,8.0;3.0,0.6;accept_invite;ACCEPT]")
-				table.insert(fs, "button[10.3,8.0;3.0,0.6;decline_invite;DECLINE]")
+				table.insert(fs, "textlist[8.7,5.3;8.1,4.5;sel_invite;" .. table.concat(invites, ",") .. ";;false]")
+				table.insert(fs, "button[8.7,10.2;3.8,0.6;accept_invite;ACCEPT]")
+				table.insert(fs, "button[13.0,10.2;3.8,0.6;decline_invite;DECLINE]")
 			else
-				table.insert(fs, "label[7.2,6;No pending invites.]")
+				table.insert(fs, "label[8.7,6.5;No pending invites.]")
 			end
 		else
 			-- SQUAD VIEW (Member or Owner)
@@ -721,12 +752,12 @@ local function get_formspec(name)
 				table.insert(roster_items, string.format("%s (R:%d K:%d D:%d C:%d H:%ds P:%d)", esports_core.get_nick(mname), rating, k, d, c, h, dom))
 			end
 
-			table.insert(fs, "textlist[0.5,4.8;6.0,4.0;roster_list;" .. table.concat(roster_items, ",") .. ";;false]")
+			table.insert(fs, "textlist[0.5,4.8;7.5,6.3;roster_list;" .. table.concat(roster_items, ",") .. ";;false]")
 
 			if is_owner then
-				table.insert(fs, "button[0.5,9.0;6.0,0.8;kick_player;KICK MEMBER]")
-				table.insert(fs, "box[7.0,4.3;6.5,4.5;#222222aa]")
-				table.insert(fs, "label[7.2,4.8;JOIN REQUESTS]")
+				table.insert(fs, "button[0.5,11.5;7.5,0.8;kick_player;KICK MEMBER]")
+				table.insert(fs, "box[8.5,4.3;8.5,6.8;#222222aa]")
+				table.insert(fs, "label[8.7,4.8;JOIN REQUESTS]")
 
 				local requests = esports_league.requests[p_team_name] or {}
 				local req_items = {}
@@ -734,17 +765,17 @@ local function get_formspec(name)
 					table.insert(req_items, esports_core.get_nick(req_name))
 				end
 				if #requests > 0 then
-					table.insert(fs, "textlist[7.2,5.3;6.1,2.5;sel_request;" .. table.concat(req_items, ",") .. ";;false]")
-					table.insert(fs, "button[7.2,8.0;3.0,0.6;accept_request;APPROVE]")
-					table.insert(fs, "button[10.3,8.0;3.0,0.6;deny_request;DENY]")
+					table.insert(fs, "textlist[8.7,5.3;8.1,4.5;sel_request;" .. table.concat(req_items, ",") .. ";;false]")
+					table.insert(fs, "button[8.7,10.2;3.8,0.6;accept_request;APPROVE]")
+					table.insert(fs, "button[13.0,10.2;3.8,0.6;deny_request;DENY]")
 				else
-					table.insert(fs, "label[7.2,6;No pending requests.]")
+					table.insert(fs, "label[8.7,6.5;No pending requests.]")
 				end
 
-				table.insert(fs, "field[7.0,9.2;4.5,0.8;invite_name;Invite Player;]")
-				table.insert(fs, "button[11.6,9.2;1.9,0.8;send_invite;INVITE]")
+				table.insert(fs, "field[8.5,11.5;5.5,0.8;invite_name;Invite Player;]")
+				table.insert(fs, "button[14.5,11.5;2.5,0.8;send_invite;INVITE]")
 			else
-				table.insert(fs, "button[0.5,9.0;6.0,0.8;leave_team;LEAVE TEAM]")
+				table.insert(fs, "button[0.5,11.5;7.5,0.8;leave_team;LEAVE TEAM]")
 			end
 		end
 	elseif tab == "settings" then
@@ -759,17 +790,17 @@ local function get_formspec(name)
 
 		table.insert(fs, "label[0.5,4.0;PVE CONFIGURATION]")
 		table.insert(fs, "label[0.5,4.7;Bot Count:]")
-		table.insert(fs, "dropdown[0.5,5.1;3,0.8;bot_count;" .. table.concat(count_list, ",") .. ";" .. count_idx .. "]")
+		table.insert(fs, "dropdown[0.5,5.1;4.5,0.8;bot_count;" .. table.concat(count_list, ",") .. ";" .. count_idx .. "]")
 
 		table.insert(fs, "label[0.5,6.2;AI Difficulty:]")
-		table.insert(fs, "dropdown[0.5,6.6;3,0.8;bot_diff;" .. table.concat(diff_list, ",") .. ";" .. diff_idx .. "]")
+		table.insert(fs, "dropdown[0.5,6.6;4.5,0.8;bot_diff;" .. table.concat(diff_list, ",") .. ";" .. diff_idx .. "]")
 
-		table.insert(fs, "checkbox[0.5,7.4;chk_allow_nicks;Allow player nickname changes;" .. (esports_core.allow_nicks and "true" or "false") .. "]")
+		table.insert(fs, "checkbox[0.5,7.7;chk_allow_nicks;Allow Nickname Changes;" .. (esports_core.allow_nicks and "true" or "false") .. "]")
 
-		table.insert(fs, "label[0.5,8.1;TIPS]")
-		table.insert(fs, "label[0.5,8.6;- Bots spawn with 0 ammo.]")
-		table.insert(fs, "label[0.5,9.0;- They hunt crates to reload.]")
-		table.insert(fs, "label[0.5,9.4;- Hard bots move faster/hit harder.]")
+		table.insert(fs, "label[0.5,8.6;TIPS]")
+		table.insert(fs, "label[0.5,9.2;- Bots spawn with 0 ammo.]")
+		table.insert(fs, "label[0.5,9.7;- They hunt crates to reload.]")
+		table.insert(fs, "label[0.5,10.2;- Hard bots move faster/hit harder.]")
 
 		-- Nicknames mappings display for admins
 		local mapping_items = {}
@@ -789,12 +820,46 @@ local function get_formspec(name)
 			table.insert(mapping_items, "No nicknames registered")
 		end
 
-		table.insert(fs, "label[5.5,4.0;NICKNAME MAPPINGS]")
-		table.insert(fs, "textlist[5.5,4.5;8.0,4.5;admin_nicks_list;" .. table.concat(mapping_items, ",") .. ";" .. sel_nick_idx .. ";false]")
+		table.insert(fs, "label[5.8,4.0;NICKNAME MAPPINGS]")
+		table.insert(fs, "textlist[5.8,4.5;5.2,6.5;admin_nicks_list;" .. table.concat(mapping_items, ",") .. ";" .. sel_nick_idx .. ";false]")
 
 		if #keys > 0 then
-			table.insert(fs, "button[5.5,9.2;8.0,0.8;btn_reset_nick;RESET SELECTED NICKNAME]")
+			table.insert(fs, "button[5.8,11.4;5.2,0.8;btn_reset_nick;RESET NICKNAME]")
 		end
+
+		-- Spectator Management display for admins
+		local online_players = core.get_connected_players()
+		local spec_items = {}
+		local spec_keys = {}
+		for _, p in ipairs(online_players) do
+			table.insert(spec_keys, p:get_player_name())
+		end
+		table.sort(spec_keys)
+
+		for _, pname in ipairs(spec_keys) do
+			local status = esports_core.is_spectator(pname) and "Spectator" or "Player"
+			table.insert(spec_items, pname .. " (" .. status .. ")")
+		end
+
+		local sel_spec_idx = settings.sel_spec_idx or 1
+		if sel_spec_idx > #spec_items then sel_spec_idx = #spec_items end
+		if #spec_items == 0 then
+			table.insert(spec_items, "No players online")
+		end
+
+		local selected_spec_player = spec_keys[sel_spec_idx]
+		local spec_btn_text = "TOGGLE SPECTATOR"
+		if selected_spec_player then
+			if esports_core.is_spectator(selected_spec_player) then
+				spec_btn_text = "REMOVE SPECTATOR"
+			else
+				spec_btn_text = "GIVE SPECTATOR"
+			end
+		end
+
+		table.insert(fs, "label[11.8,4.0;SPECTATOR MANAGEMENT]")
+		table.insert(fs, "textlist[11.8,4.5;5.2,6.5;admin_spec_list;" .. table.concat(spec_items, ",") .. ";" .. sel_spec_idx .. ";false]")
+		table.insert(fs, "button[11.8,11.4;5.2,0.8;btn_toggle_spec;" .. spec_btn_text .. "]")
 	elseif tab == "locker" then
 		local meta = core.get_player_by_name(name):get_meta()
 		local current = meta:get_string("esports_selected_skin")
@@ -814,36 +879,36 @@ local function get_formspec(name)
 			table.insert(fs, "label[1,3.5;Select your base field outfit:]")
 
 			local skins = {
-				{id = "sam", name = "Tactical Sam", file = "character.png", portrait = "esports_portrait_sam.png", x = 1.0},
-				{id = "elite", name = "Elite Soldier", file = "skin_1.png", portrait = "esports_portrait_elite.png", x = 4.2},
-				{id = "recon", name = "Ghost Recon", file = "skin_2.png", portrait = "esports_portrait_recon.png", x = 7.4},
-				{id = "infil", name = "Infiltrator", file = "skin_3.png", portrait = "esports_portrait_infil.png", x = 10.6},
+				{id = "sam", name = "Tactical Sam", file = "character.png", portrait = "esports_portrait_sam.png", x = 1.1},
+				{id = "elite", name = "Elite Soldier", file = "skin_1.png", portrait = "esports_portrait_elite.png", x = 5.2},
+				{id = "recon", name = "Ghost Recon", file = "skin_2.png", portrait = "esports_portrait_recon.png", x = 9.3},
+				{id = "infil", name = "Infiltrator", file = "skin_3.png", portrait = "esports_portrait_infil.png", x = 13.4},
 			}
 
 			for _, s in ipairs(skins) do
 				-- High-Fidelity Operative Portrait
-				table.insert(fs, "image[" .. s.x .. ",4.5;2.4,4.2;" .. s.portrait .. "]")
+				table.insert(fs, "image[" .. s.x .. ",4.6;3.0,5.5;" .. s.portrait .. "]")
 
 				if current == s.file then
 					table.insert(fs, "style[set_skin_" .. s.id .. ";bgcolor=#00FF00;textcolor=black]")
-					table.insert(fs, "button[" .. s.x .. ",8.8;2.4,0.6;set_skin_" .. s.id .. ";ACTIVE]")
+					table.insert(fs, "button[" .. s.x .. ",10.3;3.0,0.6;set_skin_" .. s.id .. ";ACTIVE]")
 				else
-					table.insert(fs, "button[" .. s.x .. ",8.8;2.4,0.6;set_skin_" .. s.id .. ";SELECT]")
+					table.insert(fs, "button[" .. s.x .. ",10.3;3.0,0.6;set_skin_" .. s.id .. ";SELECT]")
 				end
 				table.insert(fs, "label[" .. s.x .. ",4.2;" .. s.name .. "]")
 			end
 
-			table.insert(fs, "label[1,9.4;Team colors will overlay these choices during a match.]")
+			table.insert(fs, "label[1.1,11.1;Team colors will overlay these choices during a match.]")
 		end
 
 		-- Nickname Editor at the very bottom
 		local is_admin = core.check_player_privs(name, {server = true})
 		if esports_core.allow_nicks or is_admin then
-			table.insert(fs, "field[1.0,10.0;5.0,0.8;txt_nickname;Lobby Nickname;" .. esports_core.get_nick(name) .. "]")
-			table.insert(fs, "button[6.2,10.0;3.0,0.8;btn_set_nickname;UPDATE NICKNAME]")
-			table.insert(fs, "button[9.4,10.0;2.0,0.8;btn_clear_nickname;RESET]")
+			table.insert(fs, "field[1.5,12.2;7.0,0.8;txt_nickname;Lobby Nickname;" .. esports_core.get_nick(name) .. "]")
+			table.insert(fs, "button[8.8,12.2;4.0,0.8;btn_set_nickname;UPDATE NICKNAME]")
+			table.insert(fs, "button[13.1,12.2;3.0,0.8;btn_clear_nickname;RESET]")
 		else
-			table.insert(fs, "label[1.0,10.0;Nickname changes are currently disabled by an administrator. (Current: " .. esports_core.get_nick(name) .. ")]")
+			table.insert(fs, "label[1.5,12.2;Nickname changes are currently disabled by an administrator. (Current: " .. esports_core.get_nick(name) .. ")]")
 		end
 	end
 
@@ -1498,6 +1563,48 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	if fields.admin_nicks_list then
 		local event = core.explode_textlist_event(fields.admin_nicks_list)
 		player_settings[name].sel_nick_idx = event.index
+		esports_core.lobby.show(player)
+		return
+	end
+
+	if fields.admin_spec_list then
+		local event = core.explode_textlist_event(fields.admin_spec_list)
+		player_settings[name].sel_spec_idx = event.index
+		esports_core.lobby.show(player)
+		return
+	end
+
+	if fields.btn_toggle_spec and is_admin then
+		local online_players = core.get_connected_players()
+		local spec_keys = {}
+		for _, p in ipairs(online_players) do
+			table.insert(spec_keys, p:get_player_name())
+		end
+		table.sort(spec_keys)
+
+		local sel_idx = player_settings[name].sel_spec_idx or 1
+		local target_name = spec_keys[sel_idx]
+		if target_name then
+			local target_player = core.get_player_by_name(target_name)
+			if target_player then
+				local is_spec = esports_core.is_spectator(target_name)
+				if is_spec then
+					esports_core.set_spectator(target_player, false)
+					core.chat_send_player(target_name, "Spectator mode disabled by administrator " .. name .. ".")
+					core.chat_send_player(name, "LOBBY: Removed spectator rights for " .. target_name .. ".")
+					esports_core.lobby.show(target_player)
+				else
+					esports_core.set_spectator(target_player, true)
+					core.chat_send_player(target_name, "Spectator mode enabled by administrator " .. name .. ".")
+					core.chat_send_player(name, "LOBBY: Granted spectator rights to " .. target_name .. ".")
+					esports_core.lobby.blackout_hide(target_player)
+					core.close_formspec(target_name, "esports_core:lobby")
+				end
+				esports_core.lobby.refresh_admins()
+			else
+				core.chat_send_player(name, "LOBBY: Player is no longer online.")
+			end
+		end
 		esports_core.lobby.show(player)
 		return
 	end

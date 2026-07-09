@@ -800,7 +800,7 @@ function esports_core.is_coordinate_on_island(x, z)
 end
 
 -- Helper to find a safe ground position within the storm and on the island
-function esports_core.get_safe_spawn_pos(pname_or_side)
+function esports_core.get_safe_spawn_pos(pname_or_side, ignore_proximity)
 	if esports_core.match.is_spleef then
 		local side = pname_or_side
 		if side and side ~= "red" and side ~= "blue" then
@@ -833,10 +833,11 @@ function esports_core.get_safe_spawn_pos(pname_or_side)
 		local target_x, target_z
 
 		if is_base_spawn then
-			-- CTF: Spawn TIGHTLY near own flag stand
+			-- CTF: Spawn TIGHTLY near own flag stand, scaled to map size
 			local base = esports_core.ctf.bases[side]
-			target_x = base.x + (math.random() * 20 - 10)
-			target_z = base.z + (math.random() * 20 - 10)
+			local offset_range = 20 * scale
+			target_x = base.x + (math.random() * offset_range - offset_range / 2)
+			target_z = base.z + (math.random() * offset_range - offset_range / 2)
 		else
 			-- TDM / Standard: Randomly on island
 			local max_r = 95 * scale
@@ -846,48 +847,51 @@ function esports_core.get_safe_spawn_pos(pname_or_side)
 			target_z = storm_center.z + math.sin(angle) * dist
 		end
 
-		if is_base_spawn or esports_core.is_coordinate_on_island(target_x, target_z) then
+		-- Always verify that coordinates are on the island
+		if esports_core.is_coordinate_on_island(target_x, target_z) then
 			-- Anti-Camp: Check for nearby hostiles (Players and Bots)
 			local enemy_nearby = false
-			local safety_dist_enemy = is_base_spawn and 12 or 30  -- Reduced at bases to allow defense
-			local safety_dist_team = is_base_spawn and 4 or 20  -- Reduced at bases to allow clustering
+			if not ignore_proximity then
+				local safety_dist_enemy = is_base_spawn and 12 or 30  -- Reduced at bases to allow defense
+				local safety_dist_team = is_base_spawn and 4 or 20  -- Reduced at bases to allow clustering
 
-			-- Check Player positions
-			for _, alt_p in ipairs(core.get_connected_players()) do
-				local other_name = alt_p:get_player_name()
-				if other_name ~= my_name and not esports_core.is_spectator(other_name) then
-					local other_pos = alt_p:get_pos()
-					local d = vector.distance({x=target_x, y=0, z=target_z}, {x=other_pos.x, y=0, z=other_pos.z})
+				-- Check Player positions
+				for _, alt_p in ipairs(core.get_connected_players()) do
+					local other_name = alt_p:get_player_name()
+					if other_name ~= my_name and not esports_core.is_spectator(other_name) then
+						local other_pos = alt_p:get_pos()
+						local d = vector.distance({x=target_x, y=0, z=target_z}, {x=other_pos.x, y=0, z=other_pos.z})
 
-					local other_side = esports_core.match.get_player_match_side(other_name)
-					local is_enemy = (side and other_side and side ~= other_side)
-					local thresh = is_enemy and safety_dist_enemy or safety_dist_team
+						local other_side = esports_core.match.get_player_match_side(other_name)
+						local is_enemy = (side and other_side and side ~= other_side)
+						local thresh = is_enemy and safety_dist_enemy or safety_dist_team
 
-					if d < thresh then
-						enemy_nearby = true
-						break
-					end
-				end
-			end
-
-			-- Check Bot positions (using object scan)
-			if not enemy_nearby then
-				local nearby_objects = core.get_objects_inside_radius({x=target_x, y=0, z=target_z}, safety_dist_enemy)
-				for _, obj in ipairs(nearby_objects) do
-					local ent = obj:get_luaentity()
-					if ent and ent.name == "esports_core:bot" then
-						local other_pos = obj:get_pos()
-						local d_bot = vector.distance({x=target_x, y=0, z=target_z}, {x=other_pos.x, y=0, z=other_pos.z})
-
-						-- If we are a player on blue, bots (red) are enemies
-						if side == "blue" and d_bot < safety_dist_enemy then
-							 enemy_nearby = true
-							 break
-						end
-						-- If we are a bot or a player on red, bots are teammates - check small radius
-						if (not side or side == "red") and d_bot < safety_dist_team then
+						if d < thresh then
 							enemy_nearby = true
 							break
+						end
+					end
+				end
+
+				-- Check Bot positions (using object scan)
+				if not enemy_nearby then
+					local nearby_objects = core.get_objects_inside_radius({x=target_x, y=0, z=target_z}, safety_dist_enemy)
+					for _, obj in ipairs(nearby_objects) do
+						local ent = obj:get_luaentity()
+						if ent and ent.name == "esports_core:bot" then
+							local other_pos = obj:get_pos()
+							local d_bot = vector.distance({x=target_x, y=0, z=target_z}, {x=other_pos.x, y=0, z=other_pos.z})
+
+							-- If we are a player on blue, bots (red) are enemies
+							if side == "blue" and d_bot < safety_dist_enemy then
+								 enemy_nearby = true
+								 break
+							end
+							-- If we are a bot or a player on red, bots are teammates - check small radius
+							if (not side or side == "red") and d_bot < safety_dist_team then
+								enemy_nearby = true
+								break
+							end
 						end
 					end
 				end
@@ -899,7 +903,7 @@ function esports_core.get_safe_spawn_pos(pname_or_side)
 					{x = math.floor(target_x - 10), y = -15, z = math.floor(target_z - 10)},
 					{x = math.floor(target_x + 10), y = 5, z = math.floor(target_z + 10)}
 				)
-				return {x=target_x, y=0.5, z=target_z}
+				return {x=target_x, y=1.5, z=target_z}
 			end
 		end
 		attempts = attempts + 1
@@ -908,12 +912,13 @@ function esports_core.get_safe_spawn_pos(pname_or_side)
 	-- LAST RESORT: Forced Deployment at Base (if CTF)
 	if is_base_spawn then
 		local base = esports_core.ctf.bases[side]
-		return {x=base.x + (math.random() * 6 - 3), y=base.y + 1, z=base.z + (math.random() * 6 - 3)}
+		local offset_range = 6 * scale
+		return {x=base.x + (math.random() * offset_range - offset_range / 2), y=base.y + 1.5, z=base.z + (math.random() * offset_range - offset_range / 2)}
 	end
 
 	-- Emerge fallback center region
 	core.emerge_area({x = -10, y = -15, z = -10}, {x = 10, y = 5, z = 10})
-	return {x=0, y=0.5, z=0}
+	return {x=0, y=1.5, z=0}
 end
 
 -- Resets a player to a clean match state
@@ -1403,7 +1408,7 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 				
 				-- Purge client chunk cache by sending the player to the far void first
 				p:set_pos({x=0, y=-2000, z=0})
-				local target_pos = esports_core.get_safe_spawn_pos("ffa")
+				local target_pos = esports_core.get_safe_spawn_pos("ffa", true)
 				core.after(0.5, function()
 					p:set_pos(target_pos)
 				end)
@@ -1429,7 +1434,7 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 				
 				-- Purge client chunk cache by sending the player to the far void first
 				p:set_pos({x=0, y=-2000, z=0})
-				local target_pos = esports_core.get_safe_spawn_pos(side)
+				local target_pos = esports_core.get_safe_spawn_pos(side, true)
 				core.after(0.5, function()
 					p:set_pos(target_pos)
 				end)
@@ -1455,7 +1460,7 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 			for i = 1, count do
 				-- Tactical Mix: 60% Rusher (Aggressive Pressure), 40% Standard (Balanced)
 				local class = math.random() > 0.6 and "standard" or "rusher"
-				esports_core.bots.spawn(esports_core.get_safe_spawn_pos("red"), diff, class)
+				esports_core.bots.spawn(esports_core.get_safe_spawn_pos("red", true), diff, class)
 			end
 		end)
 		core.chat_send_all("PVE SENTRY PROTOCOL INITIATED. " .. (bot_count or 5) .. " Hostiles Detected.")
