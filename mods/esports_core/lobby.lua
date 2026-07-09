@@ -492,7 +492,7 @@ local function get_formspec(name)
 					for _, req_name in ipairs(requests) do
 						table.insert(req_items, core.formspec_escape(esports_core.get_nick(req_name)))
 					end
-					table.insert(fs, "box[8.5,4.6;8.5,6.8;#222222aa]")
+					table.insert(fs, "box[8.5,4.6;8.5,7.0;#222222aa]")
 					table.insert(fs, "label[8.7,4.9;TEAM: " .. core.formspec_escape(selected:upper() .. " [" .. (data.tag or "???") .. "]") .. "]")
 					table.insert(fs, "label[8.7,5.3;Leader: " .. core.formspec_escape(leader_display) .. "]")
 					table.insert(fs, "label[8.7,5.7;ROSTER:]")
@@ -507,15 +507,15 @@ local function get_formspec(name)
 						table.insert(fs, "label[8.7,8.3;No pending requests.]")
 					end
 
-					table.insert(fs, "field[8.7,9.9;5.0,0.5;rename_val;New Team Name;]")
-					table.insert(fs, "button[13.9,9.9;2.8,0.5;rename_team;RENAME]")
+					table.insert(fs, "field[8.7,9.7;5.0,0.5;rename_val;New Team Name;]")
+					table.insert(fs, "button[13.9,9.7;2.8,0.5;rename_team;RENAME]")
 
-					table.insert(fs, "field[8.7,10.7;5.0,0.5;tag_val;New Tag (3 letters);]")
-					table.insert(fs, "button[13.9,10.7;2.8,0.5;change_tag;SET TAG]")
+					table.insert(fs, "field[8.7,10.8;5.0,0.5;tag_val;New Tag (3 letters);]")
+					table.insert(fs, "button[13.9,10.8;2.8,0.5;change_tag;SET TAG]")
 
-					table.insert(fs, "button[8.5,11.8;2.6,0.8;unselect_team;BACK]")
-					table.insert(fs, "button[11.3,11.8;2.6,0.8;unset_owner;UNSET LEADER]")
-					table.insert(fs, "button[14.1,11.8;2.6,0.8;set_owner;SET OWNER]")
+					table.insert(fs, "button[8.5,12.0;2.6,0.8;unselect_team;BACK]")
+					table.insert(fs, "button[11.3,12.0;2.6,0.8;unset_owner;UNSET LEADER]")
+					table.insert(fs, "button[14.1,12.0;2.6,0.8;set_owner;SET OWNER]")
 				else
 					-- Normal Team Inspector Panel
 					table.insert(fs, "box[8.5,4.6;8.5,6.8;#222222aa]")
