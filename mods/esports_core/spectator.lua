@@ -197,10 +197,6 @@ core.register_globalstep(function(dtime)
 						-- Ensure spectator is invisible
 						spectator:set_properties({visual_size = {x=0, y=0, z=0}})
 					end
-
-					-- Keep rotation in sync with target
-					spectator:set_look_horizontal(target:get_look_horizontal())
-					spectator:set_look_vertical(target:get_look_vertical())
 				else
 					data.target = nil
 				end
