@@ -384,7 +384,7 @@ function esports_core.hud.draw_kill_feed(player)
 			type = "image",
 			position = {x = 0.92, y = y_pos},
 			text = event.icon,
-			scale = {x = 0.4, y = 0.4},  -- Reduced scale for a sleek look
+			scale = {x = 0.2, y = 0.2},  -- Sleek proportions relative to player names
 			alignment = {x = 0, y = 0},
 		}))
 		-- Victim
