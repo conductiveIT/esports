@@ -60,8 +60,8 @@ This is a fast-paced hitscan team combat base game for Luanti with building, sto
 *   `/nick [player_name] <nickname>`: Change your floating nametag, chat display name, and scoreboard name (alpha-numeric only, max 15 characters). Admins can target other players. Use `reset` or `clear` to restore the default name.
 
 ### League & Team Administration
-*   `/team create <name> | invite <player> | join | leave | logo <eagle/lion/dragon/skull> | list`: Manage your TDM League team.
-   - `create <name>`: Create a new team. Admins do not auto-join created teams.
+*   `/team create <name> <3_letter_tag> | invite <player> | join | leave | logo <eagle/lion/dragon/skull> | list`: Manage your TDM League team.
+   - `create <name> <3_letter_tag>`: Create a new team with a unique 3-letter alphanumeric tag. Admins do not auto-join.
    - `invite <player>`: Invite a player to your team (leader only).
    - `join`: Join the team that invited you.
    - `leave`: Leave your current team.
@@ -74,6 +74,9 @@ This is a fast-paced hitscan team combat base game for Luanti with building, sto
    - `reset_all`: Fully clear all team records and fixtures.
 *   `/leaderboard`: Display the global player leaderboard based on Net Kill Differential and Flag Capture Bonus.
 *   `/leaguesetleader <team_name> <player_name>`: Assign a player as the leader/owner of a team (Admin only).
+*   `/leagueunsetleader <team_name>`: Remove the current leader of a team, leaving it unset (Admin only).
+*   `/leaguerename <old_name> <new_name>`: Rename a team, updating all league records, roster mappings, and match history (Admin only).
+*   `/leaguesettag <team_name> <tag>`: Change/set a team's unique 3-letter tag (Admin only).
 *   `/leaguedelete <team_name>`: Permanently remove a team and its members from the league (Admin only).
 
 ### Lobby & GUI
