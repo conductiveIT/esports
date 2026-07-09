@@ -34,6 +34,9 @@ esports_league.season_state = state_data ~= "" and state_data or "offseason"
 local archive_data = storage:get_string("season_archive")
 esports_league.season_archive = archive_data ~= "" and core.deserialize(archive_data) or {}
 
+local allow_team_creation_data = storage:get_string("allow_team_creation")
+esports_league.allow_team_creation = allow_team_creation_data ~= "false"
+
 function esports_league.save()
 	storage:set_string("teams", core.serialize(esports_league.teams))
 	storage:set_string("players", core.serialize(esports_league.player_to_team))
@@ -45,6 +48,7 @@ function esports_league.save()
 	storage:set_string("playoffs", core.serialize(esports_league.playoffs))
 	storage:set_string("season_state", esports_league.season_state)
 	storage:set_string("season_archive", core.serialize(esports_league.season_archive))
+	storage:set_string("allow_team_creation", esports_league.allow_team_creation and "true" or "false")
 end
 
 -- PUBLIC API
@@ -394,6 +398,9 @@ core.register_chatcommand("team", {
 
 		if cmd == "create" then
 			local is_admin = core.check_player_privs(name, {server = true})
+			if not esports_league.allow_team_creation and not is_admin then
+				return false, "Team creation is currently disabled by administrators."
+			end
 			if esports_league.player_to_team[name] and not is_admin then
 				return false, "You are already in a team!"
 			end

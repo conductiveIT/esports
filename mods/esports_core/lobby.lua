@@ -802,12 +802,13 @@ local function get_formspec(name)
 		table.insert(fs, "label[0.5,6.2;AI Difficulty:]")
 		table.insert(fs, "dropdown[0.5,6.6;4.5,0.8;bot_diff;" .. table.concat(diff_list, ",") .. ";" .. diff_idx .. "]")
 
-		table.insert(fs, "checkbox[0.5,7.7;chk_allow_nicks;Allow Nickname Changes;" .. (esports_core.allow_nicks and "true" or "false") .. "]")
+		table.insert(fs, "checkbox[0.5,7.5;chk_allow_nicks;Allow Nickname Changes;" .. (esports_core.allow_nicks and "true" or "false") .. "]")
+		table.insert(fs, "checkbox[0.5,8.1;chk_allow_team_create;Allow Team Creation;" .. (esports_league.allow_team_creation and "true" or "false") .. "]")
 
-		table.insert(fs, "label[0.5,8.6;TIPS]")
-		table.insert(fs, "label[0.5,9.2;- Bots spawn with 0 ammo.]")
-		table.insert(fs, "label[0.5,9.7;- They hunt crates to reload.]")
-		table.insert(fs, "label[0.5,10.2;- Hard bots move faster/hit harder.]")
+		table.insert(fs, "label[0.5,8.9;TIPS]")
+		table.insert(fs, "label[0.5,9.4;- Bots spawn with 0 ammo.]")
+		table.insert(fs, "label[0.5,9.9;- They hunt crates to reload.]")
+		table.insert(fs, "label[0.5,10.4;- Hard bots move faster/hit harder.]")
 
 		-- Nicknames mappings display for admins
 		local mapping_items = {}
@@ -1559,6 +1560,13 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		esports_core.allow_nicks = (fields.chk_allow_nicks == "true")
 		local storage = core.get_mod_storage()
 		storage:set_string("allow_nicks", esports_core.allow_nicks and "true" or "false")
+		esports_core.lobby.show(player)
+		return
+	end
+
+	if fields.chk_allow_team_create then
+		esports_league.allow_team_creation = (fields.chk_allow_team_create == "true")
+		esports_league.save()
 		esports_core.lobby.show(player)
 		return
 	end
