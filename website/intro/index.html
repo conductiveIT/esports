@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luanti Esports - Team Introductions</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="stars-bg"></div>
+    <div class="glow-orb" id="background-glow"></div>
+
+    <header class="main-header">
+        <div class="logo-container">
+            <span class="logo-text">LUANTI <span class="accent-text">DEATHMATCH</span></span>
+            <span class="sub-text">LIVE TOURNAMENT INTRODUCTIONS</span>
+        </div>
+    </header>
+
+    <main class="presentation-container">
+        <!-- Slide Track -->
+        <div class="slides-wrapper" id="slides-wrapper">
+            <!-- Slide 0: Welcome (Always present) -->
+            <section class="slide active" id="slide-welcome" data-color="#9d4edd">
+                <div class="welcome-content">
+                    <h1 class="welcome-title">TOURNAMENT BEGINS</h1>
+                    <p class="welcome-subtitle">PREPARE TO MEET THE TEAMS</p>
+                    <div class="welcome-decoration">
+                        <div class="line"></div>
+                        <div class="diamond"></div>
+                        <div class="line"></div>
+                    </div>
+                    <p class="instructions-text">Use Left/Right arrow keys or click the navigation below to present</p>
+                    <p class="db-status-text" id="db-status">Loading teams database...</p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Controls Footer -->
+    <footer class="controls-footer">
+        <button class="nav-btn" id="prev-btn" title="Previous Slide (Left Arrow)">◀</button>
+        
+        <div class="thumbnail-indicator" id="thumbnail-indicator">
+            <div class="dot active" data-index="0" title="Welcome"></div>
+        </div>
+
+        <button class="nav-btn" id="next-btn" title="Next Slide (Right Arrow/Space)">▶</button>
+        <button class="audio-toggle-btn" id="audio-btn" title="Mute/Play Theme Music">🔊 PLAY THEME</button>
+    </footer>
+
+    <!-- Audio & Data Controller Script -->
+    <script>
+        // Default Fallback Teams (if teams.json is not present or CORS blocks loading)
+        let teams = [
+            {
+                "name": "CYBER STORM",
+                "logo_id": "dragon",
+                "leader": "Matrix",
+                "members": [
+                    {"username": "alex", "nickname": "Matrix"},
+                    {"username": "sarah", "nickname": "Vortex"},
+                    {"username": "marcus", "nickname": "Byte"},
+                    {"username": "elena", "nickname": "Netrunner"}
+                ]
+            },
+            {
+                "name": "INFERNO FURY",
+                "logo_id": "skull",
+                "leader": "Blaze",
+                "members": [
+                    {"username": "tyler", "nickname": "Blaze"},
+                    {"username": "diana", "nickname": "Magma"},
+                    {"username": "cole", "nickname": "Cinder"},
+                    {"username": "ignis", "nickname": "Wildfire"}
+                ]
+            },
+            {
+                "name": "BIO HAZARD",
+                "logo_id": "eagle",
+                "leader": "Toxin",
+                "members": [
+                    {"username": "fries", "nickname": "Toxin"},
+                    {"username": "pamela", "nickname": "Venom"},
+                    {"username": "bruce", "nickname": "Gamma"},
+                    {"username": "joe", "nickname": "Spore"}
+                ]
+            }
+        ];
+
+        // Dynamic Color mapping based on logo/team name
+        const themeColors = {
+            "cyber": "#00f0ff",
+            "storm": "#00f0ff",
+            "dragon": "#00f0ff",
+            "inferno": "#ff3f3f",
+            "fury": "#ff3f3f",
+            "skull": "#ff3f3f",
+            "lion": "#ffb800",
+            "bio": "#39ff14",
+            "hazard": "#39ff14",
+            "eagle": "#39ff14",
+            "default": "#9d4edd"
+        };
+
+        function getThemeColor(teamName, logoId) {
+            const nameLower = teamName.toLowerCase();
+            const logoLower = (logoId || "").toLowerCase();
+            for (const key in themeColors) {
+                if (nameLower.includes(key) || logoLower.includes(key)) {
+                    return themeColors[key];
+                }
+            }
+            return themeColors.default;
+        }
+
+        // SVG Logo Templates
+        const logoSVGs = {
+            dragon: `
+                <svg class="team-logo" viewBox="0 0 100 100" style="color: #00f0ff">
+                    <polygon points="50,5 95,30 95,70 50,95 5,70 5,30" fill="none" stroke="currentColor" stroke-width="4" />
+                    <path d="M50,20 L35,55 L55,55 L45,80 L65,45 L45,45 Z" fill="currentColor" />
+                </svg>
+            `,
+            skull: `
+                <svg class="team-logo" viewBox="0 0 100 100" style="color: #ff3f3f">
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="4" />
+                    <path d="M50,15 C65,30 75,45 75,60 C75,75 60,85 50,85 C40,85 25,75 25,60 C25,45 35,30 50,15 Z" fill="rgba(255, 63, 63, 0.1)" stroke="currentColor" stroke-width="2" />
+                    <path d="M50,30 C58,40 63,50 63,60 C63,70 55,75 50,75 C45,75 37,70 37,60 C37,50 42,40 50,30 Z" fill="currentColor" />
+                </svg>
+            `,
+            eagle: `
+                <svg class="team-logo" viewBox="0 0 100 100" style="color: #39ff14">
+                    <polygon points="50,5 90,85 10,85" fill="none" stroke="currentColor" stroke-width="4" />
+                    <circle cx="50" cy="45" r="12" fill="none" stroke="currentColor" stroke-width="3" />
+                    <circle cx="38" cy="62" r="12" fill="none" stroke="currentColor" stroke-width="3" />
+                    <circle cx="62" cy="62" r="12" fill="none" stroke="currentColor" stroke-width="3" />
+                    <circle cx="50" cy="57" r="4" fill="currentColor" />
+                </svg>
+            `,
+            lion: `
+                <svg class="team-logo" viewBox="0 0 100 100" style="color: #ffb800">
+                    <polygon points="50,5 90,30 90,75 50,95 10,75 10,30" fill="none" stroke="currentColor" stroke-width="4" />
+                    <circle cx="50" cy="50" r="22" fill="none" stroke="currentColor" stroke-width="2" />
+                    <path d="M50,35 A15,15 0 0,0 35,50" fill="none" stroke="currentColor" stroke-width="4" />
+                </svg>
+            `
+        };
+
+        // Web Audio Synthesizer (Fallback Theme generator)
+        const AudioSynth = {
+            ctx: null,
+            activeOscillators: [],
+            isPlaying: false,
+            currentSynthType: null,
+            sequenceInterval: null,
+
+            init() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            },
+
+            stop() {
+                if (this.sequenceInterval) {
+                    clearInterval(this.sequenceInterval);
+                }
+                this.activeOscillators.forEach(osc => {
+                    try { osc.stop(); } catch(e) {}
+                });
+                this.activeOscillators = [];
+                this.isPlaying = false;
+                document.getElementById('audio-btn').classList.remove('playing');
+                document.getElementById('audio-btn').textContent = '🔊 PLAY THEME';
+            },
+
+            play(type) {
+                this.stop();
+                if (!this.ctx) this.init();
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+
+                this.isPlaying = true;
+                this.currentSynthType = type;
+                document.getElementById('audio-btn').classList.add('playing');
+                document.getElementById('audio-btn').textContent = '⏹ MUTE';
+
+                if (type === 'dragon') {
+                    this.playCyberTheme();
+                } else if (type === 'skull') {
+                    this.playInfernoTheme();
+                } else {
+                    this.playToxinTheme();
+                }
+            },
+
+            playCyberTheme() {
+                const notes = [130.81, 164.81, 196.00, 220.00, 261.63, 329.63, 392.00, 440.00];
+                let step = 0;
+                this.sequenceInterval = setInterval(() => {
+                    if (!this.isPlaying) return;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(notes[step % notes.length] * 2, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.4);
+                    this.activeOscillators.push(osc);
+                    step++;
+                }, 150);
+            },
+
+            playInfernoTheme() {
+                const baseFreqs = [73.42, 82.41, 55.00, 65.41];
+                let step = 0;
+                this.sequenceInterval = setInterval(() => {
+                    if (!this.isPlaying) return;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(baseFreqs[step % baseFreqs.length], this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.6);
+                    this.activeOscillators.push(osc);
+                    step++;
+                }, 300);
+            },
+
+            playToxinTheme() {
+                let step = 0;
+                this.sequenceInterval = setInterval(() => {
+                    if (!this.isPlaying) return;
+                    const osc = this.ctx.createOscillator();
+                    const filter = this.ctx.createBiquadFilter();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(120 + Math.sin(step) * 200, this.ctx.currentTime);
+                    filter.type = 'peaking';
+                    filter.frequency.setValueAtTime(600 + Math.cos(step) * 300, this.ctx.currentTime);
+                    filter.Q.setValueAtTime(8, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+                    osc.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.35);
+                    this.activeOscillators.push(osc);
+                    step++;
+                }, 200);
+            }
+        };
+
+        // Custom HTML5 Audio Player (for MP3/OGG files)
+        const CustomAudioPlayer = {
+            audioEl: null,
+            isPlaying: false,
+
+            playFile(src) {
+                this.stop();
+                this.audioEl = new Audio(src);
+                this.audioEl.loop = true;
+                
+                document.getElementById('audio-btn').classList.add('playing');
+                document.getElementById('audio-btn').textContent = '⏹ MUTE';
+
+                this.audioEl.play().then(() => {
+                    this.isPlaying = true;
+                }).catch(e => {
+                    console.warn(`Local audio file failed to play: ${src}. Falling back to dynamic Synthesizer.`, e);
+                    // Fall back to synth theme
+                    const currentSlide = slides[currentSlideIdx];
+                    const logoId = currentSlide.getAttribute('data-logo-id') || 'dragon';
+                    AudioSynth.play(logoId);
+                });
+            },
+
+            stop() {
+                if (this.audioEl) {
+                    this.audioEl.pause();
+                    this.audioEl = null;
+                }
+                this.isPlaying = false;
+            }
+        };
+
+        // Render slides from data
+        function buildSlidesFromData() {
+            const wrapper = document.getElementById('slides-wrapper');
+            const indicators = document.getElementById('thumbnail-indicator');
+
+            // Keep the first (Welcome) slide
+            const welcomeSlide = document.getElementById('slide-welcome');
+            wrapper.innerHTML = '';
+            wrapper.appendChild(welcomeSlide);
+
+            indicators.innerHTML = '<div class="dot active" data-index="0" title="Welcome"></div>';
+
+            teams.forEach((team, index) => {
+                const slideIdx = index + 1;
+                const teamColor = getThemeColor(team.name, team.logo_id);
+
+                // Create Slide section
+                const section = document.createElement('section');
+                section.className = 'slide';
+                section.id = `slide-team-${slideIdx}`;
+                section.setAttribute('data-color', teamColor);
+                section.setAttribute('data-logo-id', team.logo_id);
+                section.setAttribute('data-team-name', team.name);
+
+                // Logo definition (Custom image file or Fallback vector SVG)
+                const imageSrc = `assets/logos/${team.logo_id}.png`;
+                const logoHtml = `
+                    <div class="logo-wrapper">
+                        <!-- Try to show custom logo image, fall back to inline vector SVG if image fails to load -->
+                        <img class="team-logo-img" src="${imageSrc}" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" alt="${team.name}">
+                        <div class="vector-fallback-logo" style="display: none;">
+                            ${logoSVGs[team.logo_id] || logoSVGs.dragon}
+                        </div>
+                    </div>
+                `;
+
+                // Roster list html
+                const rosterHtml = team.members.map(member => {
+                    const firstChar = member.nickname ? member.nickname.charAt(0).toUpperCase() : '👤';
+                    return `
+                        <div class="player-node">
+                            <div class="player-avatar" style="border: 1px solid ${teamColor}; box-shadow: 0 0 10px ${teamColor}44">${firstChar}</div>
+                            <div class="player-info">
+                                <span class="player-name">${member.username}</span>
+                                <span class="player-nick">"${member.nickname || member.username}"</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                // Slide structure
+                section.innerHTML = `
+                    <div class="team-card">
+                        <div class="team-visual">
+                            ${logoHtml}
+                            <h2 class="team-name" style="color: ${teamColor}; text-shadow: 0 0 15px ${teamColor}66">${team.name}</h2>
+                            <span class="team-tagline">LEAGUE COMPETITOR</span>
+                        </div>
+                        <div class="team-details">
+                            <h3 class="section-heading" style="border-left-color: ${teamColor}">TEAM ROSTER</h3>
+                            <div class="roster-grid">
+                                ${rosterHtml}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                wrapper.appendChild(section);
+
+                // Create dot indicator
+                const dot = document.createElement('div');
+                dot.className = 'dot';
+                dot.setAttribute('data-index', slideIdx);
+                dot.title = team.name;
+                indicators.appendChild(dot);
+            });
+
+            // Re-initialize event listeners and selectors
+            initNavigation();
+        }
+
+        // Global states for presentation navigation
+        let currentSlideIdx = 0;
+        let slides = [];
+        let dots = [];
+
+        function initNavigation() {
+            slides = document.querySelectorAll('.slide');
+            dots = document.querySelectorAll('.dot');
+            
+            // Re-bind click events on dots
+            dots.forEach(dot => {
+                dot.replaceWith(dot.cloneNode(true)); // Clear previous listeners
+            });
+            
+            // Re-query and bind
+            dots = document.querySelectorAll('.dot');
+            dots.forEach(dot => {
+                dot.addEventListener('click', (e) => {
+                    const idx = parseInt(e.target.getAttribute('data-index'));
+                    updateSlide(idx);
+                });
+            });
+        }
+
+        function updateSlide(idx) {
+            if (slides.length === 0) return;
+
+            slides[currentSlideIdx].classList.remove('active');
+            dots[currentSlideIdx].classList.remove('active');
+
+            currentSlideIdx = idx;
+
+            slides[currentSlideIdx].classList.add('active');
+            dots[currentSlideIdx].classList.add('active');
+
+            // Slide translation
+            const wrapper = document.getElementById('slides-wrapper');
+            wrapper.style.transform = `translateX(-${currentSlideIdx * 100}%)`;
+
+            // Adjust background glow color
+            const color = slides[currentSlideIdx].getAttribute('data-color') || '#9d4edd';
+            document.getElementById('background-glow').style.backgroundColor = color;
+
+            // Trigger theme song (local music files take priority, synthesizers as fallback)
+            triggerThemePlayback();
+        }
+
+        function triggerThemePlayback() {
+            AudioSynth.stop();
+            CustomAudioPlayer.stop();
+
+            if (currentSlideIdx === 0) return; // Welcome slide doesn't autostart music
+
+            const currentSlide = slides[currentSlideIdx];
+            const teamName = currentSlide.getAttribute('data-team-name') || "";
+            const logoId = currentSlide.getAttribute('data-logo-id') || "";
+
+            // Check if user has uploaded a custom music track named after team name or logo id
+            const teamCleanName = teamName.toLowerCase().replace(/[^a-z0-9]/g, "_");
+            const fileSrc = `assets/music/${teamCleanName}.mp3`;
+
+            // Play the file source (falls back to synth on fail inside playFile)
+            CustomAudioPlayer.playFile(fileSrc);
+        }
+
+        // Navigation controls
+        document.getElementById('prev-btn').addEventListener('click', () => {
+            let prevIdx = currentSlideIdx - 1;
+            if (prevIdx < 0) prevIdx = slides.length - 1;
+            updateSlide(prevIdx);
+        });
+
+        document.getElementById('next-btn').addEventListener('click', () => {
+            let nextIdx = (currentSlideIdx + 1) % slides.length;
+            updateSlide(nextIdx);
+        });
+
+        document.getElementById('audio-btn').addEventListener('click', () => {
+            if (AudioSynth.isPlaying || CustomAudioPlayer.isPlaying) {
+                AudioSynth.stop();
+                CustomAudioPlayer.stop();
+            } else {
+                triggerThemePlayback();
+            }
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                let nextIdx = (currentSlideIdx + 1) % slides.length;
+                updateSlide(nextIdx);
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                let prevIdx = currentSlideIdx - 1;
+                if (prevIdx < 0) prevIdx = slides.length - 1;
+                updateSlide(prevIdx);
+            }
+        });
+
+        // Fetch teams.json dynamically
+        async function fetchTeams() {
+            const statusEl = document.getElementById('db-status');
+            try {
+                const res = await fetch('teams.json');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.length > 0) {
+                        teams = data;
+                        statusEl.textContent = `Connected to teams database (${teams.length} teams synced)`;
+                        statusEl.style.color = '#39ff14';
+                    } else {
+                        statusEl.textContent = 'Database empty. Using fallback team demos.';
+                    }
+                } else {
+                    statusEl.textContent = 'No teams.json found. Run update_teams.py to sync live data.';
+                }
+            } catch (e) {
+                console.warn("Fetch failed, running offline fallback mode.", e);
+                statusEl.textContent = 'Running offline (CORS/file mode). Using demo teams.';
+            }
+            
+            // Build visual layout
+            buildSlidesFromData();
+        }
+
+        // Start
+        window.addEventListener('DOMContentLoaded', fetchTeams);
+    </script>
+</body>
+</html>
