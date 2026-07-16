@@ -25,6 +25,14 @@ local function get_arrow(rel_angle)
 	end
 end
 
+local function calculate_radar_line(p_pos, p_yaw, target_pos, label, icon)
+	local dx = target_pos.x - p_pos.x
+	local dz = target_pos.z - p_pos.z
+	local dist = math.floor(math.sqrt(dx*dx + dz*dz))
+	local rel_angle = math.atan2(-dx, dz) - p_yaw
+	return string.format("%s %s: %dm %s", icon, label, dist, get_arrow(rel_angle))
+end
+
 function esports_core.radar.clear(player)
 	local name = player:get_player_name()
 	local hud = esports_core.radar.player_huds[name]
@@ -74,11 +82,7 @@ function esports_core.radar.update(player)
 				label = "RED Flag (Dropped)"
 			end
 
-			local dx = t_pos.x - p_pos.x
-			local dz = t_pos.z - p_pos.z
-			local dist = math.floor(math.sqrt(dx*dx + dz*dz))
-			local rel_angle = math.atan2(-dx, dz) - p_yaw
-			table.insert(objectives, string.format("🚩 %s: %dm %s", label, dist, get_arrow(rel_angle)))
+			table.insert(objectives, calculate_radar_line(p_pos, p_yaw, t_pos, label, "🚩"))
 		end
 
 		-- Blue Flag
@@ -99,34 +103,22 @@ function esports_core.radar.update(player)
 				label = "BLUE Flag (Dropped)"
 			end
 
-			local dx = t_pos.x - p_pos.x
-			local dz = t_pos.z - p_pos.z
-			local dist = math.floor(math.sqrt(dx*dx + dz*dz))
-			local rel_angle = math.atan2(-dx, dz) - p_yaw
-			table.insert(objectives, string.format("🚩 %s: %dm %s", label, dist, get_arrow(rel_angle)))
+			table.insert(objectives, calculate_radar_line(p_pos, p_yaw, t_pos, label, "🚩"))
 		end
 	end
 
 	-- KotH Mode Objectives
 	if esports_core.match.is_koth and esports_core.koth and esports_core.koth.hill_center then
 		local hill_pos = esports_core.koth.hill_center
-		local dx = hill_pos.x - p_pos.x
-		local dz = hill_pos.z - p_pos.z
-		local dist = math.floor(math.sqrt(dx*dx + dz*dz))
-		local rel_angle = math.atan2(-dx, dz) - p_yaw
-		table.insert(objectives, string.format("👑 Active Hill: %dm %s", dist, get_arrow(rel_angle)))
+		table.insert(objectives, calculate_radar_line(p_pos, p_yaw, hill_pos, "Active Hill", "👑"))
 	end
 
 	-- Domination Mode Objectives
 	if esports_core.match.is_domination and esports_core.dom and esports_core.dom.points then
 		for id, pt in pairs(esports_core.dom.points) do
 			if pt.center then
-				local dx = pt.center.x - p_pos.x
-				local dz = pt.center.z - p_pos.z
-				local dist = math.floor(math.sqrt(dx*dx + dz*dz))
-				local rel_angle = math.atan2(-dx, dz) - p_yaw
 				local owner = pt.owner or "none"
-				table.insert(objectives, string.format("⚑ Point %s (%s): %dm %s", id, owner:upper(), dist, get_arrow(rel_angle)))
+				table.insert(objectives, calculate_radar_line(p_pos, p_yaw, pt.center, string.format("Point %s (%s)", id, owner:upper()), "⚑"))
 			end
 		end
 	end
@@ -136,11 +128,7 @@ function esports_core.radar.update(player)
 		local cart = esports_core.payload.cart_entity
 		if cart:get_pos() then
 			local cart_pos = cart:get_pos()
-			local dx = cart_pos.x - p_pos.x
-			local dz = cart_pos.z - p_pos.z
-			local dist = math.floor(math.sqrt(dx*dx + dz*dz))
-			local rel_angle = math.atan2(-dx, dz) - p_yaw
-			table.insert(objectives, string.format("🛒 Cart: %dm %s", dist, get_arrow(rel_angle)))
+			table.insert(objectives, calculate_radar_line(p_pos, p_yaw, cart_pos, "Cart", "🛒"))
 		end
 	end
 

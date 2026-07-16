@@ -205,7 +205,7 @@ esports_weapons.register_gun = function(name, def)
 			local cd = esports_weapons.cooldowns[p_name] or 0
 
 			if current_time >= cd then
-				for i = 1, (def.pellets or 1) do
+				for _ = 1, (def.pellets or 1) do
 					esports_weapons.shoot_raycast(user, def.damage, def.range, def.spread or 0)
 				end
 				esports_weapons.cooldowns[p_name] = current_time + def.fire_rate
@@ -341,7 +341,7 @@ core.register_tool("esports_weapons:shotgun", {
 			end
 
 			if count > 0 then
-				for i = 1, 8 do
+				for _ = 1, 8 do
 					-- Shotgun deals 4.2 per pellet (33.6 total per blast)
 					-- 3 hits = 100.8 damage (Lethal for 100 HP players)
 					esports_weapons.shoot_raycast(user, 4.2, 30, 0.2)
@@ -480,7 +480,7 @@ core.register_on_item_pickup(function(itemstack, picker, pointed_thing)
 	return leftover
 end)
 
-core.register_on_punchnode(function(pos, node, puncher, pointed_thing)
+core.register_on_punchnode(function(pos, node, puncher)
 	if not puncher or not puncher:is_player() then return end
 	local pname = puncher:get_player_name()
 	if esports_core.is_spectator(pname) or (esports_core.is_in_lobby and esports_core.is_in_lobby(pname)) then return end

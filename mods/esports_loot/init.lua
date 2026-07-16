@@ -90,7 +90,6 @@ end)
 
 -- Spawning logic
 local spawn_timer = 0
-local ISLAND_RADIUS = 100
 
 -- Dynamically calculate combatants (Players + Bots)
 local function get_combatant_count()
@@ -146,7 +145,7 @@ core.register_globalstep(function(dtime)
 			if num_spots > 0 then
 				local safe_r = storm_radius * 0.9
 				local safe_r2 = safe_r * safe_r
-				for attempt = 1, 30 do
+				for _ = 1, 30 do
 					local spot = spots[math.random(num_spots)]
 					local dx = spot.x - storm_center.x
 					local dz = spot.z - storm_center.z

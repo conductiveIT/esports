@@ -189,7 +189,7 @@ function esports_core.practice.enter(name)
 	end
 
 	-- Spawn 3 new practice targets
-	for i = 1, 3 do
+	for _ = 1, 3 do
 		local tx = arena_pos.x + math.random(-8, 8)
 		local ty = arena_pos.y + math.random(1, 3)
 		local tz = arena_pos.z + math.random(4, 10)

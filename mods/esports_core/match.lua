@@ -141,7 +141,6 @@ core.register_globalstep(function(dtime)
 	elseif esports_core.match.state == "countdown" then
 		esports_core.match.timer = esports_core.match.timer - 1
 
-		local players = core.get_connected_players()
 		local r_name = esports_core.match.active_teams.red
 		local b_name = esports_core.match.active_teams.blue
 
@@ -150,9 +149,6 @@ core.register_globalstep(function(dtime)
 				p:set_physics_override({speed = 0, jump = 0, gravity = 0})
 				esports_core.hud.show_intro(p, esports_core.match.timer, r_name, b_name)
 			end
-		end
-
-		if esports_core.match.timer > 0 then
 		end
 
 		if esports_core.match.timer <= 0 then

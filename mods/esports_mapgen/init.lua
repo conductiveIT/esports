@@ -166,11 +166,6 @@ function esports_mapgen.reset_island(layout_name, scale_val)
 	local area = VoxelArea:new{MinEdge=emin, MaxEdge=emax}
 	local data = vm:get_data()
 
-	local c_grass = core.get_content_id("esports_mapgen:grass")
-	local c_dirt = core.get_content_id("esports_mapgen:dirt")
-	local c_stone = core.get_content_id("esports_mapgen:stone")
-	local c_air = core.CONTENT_AIR
-
 	local max_r = 100 * scale
 	local max_r2 = max_r * max_r
 
@@ -314,8 +309,6 @@ function esports_mapgen.setup_spleef_arena(levels)
 	local data = vm:get_data()
 
 	local c_spleef = core.get_content_id("esports_mapgen:spleef_block")
-	local c_air = core.CONTENT_AIR
-	local c_stone = core.get_content_id("esports_mapgen:stone")
 
 	-- Pre-calculate floor Y values
 	local floors = {}

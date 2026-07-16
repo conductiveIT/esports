@@ -184,7 +184,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 end)
 
 -- CHAT SUPPRESSION
-core.register_on_chat_message(function(name, message)
+core.register_on_chat_message(function(name)
 	if esports_core.spectators[name] then
 		core.chat_send_player(name, "Spectators cannot talk in chat.")
 		return true  -- Block message
