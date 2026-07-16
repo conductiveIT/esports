@@ -1,6 +1,6 @@
 esports_core = {}
-esports_core.version = "1.5.1"
-esports_core.build = 3
+esports_core.version = "0.5.4"
+esports_core.build = 1
 core.log("action", "====================================================")
 core.log("action", "[TDM Core] Starting Luanti Deathmatch Core v" .. esports_core.version .. " (build " .. esports_core.build .. ")")
 core.log("action", "====================================================")
@@ -28,6 +28,73 @@ function esports_core.get_nick(name)
 		end
 	end
 	return display
+end
+
+function esports_core.is_in_lobby(player)
+	local name = type(player) == "string" and player or player:get_player_name()
+
+	-- Admins are exempt from lobby lock to permit administrative building, testing, and debugging
+	local is_admin = core.check_player_privs(name, {server = true})
+	if is_admin then
+		return false
+	end
+
+	-- If they are in the practice range, they are not in lobby mode (they need to shoot/interact)
+	if esports_core.practice and esports_core.practice.players and esports_core.practice.players[name] then
+		return false
+	end
+
+	-- If a match is active or in countdown, check if they are an active player in the match
+	if esports_core.match then
+		local match_active = (esports_core.match.state == "active" or esports_core.match.state == "countdown")
+		if match_active then
+			local side = esports_core.match.get_player_match_side and esports_core.match.get_player_match_side(name)
+			if side and not esports_core.is_spectator(name) then
+				return false -- Active player, not in lobby mode
+			end
+		end
+	end
+
+	-- Otherwise, they are in lobby mode!
+	return true
+end
+
+function esports_core.reset_to_lobby(player)
+	local pname = player:get_player_name()
+	local inv = player:get_inventory()
+
+	if inv then
+		-- Wipe Inventories of weapons/ammo (only keep blueprints)
+		inv:set_list("main", {})
+		inv:set_list("ammo", {})
+
+		-- Re-add standard lobby blueprints
+		inv:set_stack("main", 2, ItemStack("esports_building:blueprint_wall"))
+		inv:set_stack("main", 3, ItemStack("esports_building:blueprint_ramp"))
+	end
+
+	-- Wipe custom combat stats/cooldowns
+	if esports_weapons and esports_weapons.cooldowns then
+		esports_weapons.cooldowns[pname] = 0
+	end
+
+	-- Apply Lobby Ghost Mode: Invisible, Invulnerable, and Frozen
+	player:set_properties({
+		hp_max = 100,
+		visual_size = {x=1, y=1, z=1},  -- Full size for light calculation
+		textures = {"character.png^[alpha:0"},  -- 100% transparent
+		eye_height = 1.625,
+		interact_distance = 0,  -- Cannot hit anything in lobby
+	})
+	player:set_hp(100)
+	player:set_armor_groups({immortal = 1})
+
+	-- Physics freeze (unless admin)
+	if not core.check_player_privs(pname, {server=true}) then
+		player:set_physics_override({speed = 0, jump = 0, gravity = 1})
+	else
+		player:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1})
+	end
 end
 
 dofile(modpath .. "/teams.lua")
@@ -107,6 +174,12 @@ core.register_on_joinplayer(function(player)
 	privs.shout = true
 	privs.zoom = true
 	core.set_player_privs(name, privs)
+
+	-- Enable minimap and radar by default
+	player:hud_set_flags({
+		minimap = true,
+		minimap_radar = true
+	})
 
 	-- Apply nickname to nametag if exists
 	local nick = esports_core.get_nick(name)

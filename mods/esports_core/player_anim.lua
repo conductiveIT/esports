@@ -6,7 +6,11 @@ local ANIM_WALK = {x=168, y=187}
 local ANIM_MINE = {x=189, y=198}
 local ANIM_WALK_MINE = {x=200, y=219}
 
+local anim_timer = 0
 core.register_globalstep(function(dtime)
+	anim_timer = anim_timer + dtime
+	if anim_timer < 0.1 then return end
+	anim_timer = 0
 	for _, player in ipairs(core.get_connected_players()) do
 		local p_name = player:get_player_name()
 		local controls = player:get_player_control()

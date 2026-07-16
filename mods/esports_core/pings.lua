@@ -27,7 +27,7 @@ function esports_core.pings.trigger(sender_name, team_name, pos, ping_type)
 				esports_core.get_nick(sender_name), ping_type:upper(), math.floor(pos.x), math.floor(pos.y), math.floor(pos.z)))
 
 			local id = p:hud_add({
-				hud_elem_type = "waypoint",
+				type = "waypoint",
 				name = label,
 				text = "m",
 				number = color,

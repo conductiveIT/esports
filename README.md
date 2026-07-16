@@ -28,7 +28,10 @@ This is a fast-paced hitscan team combat base game for Luanti with building, sto
 - **Aim Trainer Practice Range**: A private practice zone accessible via `/practice` with pop-up target entities, statistics tracking, and custom weapon warmups.
 - **Audio Announcer**: Dynamic sounds and announcements for **Double Kill**, **Triple Kill**, **Shut Down**, and match countdown beeps.
 
-
+### External Utilities & Integrations
+- **Xbox Controller Mapper (`run_controller.ps1`)**: A lightweight, dependency-free PowerShell script using in-memory C# compilation to map Xbox controller inputs directly to keyboard/mouse operations (`xinput` and `user32` calls), allowing immediate controller gameplay on Luanti/Minetest.
+- **League Stats Web Dashboards (`league_stats.html` / `league_stats.aspx`)**: Complete interactive web interfaces to display standings, fixtures, match history, and player stats.
+- **Team Database Export Tool (`website/intro/update_teams.py`)**: A Python utility that reads, parses, and deserializes Lua table configurations (teams and player nicknames) directly from Luanti's `mod_storage.sqlite` and outputs clean JSON data for the website intro portal.
 
 ## How to Install & Play
 

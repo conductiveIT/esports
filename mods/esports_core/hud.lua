@@ -539,7 +539,10 @@ end
 function esports_core.hud.show_outro(player, data)
 	local pname = player:get_player_name()
 	local huds = esports_core.hud.player_huds[pname]
-	if not huds then return end
+	if not huds then
+		esports_core.hud.player_huds[pname] = {}
+		huds = esports_core.hud.player_huds[pname]
+	end
 
 	-- Clean previous state
 	esports_core.hud.hide_outro(player)
@@ -593,6 +596,8 @@ function esports_core.hud.show_outro(player, data)
 		mvp_label = "ESCORT POINTS"
 	elseif data.is_domination then
 		mvp_label = "CAPTURE POINTS"
+	elseif data.is_spleef then
+		mvp_label = "SPLEEF POINTS"
 	end
 	local mvp_txt = "MVP: " .. esports_core.get_nick(data.mvp) .. " (" .. data.mvp_kills .. " " .. mvp_label .. ")"
 	huds.outro_mvp = player:hud_add({
@@ -614,6 +619,8 @@ function esports_core.hud.show_outro(player, data)
 		red_scores = red_scores .. "PLAYER               | E    | K | D\n" .. string.rep("-", 39) .. "\n"
 	elseif data.is_domination then
 		red_scores = red_scores .. "PLAYER               | P    | K | D\n" .. string.rep("-", 39) .. "\n"
+	elseif data.is_spleef then
+		red_scores = red_scores .. "PLAYER               | SURVIVAL | BLOCKS\n" .. string.rep("-", 42) .. "\n"
 	else
 		red_scores = red_scores .. "PLAYER               | K | D\n" .. string.rep("-", 30) .. "\n"
 	end
@@ -628,6 +635,8 @@ function esports_core.hud.show_outro(player, data)
 			red_scores = red_scores .. string.format("%-20s |%3ds |%2d |%2d\n", display_name:sub(1,15), p.e or 0, p.k, p.d)
 		elseif data.is_domination then
 			red_scores = red_scores .. string.format("%-20s |%3d  |%2d |%2d\n", display_name:sub(1,15), p.d_pts or 0, p.k, p.d)
+		elseif data.is_spleef then
+			red_scores = red_scores .. string.format("%-20s |%7ds |%7d\n", display_name:sub(1,15), p.s_surv or 0, p.s_blks or 0)
 		else
 			red_scores = red_scores .. string.format("%-20s |%2d |%2d\n", display_name:sub(1,15), p.k, p.d)
 		end
@@ -651,6 +660,8 @@ function esports_core.hud.show_outro(player, data)
 		blue_scores = blue_scores .. "PLAYER               | E    | K | D\n" .. string.rep("-", 39) .. "\n"
 	elseif data.is_domination then
 		blue_scores = blue_scores .. "PLAYER               | P    | K | D\n" .. string.rep("-", 39) .. "\n"
+	elseif data.is_spleef then
+		blue_scores = blue_scores .. "PLAYER               | SURVIVAL | BLOCKS\n" .. string.rep("-", 42) .. "\n"
 	else
 		blue_scores = blue_scores .. "PLAYER               | K | D\n" .. string.rep("-", 30) .. "\n"
 	end
@@ -665,6 +676,8 @@ function esports_core.hud.show_outro(player, data)
 			blue_scores = blue_scores .. string.format("%-20s |%3ds |%2d |%2d\n", display_name:sub(1,15), p.e or 0, p.k, p.d)
 		elseif data.is_domination then
 			blue_scores = blue_scores .. string.format("%-20s |%3d  |%2d |%2d\n", display_name:sub(1,15), p.d_pts or 0, p.k, p.d)
+		elseif data.is_spleef then
+			blue_scores = blue_scores .. string.format("%-20s |%7ds |%7d\n", display_name:sub(1,15), p.s_surv or 0, p.s_blks or 0)
 		else
 			blue_scores = blue_scores .. string.format("%-20s |%2d |%2d\n", display_name:sub(1,15), p.k, p.d)
 		end
@@ -761,6 +774,7 @@ esports_core.hud.update_scoreboard = function()
 	local is_ctf = esports_core.match.is_ctf
 	local is_payload = esports_core.match.is_payload
 	local is_domination = esports_core.match.is_domination
+	local is_spleef = esports_core.match.is_spleef
 
 	for name, data in pairs(stats) do
 		table.insert(sorted, {
@@ -769,11 +783,13 @@ esports_core.hud.update_scoreboard = function()
 			deaths = data.deaths,
 			captures = data.captures or 0,
 			escort = data.escort_time or 0,
-			dom_pts = data.dom_points or 0
+			dom_pts = data.dom_points or 0,
+			spleef_survival = data.spleef_survival or 0,
+			spleef_blocks = data.spleef_blocks or 0
 		})
 	end
 
-	-- Dynamic Sort: Captures/Escort/Dom > Kills > Deaths (less is better)
+	-- Dynamic Sort: Captures/Escort/Dom/Spleef > Kills > Deaths (less is better)
 	table.sort(sorted, function(a, b)
 		if is_ctf then
 			if a.captures ~= b.captures then return a.captures > b.captures end
@@ -781,6 +797,10 @@ esports_core.hud.update_scoreboard = function()
 			if a.escort ~= b.escort then return a.escort > b.escort end
 		elseif is_domination then
 			if a.dom_pts ~= b.dom_pts then return a.dom_pts > b.dom_pts end
+		elseif is_spleef then
+			local score_a = (a.spleef_survival or 0) + (a.spleef_blocks or 0) * 2
+			local score_b = (b.spleef_survival or 0) + (b.spleef_blocks or 0) * 2
+			if score_a ~= score_b then return score_a > score_b end
 		end
 		if a.kills ~= b.kills then return a.kills > b.kills end
 		return a.deaths < b.deaths
@@ -790,8 +810,9 @@ esports_core.hud.update_scoreboard = function()
 	local header = is_ctf and "PLAYER               | CAP | KIL | DEA\n" or
 				   (is_payload and "PLAYER               | ESC | KIL | DEA\n" or
 				   (is_domination and "PLAYER               | DOM | KIL | DEA\n" or
-					"PLAYER               | KILLS | DEATHS\n"))
-	local separator = string.rep("-", (is_ctf or is_payload or is_domination) and 38 or 35) .. "\n"
+				   (is_spleef and "PLAYER               | SURV | BLKS\n" or
+					"PLAYER               | KILLS | DEATHS\n")))
+	local separator = string.rep("-", (is_ctf or is_payload or is_domination or is_spleef) and 38 or 35) .. "\n"
 	local final_text = "MATCH STANDINGS\n" .. header .. separator
 
 	for i, p in ipairs(sorted) do
@@ -803,6 +824,8 @@ esports_core.hud.update_scoreboard = function()
 			row = string.format("%-20s | %3d | %3d | %3d\n", p.name:sub(1,15), p.escort, p.kills, p.deaths)
 		elseif is_domination then
 			row = string.format("%-20s | %3d | %3d | %3d\n", p.name:sub(1,15), p.dom_pts, p.kills, p.deaths)
+		elseif is_spleef then
+			row = string.format("%-20s | %3ds | %4d\n", p.name:sub(1,15), p.spleef_survival, p.spleef_blocks)
 		else
 			row = string.format("%-20s | %5d | %7d\n", p.name:sub(1,15), p.kills, p.deaths)
 		end
@@ -842,7 +865,11 @@ esports_core.hud.toggle_scoreboard = function(player, visible)
 end
 
 -- Input Update Loop (Event-driven scoreboard toggle)
+local input_timer = 0
 core.register_globalstep(function(dtime)
+	input_timer = input_timer + dtime
+	if input_timer < 0.1 then return end
+	input_timer = 0
 	for _, player in ipairs(core.get_connected_players()) do
 		local name = player:get_player_name()
 		if not esports_core.is_spectator(name) then
@@ -856,10 +883,19 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname == "esports_core:outro_return" and fields.return_lobby then
 		esports_core.hud.hide_outro(player)
 		esports_core.lobby.show(player)
-		-- Ensure lobby physics are reset
-		if not core.check_player_privs(player:get_player_name(), {server=true}) then
-			player:set_physics_override({speed = 0, jump = 0})
-		end
+		esports_core.reset_to_lobby(player)
 		return true
 	end
+end)
+
+core.register_on_joinplayer(function(player)
+	local pname = player:get_player_name()
+	if not esports_core.hud.player_huds[pname] then
+		esports_core.hud.player_huds[pname] = {}
+	end
+end)
+
+core.register_on_leaveplayer(function(player)
+	local pname = player:get_player_name()
+	esports_core.hud.player_huds[pname] = nil
 end)

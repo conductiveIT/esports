@@ -1,15 +1,18 @@
 esports_core.broadcaster = {}
 esports_core.broadcaster.active_huds = {} -- name -> table of HUD IDs
+esports_core.broadcaster.last_states = {} -- name -> table of text states
 
 function esports_core.broadcaster.clear_hud(player)
 	local name = player:get_player_name()
 	local hids = esports_core.broadcaster.active_huds[name]
 	if hids then
-		for _, id in pairs(hids) do
-			player:hud_remove(id)
-		end
+		if hids.title then player:hud_remove(hids.title) end
+		if hids.red then player:hud_remove(hids.red) end
+		if hids.blue then player:hud_remove(hids.blue) end
+		if hids.target then player:hud_remove(hids.target) end
 		esports_core.broadcaster.active_huds[name] = nil
 	end
+	esports_core.broadcaster.last_states[name] = nil
 end
 
 function esports_core.broadcaster.update_hud(player)
@@ -19,25 +22,45 @@ function esports_core.broadcaster.update_hud(player)
 		return
 	end
 
-	-- Clean up previous elements first
-	esports_core.broadcaster.clear_hud(player)
+	-- Initialize HUD tracking structure if missing
+	local hids = esports_core.broadcaster.active_huds[name]
+	if not hids then
+		hids = {title = nil, red = nil, blue = nil, target = nil}
+		esports_core.broadcaster.active_huds[name] = hids
+	end
 
-	local hids = {}
+	local last_state = esports_core.broadcaster.last_states[name]
+	if not last_state then
+		last_state = {title = "", red = "", blue = "", target = ""}
+		esports_core.broadcaster.last_states[name] = last_state
+	end
 
 	-- Check if a match is active
 	local match_active = (esports_core.match.state == "active" or esports_core.match.state == "countdown")
 	if not match_active then
 		-- Display simple idle label
-		hids.title = player:hud_add({
-			hud_elem_type = "text",
-			position = {x = 0.5, y = 0.15},
-			offset = {x = 0, y = 0},
-			text = "SPECTATOR MODE - WAITING FOR MATCH",
-			alignment = {x = 0, y = 0},
-			scale = {x = 100, y = 100},
-			number = 0xFFFFFF,
-		})
-		esports_core.broadcaster.active_huds[name] = hids
+		local title_text = "SPECTATOR MODE - WAITING FOR MATCH"
+		if last_state.title ~= title_text then
+			last_state.title = title_text
+			if hids.title then
+				player:hud_change(hids.title, "text", title_text)
+			else
+				hids.title = player:hud_add({
+					type = "text",
+					position = {x = 0.5, y = 0.15},
+					offset = {x = 0, y = 0},
+					text = title_text,
+					alignment = {x = 0, y = 0},
+					scale = {x = 100, y = 100},
+					number = 0xFFFFFF,
+				})
+			end
+		end
+
+		-- Clear other panels if they exist
+		if hids.red then player:hud_remove(hids.red); hids.red = nil; last_state.red = "" end
+		if hids.blue then player:hud_remove(hids.blue); hids.blue = nil; last_state.blue = "" end
+		if hids.target then player:hud_remove(hids.target); hids.target = nil; last_state.target = "" end
 		return
 	end
 
@@ -65,93 +88,114 @@ function esports_core.broadcaster.update_hud(player)
 	end
 
 	-- 1. TITLE
-	hids.title = player:hud_add({
-		hud_elem_type = "text",
-		position = {x = 0.5, y = 0.05},
-		offset = {x = 0, y = 0},
-		text = "LIVE SPECTATOR FEED",
-		alignment = {x = 0, y = 0},
-		scale = {x = 100, y = 100},
-		number = 0xFFFF00,
-	})
+	local title_text = "LIVE SPECTATOR FEED"
+	if last_state.title ~= title_text then
+		last_state.title = title_text
+		if hids.title then
+			player:hud_change(hids.title, "text", title_text)
+		else
+			hids.title = player:hud_add({
+				type = "text",
+				position = {x = 0.5, y = 0.05},
+				offset = {x = 0, y = 0},
+				text = title_text,
+				alignment = {x = 0, y = 0},
+				scale = {x = 100, y = 100},
+				number = 0xFFFF00,
+			})
+		end
+	end
 
 	-- 2. RED ROSTER (LEFT PANEL)
-	hids.red_header = player:hud_add({
-		hud_elem_type = "text",
-		position = {x = 0.15, y = 0.15},
-		offset = {x = 0, y = 0},
-		text = "RED TEAM STATUS",
-		alignment = {x = -1, y = 0},
-		scale = {x = 100, y = 100},
-		number = 0xFF5555,
-	})
-
-	local y_off = 0.20
+	local red_lines = { "RED TEAM STATUS", "----------------" }
 	for _, p in ipairs(red_team) do
-		local desc = string.format("%s - HP: %d | K: %d (Weapon: %s)", p.nick, p.hp, p.kills, p.weapon)
-		local id = player:hud_add({
-			hud_elem_type = "text",
-			position = {x = 0.15, y = y_off},
-			offset = {x = 0, y = 0},
-			text = desc,
-			alignment = {x = -1, y = 0},
-			scale = {x = 100, y = 100},
-			number = 0xFFFFFF,
-		})
-		table.insert(hids, id)
-		y_off = y_off + 0.04
+		table.insert(red_lines, string.format("%s - HP: %d | K: %d (%s)", p.nick, p.hp, p.kills, p.weapon))
+	end
+	if #red_team == 0 then
+		table.insert(red_lines, "(No players)")
+	end
+	local red_text = table.concat(red_lines, "\n")
+
+	if last_state.red ~= red_text then
+		last_state.red = red_text
+		if hids.red then
+			player:hud_change(hids.red, "text", red_text)
+		else
+			hids.red = player:hud_add({
+				type = "text",
+				position = {x = 0.15, y = 0.15},
+				offset = {x = 0, y = 0},
+				text = red_text,
+				alignment = {x = -1, y = -1},
+				scale = {x = 100, y = 100},
+				number = 0xFF5555,
+			})
+		end
 	end
 
 	-- 3. BLUE ROSTER (RIGHT PANEL)
-	hids.blue_header = player:hud_add({
-		hud_elem_type = "text",
-		position = {x = 0.85, y = 0.15},
-		offset = {x = 0, y = 0},
-		text = "BLUE TEAM STATUS",
-		alignment = {x = 1, y = 0},
-		scale = {x = 100, y = 100},
-		number = 0x5555FF,
-	})
-
-	y_off = 0.20
+	local blue_lines = { "BLUE TEAM STATUS", "----------------" }
 	for _, p in ipairs(blue_team) do
-		local desc = string.format("(Weapon: %s) %d :K | %d :HP - %s", p.weapon, p.kills, p.hp, p.nick)
-		local id = player:hud_add({
-			hud_elem_type = "text",
-			position = {x = 0.85, y = y_off},
-			offset = {x = 0, y = 0},
-			text = desc,
-			alignment = {x = 1, y = 0},
-			scale = {x = 100, y = 100},
-			number = 0xFFFFFF,
-		})
-		table.insert(hids, id)
-		y_off = y_off + 0.04
+		table.insert(blue_lines, string.format("(%s) %d :K | %d :HP - %s", p.weapon, p.kills, p.hp, p.nick))
+	end
+	if #blue_team == 0 then
+		table.insert(blue_lines, "(No players)")
+	end
+	local blue_text = table.concat(blue_lines, "\n")
+
+	if last_state.blue ~= blue_text then
+		last_state.blue = blue_text
+		if hids.blue then
+			player:hud_change(hids.blue, "text", blue_text)
+		else
+			hids.blue = player:hud_add({
+				type = "text",
+				position = {x = 0.85, y = 0.15},
+				offset = {x = 0, y = 0},
+				text = blue_text,
+				alignment = {x = 1, y = -1},
+				scale = {x = 100, y = 100},
+				number = 0x5555FF,
+			})
+		end
 	end
 
 	-- 4. CURRENT TARGET DETAILS (BOTTOM PANEL)
+	local target_text = ""
 	local spec_data = esports_core.spectators[name]
 	if spec_data and spec_data.target then
 		local t_player = core.get_player_by_name(spec_data.target)
 		if t_player then
 			local stats = esports_core.match.player_stats[spec_data.target] or {kills = 0, deaths = 0}
 			local weapon = t_player:get_wielded_item():get_name():match(":(%w+)$") or "Hands"
-			local text = string.format("FOLLOWING: %s | HP: %d | Kills: %d | Wielding: %s", 
+			target_text = string.format("FOLLOWING: %s | HP: %d | Kills: %d | Wielding: %s", 
 				esports_core.get_nick(spec_data.target), t_player:get_hp(), stats.kills or 0, weapon)
-
-			hids.target_info = player:hud_add({
-				hud_elem_type = "text",
-				position = {x = 0.5, y = 0.85},
-				offset = {x = 0, y = 0},
-				text = text,
-				alignment = {x = 0, y = 0},
-				scale = {x = 100, y = 100},
-				number = 0x00FF00,
-			})
 		end
 	end
 
-	esports_core.broadcaster.active_huds[name] = hids
+	if last_state.target ~= target_text then
+		last_state.target = target_text
+		if target_text == "" then
+			if hids.target then
+				player:hud_remove(hids.target)
+				hids.target = nil
+			end
+		else
+			if hids.target then
+				player:hud_change(hids.target, "text", target_text)
+			else
+				hids.target = player:hud_add({
+					type = "text",
+					position = {x = 0.5, y = 0.85},
+					offset = {x = 0, y = 0},
+					text = target_text,
+					alignment = {x = 0, y = 0},
+					scale = {x = 100, y = 100},
+					number = 0x00FF00,
+				})
+			end
+		end
+	end
 end
 
 -- Refresh spectator HUDs every second

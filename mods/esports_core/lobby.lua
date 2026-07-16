@@ -179,10 +179,13 @@ function esports_core.lobby.get_live_scoreboard_formspec(name)
 	table.insert(fs, "textlist[0.5,5.0;16.5,7.0;live_stats_list;" .. table.concat(list_items, ",") .. ";;false]")
 
 	table.insert(fs, "style[stop_match;bgcolor=#770000;textcolor=white]")
-	table.insert(fs, "button[0.5,12.5;8.0,0.9;stop_match;STOP MATCH]")
+	table.insert(fs, "button[0.5,12.5;5.2,0.9;stop_match;STOP MATCH]")
 
 	table.insert(fs, "style[go_spectate;bgcolor=#335533;textcolor=white]")
-	table.insert(fs, "button[9.0,12.5;8.0,0.9;go_spectate;SPECTATE 3D]")
+	table.insert(fs, "button[6.1,12.5;5.2,0.9;go_spectate;SPECTATE 3D]")
+
+	table.insert(fs, "style[show_lobby;bgcolor=#0055aa;textcolor=white]")
+	table.insert(fs, "button[11.7,12.5;5.3,0.9;show_lobby;LOBBY MENU]")
 
 	return table.concat(fs)
 end
@@ -220,27 +223,30 @@ local function get_formspec(name)
 	local side = esports_core.match.get_player_match_side(name)
 	local match_active = (esports_core.match.state == "active" or esports_core.match.state == "countdown")
 
-	if match_active and is_admin and not side then
-		return esports_core.lobby.get_live_scoreboard_formspec(name)
-	end
-
-	local tab = player_tabs[name] or (is_admin and "matchmaking" or "league")
-	local p_team = esports_league.get_team(name) or "NONE"
-
-	-- Ensure settings exist
+	-- Ensure settings exist early
 	if not player_settings[name] then
 		player_settings[name] = {
 			count = "5", diff = "medium", red = "", blue = "", pve = "",
 			match_dur = "5m", match_tod = "Day", match_mode = "TDM",
 			map_size = "Small", map_layout = "Random", friendly_fire = false, melee_damage = true,
+			spleef_levels = "1 Level",
 			league_subtab = "standings", sel_round = 1, sel_match_idx = 1, sel_spec_idx = 1
 		}
 	end
-	local settings = player_settings[name]
 
-	local teams_list = get_available_teams()
-	local teams_str = table.concat(teams_list, ",")
-	if teams_str == "" then teams_str = "No teams registered" end
+	if match_active and is_admin and not side then
+		local settings = player_settings[name]
+		if not settings.show_lobby_during_match then
+			return esports_core.lobby.get_live_scoreboard_formspec(name)
+		end
+	end
+
+	local tab = player_tabs[name] or (is_admin and "matchmaking" or "league")
+	local p_team = esports_league.get_team(name) or "NONE"
+	local settings = player_settings[name]
+	if not settings.spleef_levels then
+		settings.spleef_levels = "1 Level"
+	end
 
 	local fs = {
 		"formspec_version[6]",
@@ -261,6 +267,10 @@ local function get_formspec(name)
 	if is_admin then
 		table.insert(fs, "style[exit_lobby;bgcolor=#555555;textcolor=white]")
 		table.insert(fs, "button[11.5,1.3;2.2,0.9;exit_lobby;EXIT]")
+		if match_active then
+			table.insert(fs, "style[show_scoreboard;bgcolor=#007700;textcolor=white]")
+			table.insert(fs, "button[9.0,1.3;2.2,0.9;show_scoreboard;SCOREBOARD]")
+		end
 	end
 
 	-- Dynamic Tab Highlighting Style
@@ -276,20 +286,27 @@ local function get_formspec(name)
 	end
 
 	if is_admin then
-		table.insert(fs, "button[0.5,2.5;3.1,0.8;tab_match;MATCH]")
-		table.insert(fs, "button[3.85,2.5;3.1,0.8;tab_league;LEAGUE]")
-		table.insert(fs, "button[7.2,2.5;3.1,0.8;tab_team;TEAM]")
-		table.insert(fs, "button[10.55,2.5;3.1,0.8;tab_locker;LOCKER]")
-		table.insert(fs, "button[13.9,2.5;3.1,0.8;tab_settings;ADMIN]")
+		table.insert(fs, "button[0.5,2.5;2.5,0.8;tab_match;MATCH]")
+		table.insert(fs, "button[3.3,2.5;2.5,0.8;tab_league;LEAGUE]")
+		table.insert(fs, "button[6.1,2.5;2.5,0.8;tab_team;TEAM]")
+		table.insert(fs, "button[8.9,2.5;2.5,0.8;tab_locker;LOCKER]")
+		table.insert(fs, "button[11.7,2.5;2.5,0.8;tab_settings;ADMIN]")
+		table.insert(fs, "style[btn_practice;bgcolor=#005533;textcolor=white]")
+		table.insert(fs, "button[14.5,2.5;2.5,0.8;btn_practice;PRACTICE]")
 	else
-		table.insert(fs, "button[0.5,2.5;5.1,0.8;tab_league;LEAGUE]")
-		table.insert(fs, "button[6.2,2.5;5.1,0.8;tab_team;TEAM]")
-		table.insert(fs, "button[11.9,2.5;5.1,0.8;tab_locker;LOCKER]")
+		table.insert(fs, "button[0.5,2.5;3.8,0.8;tab_league;LEAGUE]")
+		table.insert(fs, "button[4.7,2.5;3.8,0.8;tab_team;TEAM]")
+		table.insert(fs, "button[8.9,2.5;3.8,0.8;tab_locker;LOCKER]")
+		table.insert(fs, "style[btn_practice;bgcolor=#005533;textcolor=white]")
+		table.insert(fs, "button[13.1,2.5;3.9,0.8;btn_practice;PRACTICE]")
 	end
 
 	local match_active = (esports_core.match.state == "active")
 
 	if tab == "matchmaking" then
+		local teams_list = get_available_teams()
+		local teams_str = table.concat(teams_list, ",")
+		if teams_str == "" then teams_str = "No teams registered" end
 		local red_ready = is_team_online(settings.red)
 		local blue_ready = is_team_online(settings.blue)
 		local pve_ready = is_team_online(settings.pve)
@@ -350,6 +367,10 @@ local function get_formspec(name)
 		local layout_idx = 1
 		for i, v in ipairs(layout_list) do if v == settings.map_layout then layout_idx = i break end end
 
+		local spleef_levels_list = {"1 Level", "2 Levels", "3 Levels"}
+		local spleef_levels_idx = 1
+		for i, v in ipairs(spleef_levels_list) do if v == settings.spleef_levels then spleef_levels_idx = i break end end
+
 		local mode_idx = 1
 		if settings.match_mode == "CTF" then mode_idx = 2
 		elseif settings.match_mode == "FFA" then mode_idx = 3
@@ -377,8 +398,13 @@ local function get_formspec(name)
 			table.insert(fs, "checkbox[1.0,10.6;chk_friendly_fire;Friendly Fire (FF);" .. (settings.friendly_fire and "true" or "false") .. "]")
 		end
 		table.insert(fs, "checkbox[6.5,10.6;chk_melee_damage;Melee Damage;" .. (settings.melee_damage and "true" or "false") .. "]")
-		table.insert(fs, "label[11.5,10.9;Layout:]")
-		table.insert(fs, "dropdown[12.5,10.6;3.2,0.6;sel_map_layout;Random,Classic,Choke Point,Three Lanes,Split Center;" .. layout_idx .. "]")
+		if match_mode == "SPLEEF" then
+			table.insert(fs, "label[11.5,10.9;Levels:]")
+			table.insert(fs, "dropdown[12.5,10.6;3.2,0.6;sel_spleef_levels;1 Level,2 Levels,3 Levels;" .. spleef_levels_idx .. "]")
+		else
+			table.insert(fs, "label[11.5,10.9;Layout:]")
+			table.insert(fs, "dropdown[12.5,10.6;3.2,0.6;sel_map_layout;Random,Classic,Choke Point,Three Lanes,Split Center;" .. layout_idx .. "]")
+		end
 
 		local rec_players = get_recommended_max_players(settings.map_size or "Small", settings.match_mode or "TDM", settings.map_layout or "Random")
 		table.insert(fs, "label[1.0,11.25;" .. core.colorize("#ffa500", "Recommended Capacity: " .. rec_players) .. "]")
@@ -392,8 +418,16 @@ local function get_formspec(name)
 
 		if match_active then
 			table.insert(fs, "style[stop_match;bgcolor=#770000;textcolor=white]")
-			table.insert(fs, "label[6.0,12.5;MATCH CURRENTLY IN PROGRESS]")
-			table.insert(fs, "button[0.8,12.9;15.9,0.5;stop_match;STOP MATCH]")
+			if esports_core.match.paused then
+				table.insert(fs, "style[resume_match;bgcolor=#007700;textcolor=white]")
+				table.insert(fs, "label[6.0,12.5;" .. core.colorize("#ffa500", "MATCH CURRENTLY PAUSED") .. "]")
+				table.insert(fs, "button[0.8,12.9;7.5,0.5;resume_match;RESUME MATCH]")
+			else
+				table.insert(fs, "style[pause_match;bgcolor=#dd7700;textcolor=white]")
+				table.insert(fs, "label[6.0,12.5;MATCH CURRENTLY IN PROGRESS]")
+				table.insert(fs, "button[0.8,12.9;7.5,0.5;pause_match;PAUSE MATCH]")
+			end
+			table.insert(fs, "button[9.2,12.9;7.5,0.5;stop_match;STOP MATCH]")
 		end
 	elseif tab == "league" then
 		local league_subtab = settings.league_subtab or "standings"
@@ -437,7 +471,8 @@ local function get_formspec(name)
 			for _, tname in ipairs(sorted) do
 				local d = esports_league.teams[tname]
 				local diff = (d.kills_scored or 0) - (d.deaths_conceded or 0)
-				table.insert(list_items, string.format("%s (W:%d L:%d D:%+d)", tname, d.wins or 0, d.losses or 0, diff))
+				local formatted = string.format("%s (W:%d L:%d D:%+d)", tname, d.wins or 0, d.losses or 0, diff)
+				table.insert(list_items, core.formspec_escape(formatted))
 			end
 
 			local selected = settings.selected_team
@@ -555,7 +590,9 @@ local function get_formspec(name)
 				local board_items = {}
 				for i, p in ipairs(sorted_players) do
 					if i > 50 then break end -- Show top 50
-					table.insert(board_items, string.format("%d. %s (R:%d K:%d D:%d C:%d H:%ds P:%d)", i, p.name, p.rating, p.kills, p.deaths, p.captures, p.hill_time, p.dom_points))
+					local nick = esports_core.get_nick(p.name)
+					local formatted = string.format("%d. %s (R:%d K:%d D:%d C:%d H:%ds P:%d)", i, nick, p.rating, p.kills, p.deaths, p.captures, p.hill_time, p.dom_points)
+					table.insert(board_items, core.formspec_escape(formatted))
 				end
 				if #board_items == 0 then
 					table.insert(board_items, "No player stats recorded yet")
@@ -568,8 +605,9 @@ local function get_formspec(name)
 
 			if is_admin then
 				if not selected then
-					table.insert(fs, "field[0.5,11.8;6.0,0.8;new_team;New Team Name;]")
-					table.insert(fs, "button[7.0,11.8;4.5,0.8;create_team;CREATE TEAM]")
+					table.insert(fs, "field[0.5,11.8;3.8,0.8;new_team;New Team Name;]")
+					table.insert(fs, "field[4.6,11.8;2.4,0.8;new_team_tag;Tag (3 chars);]")
+					table.insert(fs, "button[7.3,11.8;4.2,0.8;create_team;CREATE TEAM]")
 				end
 			else
 				table.insert(fs, "label[0.5,11.8;Registration handled by administrators.]")
@@ -598,7 +636,8 @@ local function get_formspec(name)
 				local match_items = {}
 				for idx, m in ipairs(round_matches) do
 					local status_str = m.status == "completed" and ("(W: " .. m.score.home .. "-" .. m.score.away .. ")") or "(Pending)"
-					table.insert(match_items, string.format("%d. %s vs %s %s", idx, m.home, m.away, status_str))
+					local formatted = string.format("%d. %s vs %s %s", idx, m.home, m.away, status_str)
+					table.insert(match_items, core.formspec_escape(formatted))
 				end
 
 				local sel_match_idx = settings.sel_match_idx or 1
@@ -632,7 +671,12 @@ local function get_formspec(name)
 				local entry = esports_league.history[idx]
 				local date_str = os.date("%Y-%m-%d %H:%M", entry.time or 0)
 				local m_type = entry.match_type or "Team Deathmatch"
-				table.insert(history_items, string.format("[%s] (%s) %s %d - %d %s (MVP: %s)", date_str, m_type, entry.home, entry.home_score, entry.away_score, entry.away, entry.mvp or "None"))
+				local mvp_nick = "None"
+				if entry.mvp and entry.mvp ~= "None" then
+					mvp_nick = esports_core.get_nick(entry.mvp)
+				end
+				local item_str = string.format("[%s] (%s) %s %d - %d %s (MVP: %s)", date_str, m_type, entry.home, entry.home_score, entry.away_score, entry.away, mvp_nick)
+				table.insert(history_items, core.formspec_escape(item_str))
 			end
 
 			if #history_items == 0 then
@@ -720,8 +764,13 @@ local function get_formspec(name)
 			for tname, _ in pairs(esports_league.teams) do table.insert(all_teams, tname) end
 			table.sort(all_teams)
 
+			local escaped_teams = {}
+			for _, tname in ipairs(all_teams) do
+				table.insert(escaped_teams, core.formspec_escape(tname))
+			end
+
 			table.insert(fs, "label[0.5,3.8;FIND A TEAM]")
-			table.insert(fs, "textlist[0.5,4.3;7.5,6.8;find_teams;" .. table.concat(all_teams, ",") .. ";;false]")
+			table.insert(fs, "textlist[0.5,4.3;7.5,6.8;find_teams;" .. table.concat(escaped_teams, ",") .. ";;false]")
 			table.insert(fs, "button[0.5,11.5;7.5,0.8;request_join;REQUEST TO JOIN]")
 
 			table.insert(fs, "box[8.5,4.3;8.5,6.8;#222222aa]")
@@ -733,7 +782,11 @@ local function get_formspec(name)
 			end
 
 			if #invites > 0 then
-				table.insert(fs, "textlist[8.7,5.3;8.1,4.5;sel_invite;" .. table.concat(invites, ",") .. ";;false]")
+				local escaped_invites = {}
+				for _, target in ipairs(invites) do
+					table.insert(escaped_invites, core.formspec_escape(target))
+				end
+				table.insert(fs, "textlist[8.7,5.3;8.1,4.5;sel_invite;" .. table.concat(escaped_invites, ",") .. ";;false]")
 				table.insert(fs, "button[8.7,10.2;3.8,0.6;accept_invite;ACCEPT]")
 				table.insert(fs, "button[13.0,10.2;3.8,0.6;decline_invite;DECLINE]")
 			else
@@ -819,7 +872,7 @@ local function get_formspec(name)
 		table.sort(keys)
 
 		for _, u in ipairs(keys) do
-			table.insert(mapping_items, u .. " -> " .. esports_core.nicknames[u])
+			table.insert(mapping_items, core.formspec_escape(u .. " -> " .. esports_core.nicknames[u]))
 		end
 
 		local sel_nick_idx = settings.sel_nick_idx or 1
@@ -846,7 +899,12 @@ local function get_formspec(name)
 
 		for _, pname in ipairs(spec_keys) do
 			local status = esports_core.is_spectator(pname) and "Spectator" or "Player"
-			table.insert(spec_items, pname .. " (" .. status .. ")")
+			local nick = esports_core.get_nick(pname)
+			local display = nick
+			if nick ~= pname then
+				display = nick .. " (" .. pname .. ")"
+			end
+			table.insert(spec_items, core.formspec_escape(display .. " [" .. status .. "]"))
 		end
 
 		local sel_spec_idx = settings.sel_spec_idx or 1
@@ -912,7 +970,8 @@ local function get_formspec(name)
 		-- Nickname Editor at the very bottom
 		local is_admin = core.check_player_privs(name, {server = true})
 		if esports_core.allow_nicks or is_admin then
-			table.insert(fs, "field[1.5,12.2;7.0,0.8;txt_nickname;Lobby Nickname;" .. core.formspec_escape(esports_core.get_nick(name)) .. "]")
+			local raw_nick = esports_core.nicknames[name] or name
+			table.insert(fs, "field[1.5,12.2;7.0,0.8;txt_nickname;Lobby Nickname;" .. core.formspec_escape(raw_nick) .. "]")
 			table.insert(fs, "button[8.8,12.2;4.0,0.8;btn_set_nickname;UPDATE NICKNAME]")
 			table.insert(fs, "button[13.1,12.2;3.0,0.8;btn_clear_nickname;RESET]")
 		else
@@ -934,11 +993,22 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local name = player:get_player_name()
 	local is_admin = core.check_player_privs(name, {server = true})
 
+	-- Practice Range transition
+	if fields.btn_practice then
+		esports_core.lobby.blackout_hide(player)
+		core.close_formspec(name, "esports_core:lobby")
+		esports_core.practice.enter(name)
+		return
+	end
+
 	-- Lobby Lock for non-participants (Mandatory Main Menu)
 	if fields.quit then
 		local side = esports_core.match.get_player_match_side(name)
+		local in_practice = esports_core.practice and esports_core.practice.players and esports_core.practice.players[name]
+		local huds = esports_core.hud and esports_core.hud.player_huds and esports_core.hud.player_huds[name]
+		local is_viewing_outro = huds and huds.outro_bg ~= nil
 
-		if not side and not esports_core.is_spectator(name) and (not is_admin or not fields.exit_lobby) then
+		if not side and not esports_core.is_spectator(name) and (not is_admin or not fields.exit_lobby) and not in_practice and not is_viewing_outro then
 			core.after(0, function()
 				if core.get_player_by_name(name) then
 					esports_core.lobby.show(player)
@@ -964,6 +1034,18 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	-- Disconnect Logic
 	if fields.exit_server then
 		core.kick_player(name, "Logged out via Main Lobby")
+		return
+	end
+
+	-- Scoreboard / Lobby toggles for admin during active match
+	if fields.show_lobby and is_admin then
+		player_settings[name].show_lobby_during_match = true
+		esports_core.lobby.show(player)
+		return
+	end
+	if fields.show_scoreboard and is_admin then
+		player_settings[name].show_lobby_during_match = nil
+		esports_core.lobby.show(player)
 		return
 	end
 
@@ -1353,6 +1435,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	if fields.sel_mode then player_settings[name].match_mode = fields.sel_mode end
 	if fields.sel_map_size then player_settings[name].map_size = fields.sel_map_size end
 	if fields.sel_map_layout then player_settings[name].map_layout = fields.sel_map_layout end
+	if fields.sel_spleef_levels then player_settings[name].spleef_levels = fields.sel_spleef_levels end
 	if fields.chk_friendly_fire then player_settings[name].friendly_fire = (fields.chk_friendly_fire == "true") end
 	if fields.chk_melee_damage then player_settings[name].melee_damage = (fields.chk_melee_damage == "true") end
 
@@ -1366,9 +1449,17 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				table.insert(sorted, tname)
 			end
 			table.sort(sorted, function(a, b)
-				local wa = esports_league.teams[a].wins or 0
-				local wb = esports_league.teams[b].wins or 0
-				return wa > wb
+				local da = esports_league.teams[a]
+				local db = esports_league.teams[b]
+				local wa = da.wins or 0
+				local wb = db.wins or 0
+				if wa ~= wb then return wa > wb end
+
+				local diffa = (da.kills_scored or 0) - (da.deaths_conceded or 0)
+				local diffb = (db.kills_scored or 0) - (db.deaths_conceded or 0)
+				if diffa ~= diffb then return diffa > diffb end
+
+				return (da.kills_scored or 0) > (db.kills_scored or 0)
 			end)
 
 			local selected = sorted[event.index]
@@ -1397,10 +1488,16 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	end
 
 	if fields.create_team and fields.new_team ~= "" and is_admin then
+		local tag = (fields.new_team_tag or ""):trim()
 		local cmd = core.registered_chatcommands["team"]
 		if cmd then
-			local ok, msg = cmd.func(name, "create " .. fields.new_team)
+			local ok, msg = cmd.func(name, "create " .. fields.new_team .. " " .. tag)
 			if msg then core.chat_send_player(name, msg) end
+			if not ok then
+				player_settings[name].err_msg = msg
+			else
+				player_settings[name].err_msg = nil
+			end
 		end
 	end
 
@@ -1430,8 +1527,11 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local map_size = player_settings[name].map_size or "Small"
 			local map_layout = player_settings[name].map_layout or "Random"
 
+			local spleef_levels_str = player_settings[name].spleef_levels or "1 Level"
+			local spleef_levels = tonumber(spleef_levels_str:match("%d+")) or 1
+
 			esports_core.match.scheduled_context = nil
-			local ok, err = esports_core.match.start(p_team, "BOTS", dur, true, tod, count, diff, mode, map_size, player_settings[name].friendly_fire, player_settings[name].melee_damage, map_layout)
+			local ok, err = esports_core.match.start(p_team, "BOTS", dur, true, tod, count, diff, mode, map_size, player_settings[name].friendly_fire, player_settings[name].melee_damage, map_layout, spleef_levels)
 			if not ok then
 				player_settings[name].err_msg = err or "Could not start match."
 				esports_core.lobby.show(player)
@@ -1488,8 +1588,11 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 
 				local map_size = player_settings[name].map_size or "Small"
 				local map_layout = player_settings[name].map_layout or "Random"
+				local spleef_levels_str = player_settings[name].spleef_levels or "1 Level"
+				local spleef_levels = tonumber(spleef_levels_str:match("%d+")) or 1
+
 				esports_core.match.scheduled_context = nil
-				local ok, err = esports_core.match.start(red, blue, dur, false, tod, 0, nil, mode, map_size, player_settings[name].friendly_fire, player_settings[name].melee_damage, map_layout)
+				local ok, err = esports_core.match.start(red, blue, dur, false, tod, 0, nil, mode, map_size, player_settings[name].friendly_fire, player_settings[name].melee_damage, map_layout, spleef_levels)
 				if not ok then
 					player_settings[name].err_msg = err or "Could not start match."
 					esports_core.lobby.show(player)
@@ -1503,9 +1606,22 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		end
 	end
 
+	if fields.pause_match and is_admin then
+		esports_core.match.pause()
+		esports_core.lobby.show(player)
+		return
+	end
+
+	if fields.resume_match and is_admin then
+		esports_core.match.resume()
+		esports_core.lobby.show(player)
+		return
+	end
+
 	if fields.stop_match and is_admin then
 		esports_core.match.state = "over"
 		esports_core.match.timer = 1
+		esports_core.match.paused = false
 		-- Clear state immediately to prevent stale data on instant restarts
 		esports_core.match.player_sides = {}
 		esports_core.teams.players = {}
@@ -1685,12 +1801,22 @@ core.register_globalstep(function(dtime)
 		local is_admin = core.check_player_privs(name, {server = true})
 		local side = esports_core.match.get_player_match_side(name)
 
+		-- Dynamic mid-match join detection: if a player in the lobby gets assigned a team side during an active match
+		local match_active = (esports_core.match.state == "active" or esports_core.match.state == "countdown")
+		if match_active and side and esports_core.teams.players[name] ~= side then
+			esports_core.match.join_player_to_ongoing(player)
+		end
+
 		-- If NOT in a match side, NOT an admin, and NOT already a spectator
 		if not side and not is_admin and not esports_core.is_spectator(name) then
-			-- Force physics freeze with gravity
-			player:set_physics_override({speed = 0, jump = 0, gravity = 1})
-			-- Force lobby re-open
-			esports_core.lobby.show(player)
+			local huds = esports_core.hud and esports_core.hud.player_huds and esports_core.hud.player_huds[name]
+			local is_viewing_outro = huds and huds.outro_bg ~= nil
+			if not is_viewing_outro then
+				-- Force physics freeze with gravity
+				player:set_physics_override({speed = 0, jump = 0, gravity = 1})
+				-- Force lobby re-open
+				esports_core.lobby.show(player)
+			end
 		else
 			-- Restore normal settings
 			player:override_day_night_ratio(nil)
@@ -1708,14 +1834,65 @@ core.register_globalstep(function(dtime)
 			end
 		end
 
-		-- DYNAMIC PRIVILEGE REFRESH: Ensure all active players can interact
+		-- DYNAMIC PRIVILEGE REFRESH: Ensure all active players can interact, and lobby players cannot
 		if not esports_core.is_spectator(name) then
 			local privs = core.get_player_privs(name)
-			if not privs.interact or not privs.shout then
-				privs.interact = true
-				privs.shout = true
-				core.set_player_privs(name, privs)
-				core.chat_send_player(name, "SYSTEM: Privileges synchronized.")
+			local in_lobby = esports_core.is_in_lobby(name)
+
+			if in_lobby then
+				-- Revoke interact privilege in lobby mode
+				if privs.interact then
+					privs.interact = nil
+					core.set_player_privs(name, privs)
+				end
+				-- Wipe inventory weapons/ammo/health pack if they have them in lobby
+				local inv = player:get_inventory()
+				if inv then
+					local main = inv:get_list("main")
+					local ammo = inv:get_list("ammo")
+					local cleared = false
+					if main then
+						for slot, stack in ipairs(main) do
+							local item_name = stack:get_name()
+							if item_name:find("esports_weapons:") or item_name:find("health_pack") then
+								main[slot] = ItemStack("")
+								cleared = true
+							end
+						end
+						if cleared then inv:set_list("main", main) end
+					end
+					if ammo and #ammo > 0 then
+						inv:set_list("ammo", {})
+					end
+				end
+
+				-- Ensure interact_distance is 0 and they are immortal in lobby mode
+				local props = player:get_properties()
+				if props.interact_distance ~= 0 then
+					player:set_properties({
+						interact_distance = 0,
+					})
+				end
+				local armor = player:get_armor_groups()
+				if not armor.immortal or armor.immortal ~= 1 then
+					player:set_armor_groups({immortal = 1})
+				end
+			else
+				-- Grant interact privilege to active match players or practice range players
+				if not privs.interact or not privs.shout then
+					privs.interact = true
+					privs.shout = true
+					core.set_player_privs(name, privs)
+					core.chat_send_player(name, "SYSTEM: Privileges synchronized.")
+				end
+
+				-- Ensure interact_distance is restored for active combatants (and not spectators)
+				local props = player:get_properties()
+				if props.interact_distance ~= 10 then
+					player:set_properties({
+						interact_distance = 10,
+					})
+				end
 			end
 		end
 	end
@@ -1736,11 +1913,7 @@ core.register_chatcommand("lobby", {
 			if esports_core.practice and esports_core.practice.players[name] then
 				esports_core.practice.players[name] = nil
 				player:set_pos({x=0, y=1.5, z=0})
-				player:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1})
-				-- Reset inventory
-				local inv = player:get_inventory()
-				inv:set_list("main", {})
-				inv:set_list("ammo", {})
+				esports_core.reset_to_lobby(player)
 			end
 
 			esports_core.lobby.show(player)
@@ -1758,13 +1931,26 @@ core.register_chatcommand("l", {
 	end
 })
 
--- LIVE DYNAMIC REFRESH: Automatically update admin lobby when player counts change
+local refresh_timer = nil
+
 function esports_core.lobby.refresh_admins()
-	for _, player in ipairs(core.get_connected_players()) do
-		if core.check_player_privs(player:get_player_name(), {server = true}) then
-			esports_core.lobby.show(player)
-		end
+	if refresh_timer then
+		return
 	end
+
+	refresh_timer = core.after(0.2, function()
+		refresh_timer = nil
+		for _, player in ipairs(core.get_connected_players()) do
+			local pname = player:get_player_name()
+			if core.check_player_privs(pname, {server = true}) then
+				-- Only refresh if the admin is NOT actively playing the match (not on a side)
+				local side = esports_core.match.get_player_match_side(pname)
+				if not side then
+					esports_core.lobby.show(player)
+				end
+			end
+		end
+	end)
 end
 
 core.register_on_joinplayer(function(player)

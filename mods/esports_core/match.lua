@@ -12,6 +12,8 @@ esports_core.match.player_sides = {}  -- [name] = "red" or "blue" (Temporary ove
 esports_core.match.is_ffa = false
 esports_core.match.is_payload = false
 esports_core.match.is_domination = false
+esports_core.match.paused = false
+local paused_physics = {}
 
 function esports_core.match.get_ffa_leader()
 	local leader_name = "None"
@@ -64,7 +66,12 @@ core.register_globalstep(function(dtime)
 					for _, other in ipairs(all_players) do
 						local other_name = other:get_player_name()
 						if other_name ~= pname and not esports_core.is_spectator(other_name) then
-							if vector.distance(p_pos, other:get_pos()) < 15 then
+							local o_pos = other:get_pos()
+							local dx = p_pos.x - o_pos.x
+							local dy = p_pos.y - o_pos.y
+							local dz = p_pos.z - o_pos.z
+							-- Optimized: inline squared distance check avoids math.sqrt and function call overhead
+							if (dx*dx + dy*dy + dz*dz) < 225 then
 								show_name = true
 								break
 							end
@@ -85,7 +92,19 @@ core.register_globalstep(function(dtime)
 				local tag_text = string.format("%s (%d HP)", esports_core.get_nick(pname), hp)
 
 				local last = last_nametags[pname]
-				if not last or last.text ~= tag_text or last.a ~= a or last.r ~= r or last.g ~= g or last.b ~= b then
+				local needs_update = false
+				if not last then
+					needs_update = true
+				elseif last.a ~= a then
+					needs_update = true
+				elseif a == 255 then
+					-- Only send text/color updates if the nametag is actually visible
+					if last.text ~= tag_text or last.r ~= r or last.g ~= g or last.b ~= b then
+						needs_update = true
+					end
+				end
+
+				if needs_update then
 					p:set_nametag_attributes({
 						text = tag_text,
 						color = {a = a, r = r, g = g, b = b}
@@ -99,6 +118,11 @@ core.register_globalstep(function(dtime)
 	dtime_accumulator = dtime_accumulator + dtime
 	if dtime_accumulator < 1 then return end
 	dtime_accumulator = dtime_accumulator - 1
+
+	if esports_core.match.paused then
+		esports_core.hud.update_timer("MATCH PAUSED (Admin)", true)
+		return
+	end
 
 	local players = core.get_connected_players()
 	local num_players = #players
@@ -156,31 +180,50 @@ core.register_globalstep(function(dtime)
 		elseif esports_core.match.is_domination then
 			esports_core.dom.update(1.0)
 		elseif esports_core.match.is_spleef then
-			-- Void fall check for Spleef
+			-- Void fall check for Spleef & Survival Points
 			for _, p in ipairs(core.get_connected_players()) do
 				local pname = p:get_player_name()
 				if not esports_core.is_spectator(pname) then
 					local pos = p:get_pos()
-					if pos.y <= 2 then
+					local is_at_lobby_spawn = (math.abs(pos.x) < 0.1 and math.abs(pos.y - 1.5) < 0.1 and math.abs(pos.z) < 0.1)
+					if pos.y <= 2 and pos.y > -100 and not is_at_lobby_spawn then
+						if not esports_core.match.temp_spectators then
+							esports_core.match.temp_spectators = {}
+						end
+						esports_core.match.temp_spectators[pname] = true
 						p:set_hp(0)  -- Eliminate player
+					end
+
+					-- Increment survival time if not eliminated
+					if not (esports_core.match.temp_spectators and esports_core.match.temp_spectators[pname]) then
+						if not esports_core.match.player_stats[pname] then
+							esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0, spleef_survival = 0, spleef_blocks = 0}
+						end
+						if not esports_core.match.player_stats[pname].spleef_survival then
+							esports_core.match.player_stats[pname].spleef_survival = 0
+						end
+						esports_core.match.player_stats[pname].spleef_survival = esports_core.match.player_stats[pname].spleef_survival + 1
 					end
 				end
 			end
 
 			-- Check Spleef win condition
-			local red_alive = 0
-			local blue_alive = 0
+			local red_survivors = {}
+			local blue_survivors = {}
 			for _, p in ipairs(core.get_connected_players()) do
 				local pname = p:get_player_name()
-				if not esports_core.is_spectator(pname) then
+				if not esports_core.is_spectator(pname) and p:get_hp() > 0 and not (esports_core.match.temp_spectators and esports_core.match.temp_spectators[pname]) then
 					local side = esports_core.match.get_player_match_side(pname)
 					if side == "red" then
-						red_alive = red_alive + 1
+						table.insert(red_survivors, pname)
 					elseif side == "blue" then
-						blue_alive = blue_alive + 1
+						table.insert(blue_survivors, pname)
 					end
 				end
 			end
+
+			local red_alive = #red_survivors
+			local blue_alive = #blue_survivors
 
 			if red_alive == 0 and blue_alive == 0 then
 				esports_core.match.timer = 0
@@ -189,11 +232,23 @@ core.register_globalstep(function(dtime)
 				esports_core.teams.scores.red = 0
 				esports_core.match.timer = 0
 				core.chat_send_all(">> SPLEEF: All Red team members eliminated! BLUE TEAM WINS!")
+				for _, pname in ipairs(blue_survivors) do
+					if not esports_core.match.player_stats[pname] then
+						esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0, spleef_survival = 0, spleef_blocks = 0}
+					end
+					esports_core.match.player_stats[pname].spleef_winner = true
+				end
 			elseif blue_alive == 0 then
 				esports_core.teams.scores.red = 1
 				esports_core.teams.scores.blue = 0
 				esports_core.match.timer = 0
 				core.chat_send_all(">> SPLEEF: All Blue team members eliminated! RED TEAM WINS!")
+				for _, pname in ipairs(red_survivors) do
+					if not esports_core.match.player_stats[pname] then
+						esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0, spleef_survival = 0, spleef_blocks = 0}
+					end
+					esports_core.match.player_stats[pname].spleef_winner = true
+				end
 			end
 		end
 
@@ -208,6 +263,47 @@ core.register_globalstep(function(dtime)
 				esports_core.teams.scores.blue = 100
 				esports_core.teams.scores.red = 0
 				core.chat_send_all(">> PAYLOAD: Time limit reached! BLUE TEAM WINS!")
+			elseif esports_core.match.is_spleef then
+				-- Timer ran out, count survivors!
+				local red_survivors = {}
+				local blue_survivors = {}
+				for _, p in ipairs(core.get_connected_players()) do
+					local pname = p:get_player_name()
+					if not esports_core.is_spectator(pname) and p:get_hp() > 0 and not (esports_core.match.temp_spectators and esports_core.match.temp_spectators[pname]) then
+						local side = esports_core.match.get_player_match_side(pname)
+						if side == "red" then
+							table.insert(red_survivors, pname)
+						elseif side == "blue" then
+							table.insert(blue_survivors, pname)
+						end
+					end
+				end
+
+				if #red_survivors > #blue_survivors then
+					esports_core.teams.scores.red = 1
+					esports_core.teams.scores.blue = 0
+					core.chat_send_all(">> SPLEEF: Time limit reached! RED TEAM WINS (more survivors)!")
+					for _, pname in ipairs(red_survivors) do
+						if not esports_core.match.player_stats[pname] then
+							esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0, spleef_survival = 0, spleef_blocks = 0}
+						end
+						esports_core.match.player_stats[pname].spleef_winner = true
+					end
+				elseif #blue_survivors > #red_survivors then
+					esports_core.teams.scores.blue = 1
+					esports_core.teams.scores.red = 0
+					core.chat_send_all(">> SPLEEF: Time limit reached! BLUE TEAM WINS (more survivors)!")
+					for _, pname in ipairs(blue_survivors) do
+						if not esports_core.match.player_stats[pname] then
+							esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0, spleef_survival = 0, spleef_blocks = 0}
+						end
+						esports_core.match.player_stats[pname].spleef_winner = true
+					end
+				else
+					esports_core.teams.scores.red = 0
+					esports_core.teams.scores.blue = 0
+					core.chat_send_all(">> SPLEEF: Time limit reached! DRAW (equal survivors)!")
+				end
 			end
 			esports_core.match.state = "over"
 			esports_core.match.timer = 0  -- Reset for safety watchdog
@@ -365,13 +461,13 @@ core.register_globalstep(function(dtime)
 
 			for _, p in ipairs(core.get_connected_players()) do
 				local pname = p:get_player_name()
-				local stats = esports_core.match.player_stats[pname] or {kills=0, deaths=0, captures=0, hill_time=0, escort_time=0, dom_points=0}
+				local stats = esports_core.match.player_stats[pname] or {kills=0, deaths=0, captures=0, hill_time=0, escort_time=0, dom_points=0, spleef_survival=0, spleef_blocks=0}
 				local p_team = esports_core.teams.get_player_team(pname)
 
 				if p_team == "red" then
-					table.insert(red_list, {name=pname, k=stats.kills, d=stats.deaths, c=stats.captures, h=(stats.hill_time or 0), e=(stats.escort_time or 0), d_pts=(stats.dom_points or 0)})
+					table.insert(red_list, {name=pname, k=stats.kills, d=stats.deaths, c=stats.captures, h=(stats.hill_time or 0), e=(stats.escort_time or 0), d_pts=(stats.dom_points or 0), s_surv=(stats.spleef_survival or 0), s_blks=(stats.spleef_blocks or 0)})
 				elseif p_team == "blue" then
-					table.insert(blue_list, {name=pname, k=stats.kills, d=stats.deaths, c=stats.captures, h=(stats.hill_time or 0), e=(stats.escort_time or 0), d_pts=(stats.dom_points or 0)})
+					table.insert(blue_list, {name=pname, k=stats.kills, d=stats.deaths, c=stats.captures, h=(stats.hill_time or 0), e=(stats.escort_time or 0), d_pts=(stats.dom_points or 0), s_surv=(stats.spleef_survival or 0), s_blks=(stats.spleef_blocks or 0)})
 				end
 
 				-- Save stats to persistent database (PVP ONLY!)
@@ -406,6 +502,12 @@ core.register_globalstep(function(dtime)
 					score = math.floor((stats.escort_time or 0) / 10) + stats.kills
 				elseif esports_core.match.is_domination then
 					score = math.floor((stats.dom_points or 0) / 10) + stats.kills
+				elseif esports_core.match.is_spleef then
+					-- Points: 1 pt per sec survived + 2 pts per block broken + 50 bonus pts if winner
+					local surv_pts = stats.spleef_survival or 0
+					local block_pts = (stats.spleef_blocks or 0) * 2
+					local win_pts = stats.spleef_winner and 50 or 0
+					score = surv_pts + block_pts + win_pts
 				end
 
 				if score > mvp.kills and not esports_core.is_spectator(pname) then
@@ -414,6 +516,19 @@ core.register_globalstep(function(dtime)
 
 				-- Freeze players for Outro
 				p:set_physics_override({speed = 0, jump = 0})
+			end
+
+			-- Spleef MVP Hard Override: Guarantee the last player standing (winner) is MVP
+			if esports_core.match.is_spleef then
+				for pname, stats in pairs(esports_core.match.player_stats) do
+					if stats.spleef_winner and not esports_core.is_spectator(pname) then
+						local surv_pts = stats.spleef_survival or 0
+						local block_pts = (stats.spleef_blocks or 0) * 2
+						local win_pts = 50
+						mvp = {name = pname, kills = surv_pts + block_pts + win_pts}
+						break
+					end
+				end
 			end
 
 			-- Record completed match to History log
@@ -457,6 +572,10 @@ core.register_globalstep(function(dtime)
 					if a.e ~= b.e then return a.e > b.e end
 				elseif esports_core.match.is_domination then
 					if a.d_pts ~= b.d_pts then return a.d_pts > b.d_pts end
+				elseif esports_core.match.is_spleef then
+					local score_a = (a.s_surv or 0) + (a.s_blks or 0) * 2
+					local score_b = (b.s_surv or 0) + (b.s_blks or 0) * 2
+					if score_a ~= score_b then return score_a > score_b end
 				end
 				return a.k > b.k
 			end
@@ -473,12 +592,24 @@ core.register_globalstep(function(dtime)
 				is_koth = esports_core.match.is_koth,
 				is_payload = esports_core.match.is_payload,
 				is_domination = esports_core.match.is_domination,
+				is_spleef = esports_core.match.is_spleef,
 				win_team = win_team_id,
 				red_team = r_name,
 				blue_team = b_name,
 				red_roster = red_list,
 				blue_roster = blue_list
 			}
+
+			-- Restore temporary spectators before showing outro so init_hud does not wipe it
+			if esports_core.match.temp_spectators then
+				for pname, _ in pairs(esports_core.match.temp_spectators) do
+					local p = core.get_player_by_name(pname)
+					if p then
+						esports_core.set_spectator(p, false)
+					end
+				end
+				esports_core.match.temp_spectators = nil
+			end
 
 			for _, player in ipairs(core.get_connected_players()) do
 				esports_core.hud.show_outro(player, outro_data)
@@ -491,26 +622,15 @@ core.register_globalstep(function(dtime)
 				esports_core.bots.clear_all()
 			end
 
-			-- Restore temporary spectators
-			if esports_core.match.temp_spectators then
-				for pname, _ in pairs(esports_core.match.temp_spectators) do
-					local p = core.get_player_by_name(pname)
-					if p then
-						esports_core.set_spectator(p, false)
-					end
-				end
-				esports_core.match.temp_spectators = nil
-			end
-
 			-- Reset Arena to default lobby layout at the end of the match
 			if esports_mapgen and esports_mapgen.reset_island then
 				esports_mapgen.reset_island("lobby")
 			end
 
-			-- Teleport all players back to the lobby center spawn to prevent falling into the void
+			-- Teleport all players back to the lobby center spawn and lock them
 			for _, p in ipairs(core.get_connected_players()) do
 				p:set_pos({x=0, y=1.5, z=0})
-				p:set_physics_override({speed = 0, jump = 0, gravity = 1})
+				esports_core.reset_to_lobby(p)
 			end
 
 			-- Immediately clear participants to lock back to lobby
@@ -528,10 +648,7 @@ core.register_globalstep(function(dtime)
 			for _, player in ipairs(core.get_connected_players()) do
 				esports_core.hud.hide_outro(player)
 				esports_core.lobby.show(player)
-				-- Ensure lobby physics are reset (Frozen until match starts)
-				if not core.check_player_privs(player:get_player_name(), {server=true}) then
-					player:set_physics_override({speed = 0, jump = 0, gravity = 1})
-				end
+				esports_core.reset_to_lobby(player)
 			end
 
 			core.chat_send_all("Idle timeout: Returning to lobby.")
@@ -541,6 +658,17 @@ end)
 
 core.register_on_punchplayer(function(player, hitter, time_from_last_punch, tool_capabilities, dir, damage)
 	if not player or not hitter then return end
+	local pname = player:get_player_name()
+	if esports_core.is_spectator(pname) or (esports_core.is_in_lobby and esports_core.is_in_lobby(pname)) then return true end
+	if hitter and hitter:is_player() then
+		local hname = hitter:get_player_name()
+		if esports_core.is_spectator(hname) or (esports_core.is_in_lobby and esports_core.is_in_lobby(hname)) then
+			return true  -- Block damage/punch
+		end
+	end
+	if esports_core.match.paused then
+		return true -- Block damage when paused
+	end
 
 	if esports_core.match.state == "active" then
 		-- Melee Damage Toggle Check
@@ -635,6 +763,13 @@ core.register_on_dieplayer(function(player, reason)
 	-- Broadcast kill message
 	local victim = player:get_player_name()
 	esports_core.match.add_death(victim)
+
+	if esports_core.match.is_spleef then
+		if not esports_core.match.temp_spectators then
+			esports_core.match.temp_spectators = {}
+		end
+		esports_core.match.temp_spectators[victim] = true
+	end
 
 	local killer_name = nil
 	local k_team = nil
@@ -759,6 +894,22 @@ function esports_core.match.add_capture(name)
 end
 
 
+function esports_core.match.add_spleef_block(name)
+	if not esports_core.match.player_stats[name] then
+		esports_core.match.player_stats[name] = {kills = 0, deaths = 0, captures = 0, spleef_survival = 0, spleef_blocks = 0}
+	end
+	if not esports_core.match.player_stats[name].spleef_blocks then
+		esports_core.match.player_stats[name].spleef_blocks = 0
+	end
+	esports_core.match.player_stats[name].spleef_blocks = esports_core.match.player_stats[name].spleef_blocks + 1
+
+	if esports_core.hud.update_scoreboard then
+		esports_core.hud.update_scoreboard()
+	end
+end
+
+
+
 -- Helper to check if a coordinate mathematically lands on the selected island layout
 function esports_core.is_coordinate_on_island(x, z)
 	local layout = esports_core.match.current_map_layout or "circular"
@@ -804,30 +955,96 @@ end
 
 -- Helper to find a safe ground position within the storm and on the island
 function esports_core.get_safe_spawn_pos(pname_or_side, ignore_proximity)
-	if esports_core.match.is_spleef then
-		local side = pname_or_side
-		if side and side ~= "red" and side ~= "blue" then
-			side = esports_core.match.get_player_match_side(pname_or_side)
-		end
-		if side == "red" then
-			return {x = -20 + math.random(5), y = 6, z = -20 + math.random(40)}
-		elseif side == "blue" then
-			return {x = 20 - math.random(5), y = 6, z = -20 + math.random(40)}
-		else
-			return {x = math.random(-20, 20), y = 6, z = math.random(-20, 20)}
-		end
-	end
-
-	local storm_center = esports_storm.center
-	local storm_radius = esports_storm.current_radius
-	local scale = esports_core.match.current_map_scale or 1.0
-
 	local side = pname_or_side
 	local my_name = nil
 	if side and side ~= "red" and side ~= "blue" then
 		my_name = pname_or_side
 		side = esports_core.match.get_player_match_side(my_name)
 	end
+
+	-- Prune stale recent spawns (older than 3.0 seconds)
+	local now = os.clock()
+	if not esports_core.recent_spawns then
+		esports_core.recent_spawns = {}
+	end
+	for i = #esports_core.recent_spawns, 1, -1 do
+		if now - esports_core.recent_spawns[i].time > 3.0 then
+			table.remove(esports_core.recent_spawns, i)
+		end
+	end
+
+	if esports_core.match.is_spleef then
+		local lvls = esports_core.match.spleef_levels or 1
+		local spawn_y = 5.5 + (lvls - 1) * 4
+
+		local attempts = 0
+		local final_pos
+		while attempts < 50 do
+			local candidate
+			if side == "red" then
+				candidate = {x = -20 + math.random(5), y = spawn_y, z = -20 + math.random(40)}
+			elseif side == "blue" then
+				candidate = {x = 20 - math.random(5), y = spawn_y, z = -20 + math.random(40)}
+			else
+				candidate = {x = math.random(-20, 20), y = spawn_y, z = math.random(-20, 20)}
+			end
+
+			-- Collision check: Ensure we do not spawn inside another player or bot
+			-- Relax collision distance if struggling
+			local col_dist = (attempts > 40) and 1.0 or 2.0
+			local too_close = false
+			local nearby = core.get_objects_inside_radius(candidate, col_dist)
+			for _, obj in ipairs(nearby) do
+				if obj:is_player() then
+					local other_name = obj:get_player_name()
+					if other_name ~= my_name and not esports_core.is_spectator(other_name) then
+						too_close = true
+						break
+					end
+				else
+					local ent = obj:get_luaentity()
+					if ent and ent.name == "esports_core:bot" then
+						too_close = true
+						break
+					end
+				end
+			end
+
+			-- Check recently chosen spawn positions
+			if not too_close then
+				for _, rs in ipairs(esports_core.recent_spawns) do
+					if vector.distance(candidate, rs.pos) < col_dist then
+						too_close = true
+						break
+					end
+				end
+			end
+
+			if not too_close then
+				final_pos = candidate
+				break
+			end
+			attempts = attempts + 1
+		end
+
+		if not final_pos then
+			-- Fallback
+			if side == "red" then
+				final_pos = {x = -20 + math.random(5), y = spawn_y, z = -20 + math.random(40)}
+			elseif side == "blue" then
+				final_pos = {x = 20 - math.random(5), y = spawn_y, z = -20 + math.random(40)}
+			else
+				final_pos = {x = math.random(-20, 20), y = spawn_y, z = math.random(-20, 20)}
+			end
+		end
+
+		table.insert(esports_core.recent_spawns, {pos = final_pos, time = now})
+		return final_pos
+	end
+
+	local storm_center = esports_storm.center
+	local storm_radius = esports_storm.current_radius
+	local scale = esports_core.match.current_map_scale or 1.0
 
 	local is_base_spawn = ((esports_core.match.is_ctf or esports_core.match.is_payload or esports_core.match.is_domination) and side and esports_core.ctf.bases[side])
 
@@ -855,58 +1072,101 @@ function esports_core.get_safe_spawn_pos(pname_or_side, ignore_proximity)
 			-- Anti-Camp: Check for nearby hostiles (Players and Bots)
 			local enemy_nearby = false
 			if not ignore_proximity then
-				local safety_dist_enemy = is_base_spawn and 12 or 30  -- Reduced at bases to allow defense
-				local safety_dist_team = is_base_spawn and 4 or 20  -- Reduced at bases to allow clustering
-
-				-- Check Player positions
-				for _, alt_p in ipairs(core.get_connected_players()) do
-					local other_name = alt_p:get_player_name()
-					if other_name ~= my_name and not esports_core.is_spectator(other_name) then
-						local other_pos = alt_p:get_pos()
-						local d = vector.distance({x=target_x, y=0, z=target_z}, {x=other_pos.x, y=0, z=other_pos.z})
-
-						local other_side = esports_core.match.get_player_match_side(other_name)
-						local is_enemy = (side and other_side and side ~= other_side)
-						local thresh = is_enemy and safety_dist_enemy or safety_dist_team
-
-						if d < thresh then
-							enemy_nearby = true
-							break
-						end
-					end
+				-- Dynamically reduce safety margins if we are struggling to find a spot (small storm/map)
+				local relaxation = 1.0
+				if attempts > 30 then
+					relaxation = 0.0 -- Ignore hostile proximity checks entirely, only enforce collision checks
+				elseif attempts > 15 then
+					relaxation = 0.5 -- Halve safety distances
 				end
 
-				-- Check Bot positions (using object scan)
-				if not enemy_nearby then
-					local nearby_objects = core.get_objects_inside_radius({x=target_x, y=0, z=target_z}, safety_dist_enemy)
-					for _, obj in ipairs(nearby_objects) do
-						local ent = obj:get_luaentity()
-						if ent and ent.name == "esports_core:bot" then
-							local other_pos = obj:get_pos()
-							local d_bot = vector.distance({x=target_x, y=0, z=target_z}, {x=other_pos.x, y=0, z=other_pos.z})
+				if relaxation > 0 then
+					local safety_dist_enemy = (is_base_spawn and 12 or 30) * relaxation
+					local safety_dist_team = (is_base_spawn and 4 or 20) * relaxation
 
-							-- If we are a player on blue, bots (red) are enemies
-							if side == "blue" and d_bot < safety_dist_enemy then
-								 enemy_nearby = true
-								 break
-							end
-							-- If we are a bot or a player on red, bots are teammates - check small radius
-							if (not side or side == "red") and d_bot < safety_dist_team then
+					-- Check Player positions
+					for _, alt_p in ipairs(core.get_connected_players()) do
+						local other_name = alt_p:get_player_name()
+						if other_name ~= my_name and not esports_core.is_spectator(other_name) then
+							local other_pos = alt_p:get_pos()
+							local d = vector.distance({x=target_x, y=0, z=target_z}, {x=other_pos.x, y=0, z=other_pos.z})
+
+							local other_side = esports_core.match.get_player_match_side(other_name)
+							local is_enemy = (side and other_side and side ~= other_side)
+							local thresh = is_enemy and safety_dist_enemy or safety_dist_team
+
+							if d < thresh then
 								enemy_nearby = true
 								break
+							end
+						end
+					end
+
+					-- Check Bot positions (using object scan)
+					if not enemy_nearby then
+						local nearby_objects = core.get_objects_inside_radius({x=target_x, y=0, z=target_z}, safety_dist_enemy)
+						for _, obj in ipairs(nearby_objects) do
+							local ent = obj:get_luaentity()
+							if ent and ent.name == "esports_core:bot" then
+								local other_pos = obj:get_pos()
+								local d_bot = vector.distance({x=target_x, y=0, z=target_z}, {x=other_pos.x, y=0, z=other_pos.z})
+
+								-- If we are a player on blue, bots (red) are enemies
+								if side == "blue" and d_bot < safety_dist_enemy then
+									 enemy_nearby = true
+									 break
+								end
+								-- If we are a bot or a player on red, bots are teammates - check small radius
+								if (not side or side == "red") and d_bot < safety_dist_team then
+									enemy_nearby = true
+									break
+								end
 							end
 						end
 					end
 				end
 			end
 
-			if not enemy_nearby then
+			-- ALWAYS avoid spawning directly inside any other player/bot/recent spawn (min 2.0 meters)
+			-- But relax to 1.0 meters if we are really struggling (attempts > 40)
+			local col_dist = (attempts > 40) and 1.0 or 2.0
+			local too_close = false
+			local candidate_pos = {x = target_x, y = 1.5, z = target_z}
+			local nearby = core.get_objects_inside_radius(candidate_pos, col_dist)
+			for _, obj in ipairs(nearby) do
+				if obj:is_player() then
+					local other_name = obj:get_player_name()
+					if other_name ~= my_name and not esports_core.is_spectator(other_name) then
+						too_close = true
+						break
+					end
+				else
+					local ent = obj:get_luaentity()
+					if ent and ent.name == "esports_core:bot" then
+						too_close = true
+						break
+					end
+				end
+			end
+
+			-- Check recently chosen spawn positions
+			if not too_close then
+				for _, rs in ipairs(esports_core.recent_spawns) do
+					if vector.distance(candidate_pos, rs.pos) < col_dist then
+						too_close = true
+						break
+					end
+				end
+			end
+
+			if not enemy_nearby and not too_close then
 				-- Emerge the area around target spawn to load terrain chunks
 				core.emerge_area(
 					{x = math.floor(target_x - 10), y = -15, z = math.floor(target_z - 10)},
 					{x = math.floor(target_x + 10), y = 5, z = math.floor(target_z + 10)}
 				)
-				return {x=target_x, y=1.5, z=target_z}
+				table.insert(esports_core.recent_spawns, {pos = candidate_pos, time = now})
+				return candidate_pos
 			end
 		end
 		attempts = attempts + 1
@@ -916,12 +1176,19 @@ function esports_core.get_safe_spawn_pos(pname_or_side, ignore_proximity)
 	if is_base_spawn then
 		local base = esports_core.ctf.bases[side]
 		local offset_range = 6 * scale
-		return {x=base.x + (math.random() * offset_range - offset_range / 2), y=base.y + 1.5, z=base.z + (math.random() * offset_range - offset_range / 2)}
+		local final_pos = {x=base.x + (math.random() * offset_range - offset_range / 2), y=base.y + 1.5, z=base.z + (math.random() * offset_range - offset_range / 2)}
+		table.insert(esports_core.recent_spawns, {pos = final_pos, time = now})
+		return final_pos
 	end
 
-	-- Emerge fallback center region
-	core.emerge_area({x = -10, y = -15, z = -10}, {x = 10, y = 5, z = 10})
-	return {x=0, y=1.5, z=0}
+	-- Emerge fallback region near storm center
+	core.emerge_area(
+		{x = math.floor(storm_center.x - 10), y = -15, z = math.floor(storm_center.z - 10)},
+		{x = math.floor(storm_center.x + 10), y = 5, z = math.floor(storm_center.z + 10)}
+	)
+	local final_pos = {x = storm_center.x + (math.random() * 4 - 2), y = 1.5, z = storm_center.z + (math.random() * 4 - 2)}
+	table.insert(esports_core.recent_spawns, {pos = final_pos, time = now})
+	return final_pos
 end
 
 -- Resets a player to a clean match state
@@ -1001,6 +1268,10 @@ end
 
 -- Returns "red", "blue", or nil based on whether the player is in an active match team
 function esports_core.match.get_player_match_side(name)
+	if esports_core.is_spectator(name) then
+		return nil
+	end
+
 	-- Check for temporary PVE/Join overrides first
 	if esports_core.match.player_sides and esports_core.match.player_sides[name] then
 		return esports_core.match.player_sides[name]
@@ -1027,6 +1298,50 @@ function esports_core.match.get_player_match_side(name)
 	return nil
 end
 
+-- Dynamically adds a player to the ongoing match if they are now on one of the competing teams
+function esports_core.match.join_player_to_ongoing(player)
+	local pname = player:get_player_name()
+	local side = esports_core.match.get_player_match_side(pname)
+	local match_active = (esports_core.match.state == "active" or esports_core.match.state == "countdown")
+
+	if not match_active or not side or esports_core.is_spectator(pname) then
+		return
+	end
+
+	-- Add to teams players list and match sides tracker
+	esports_core.match.player_sides[pname] = side
+	esports_core.teams.players[pname] = side
+	esports_core.teams.update_nametag(player)
+
+	-- Initialize player stats if not present
+	if not esports_core.match.player_stats[pname] then
+		esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0}
+	end
+
+	-- Full Match Setup (Inventory, Physics, HUD)
+	esports_core.reset_player(player, esports_core.match.is_debug)
+
+	-- Teleport to a safe spawn position for their team
+	local target_pos = esports_core.get_safe_spawn_pos(side, true)
+	player:set_pos(target_pos)
+
+	-- If the match is still in countdown or paused, freeze their physics
+	if esports_core.match.state == "countdown" or esports_core.match.paused then
+		player:set_physics_override({speed = 0, jump = 0, gravity = 0})
+	end
+
+	esports_core.hud.init_hud(player)
+
+	-- Close lobby and hide blackout
+	if esports_core.lobby and esports_core.lobby.blackout_hide then
+		esports_core.lobby.blackout_hide(player)
+	end
+	core.close_formspec(pname, "esports_core:lobby")
+
+	core.chat_send_player(pname, "LUANTI ESPORTS: Welcome to the match! Team " .. side:upper() .. " is in combat!")
+	core.chat_send_all("LUANTI ESPORTS: " .. pname .. " has joined team " .. side:upper() .. " mid-match!")
+end
+
 core.register_on_joinplayer(function(player)
 	local pname = player:get_player_name()
 
@@ -1039,12 +1354,24 @@ core.register_on_joinplayer(function(player)
 
 	-- Detect mid-game join for participants
 	if match_active then
+		if esports_core.match.is_spleef and esports_core.match.temp_spectators and esports_core.match.temp_spectators[pname] then
+			esports_core.set_spectator(player, true)
+			local lvls = esports_core.match.spleef_levels or 1
+			local spec_y = 5 + lvls * 4
+			player:set_pos({x=0, y=spec_y, z=0})
+			core.chat_send_player(pname, "LUANTI ESPORTS: You have already been eliminated in this Spleef match.")
+			return
+		end
+
 		if side and not esports_core.is_spectator(pname) then
 			-- Rejoin fight immediately
 			esports_core.teams.players[pname] = side
 			esports_core.teams.update_nametag(player)
 			esports_core.reset_player(player, false)
 			player:set_pos(esports_core.get_safe_spawn_pos(pname))
+			if esports_core.match.paused then
+				player:set_physics_override({speed = 0, jump = 0, gravity = 0})
+			end
 			core.chat_send_player(pname, "LUANTI ESPORTS: Welcome back. Team " .. side:upper() .. " is in combat!")
 			return  -- Skip Lobby
 		end
@@ -1100,7 +1427,9 @@ core.register_on_respawnplayer(function(player)
 			end
 			esports_core.match.temp_spectators[pname] = true
 			esports_core.set_spectator(player, true)
-			player:set_pos({x=0, y=8, z=0})
+			local lvls = esports_core.match.spleef_levels or 1
+			local spec_y = 5 + lvls * 4
+			player:set_pos({x=0, y=spec_y, z=0})
 			return true
 		end
 
@@ -1146,7 +1475,8 @@ end)
 
 esports_core.match.current_map_scale = 1.0
 
-function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_count, bot_diff, game_mode, map_size, friendly_fire, melee_damage, map_layout)
+function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_count, bot_diff, game_mode, map_size, friendly_fire, melee_damage, map_layout, spleef_levels)
+	esports_core.match.spleef_levels = tonumber(spleef_levels) or 1
 	-- Freeze all players first to prevent them from falling into the void while the map is generating/resetting
 	for _, p in ipairs(core.get_connected_players()) do
 		if not esports_core.is_spectator(p:get_player_name()) then
@@ -1315,6 +1645,8 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 	esports_core.match.is_debug = false
 	esports_core.match.timer = 6
 	esports_core.match.match_duration = tonumber(dur_secs) or 300
+	esports_core.match.paused = false
+	paused_physics = {}
 
 	-- Clear old assignments
 	esports_core.teams.players = {}
@@ -1354,7 +1686,7 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 
 	if esports_core.match.is_spleef then
 		if esports_mapgen and esports_mapgen.setup_spleef_arena then
-			esports_mapgen.setup_spleef_arena()
+			esports_mapgen.setup_spleef_arena(esports_core.match.spleef_levels)
 		end
 	end
 
@@ -1409,20 +1741,23 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 				esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0}
 				esports_core.reset_player(p, esports_core.match.is_debug)
 				
-				-- Purge client chunk cache by sending the player to the far void first
-				p:set_pos({x=0, y=-2000, z=0})
+				-- Teleport directly to safe spawn position
 				local target_pos = esports_core.get_safe_spawn_pos("ffa", true)
-				core.after(0.5, function()
-					p:set_pos(target_pos)
-				end)
+				p:set_pos(target_pos)
+				p:set_physics_override({speed = 0, jump = 0, gravity = 0})
 
 				esports_core.hud.init_hud(p)
 
-				-- Close lobby and hide blackout on match start
-				if esports_core.lobby and esports_core.lobby.blackout_hide then
-					esports_core.lobby.blackout_hide(p)
-				end
-				core.close_formspec(pname, "esports_core:lobby")
+				-- Close lobby and hide blackout after a short delay to allow chunk loading
+				core.after(0.5, function()
+					local player_obj = core.get_player_by_name(pname)
+					if player_obj then
+						if esports_core.lobby and esports_core.lobby.blackout_hide then
+							esports_core.lobby.blackout_hide(player_obj)
+						end
+						core.close_formspec(pname, "esports_core:lobby")
+					end
+				end)
 			elseif my_team == t1 or my_team == t2 then
 				local side
 				if is_pve then
@@ -1435,20 +1770,23 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 				-- Full Match Setup (Inventory, Physics, HUD)
 				esports_core.reset_player(p, esports_core.match.is_debug)
 				
-				-- Purge client chunk cache by sending the player to the far void first
-				p:set_pos({x=0, y=-2000, z=0})
+				-- Teleport directly to safe spawn position
 				local target_pos = esports_core.get_safe_spawn_pos(side, true)
-				core.after(0.5, function()
-					p:set_pos(target_pos)
-				end)
+				p:set_pos(target_pos)
+				p:set_physics_override({speed = 0, jump = 0, gravity = 0})
 
 				esports_core.hud.init_hud(p)
 
-				-- Close lobby and hide blackout on match start
-				if esports_core.lobby and esports_core.lobby.blackout_hide then
-					esports_core.lobby.blackout_hide(p)
-				end
-				core.close_formspec(pname, "esports_core:lobby")
+				-- Close lobby and hide blackout after a short delay to allow chunk loading
+				core.after(0.5, function()
+					local player_obj = core.get_player_by_name(pname)
+					if player_obj then
+						if esports_core.lobby and esports_core.lobby.blackout_hide then
+							esports_core.lobby.blackout_hide(player_obj)
+						end
+						core.close_formspec(pname, "esports_core:lobby")
+					end
+				end)
 			end
 		end
 
@@ -1586,10 +1924,77 @@ core.register_chatcommand("ffamatch", {
 -- PROTECT SPECTATORS FROM PUNCHES
 core.register_on_punchplayer(function(player, hitter, time_from_last_punch, tool_capabilities, dir, damage)
 	local pname = player:get_player_name()
-	if esports_core.is_spectator(pname) then return true end
-	if hitter and hitter:is_player() and esports_core.is_spectator(hitter:get_player_name()) then
-		return true  -- Block damage
+	if esports_core.is_spectator(pname) or (esports_core.is_in_lobby and esports_core.is_in_lobby(pname)) then return true end
+	if hitter and hitter:is_player() then
+		local hname = hitter:get_player_name()
+		if esports_core.is_spectator(hname) or (esports_core.is_in_lobby and esports_core.is_in_lobby(hname)) then
+			return true  -- Block damage
+		end
 	end
 end)
+
+function esports_core.match.pause()
+	if esports_core.match.state ~= "active" and esports_core.match.state ~= "countdown" then
+		return false, "Cannot pause: No active match."
+	end
+	if esports_core.match.paused then
+		return false, "Match is already paused."
+	end
+
+	esports_core.match.paused = true
+	paused_physics = {}
+
+	for _, p in ipairs(core.get_connected_players()) do
+		local pname = p:get_player_name()
+		if not esports_core.is_spectator(pname) then
+			paused_physics[pname] = p:get_physics_override()
+			p:set_physics_override({speed = 0, jump = 0, gravity = 0})
+		end
+	end
+
+	core.chat_send_all("⚠️ MATCH PAUSED BY ADMINISTRATOR!")
+	return true, "Match paused."
+end
+
+function esports_core.match.resume()
+	if not esports_core.match.paused then
+		return false, "Match is not paused."
+	end
+
+	esports_core.match.paused = false
+
+	for _, p in ipairs(core.get_connected_players()) do
+		local pname = p:get_player_name()
+		if not esports_core.is_spectator(pname) then
+			local phys = paused_physics[pname]
+			if phys then
+				p:set_physics_override(phys)
+			else
+				-- Fallback to default match physics
+				p:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1.0})
+			end
+		end
+	end
+	paused_physics = {}
+
+	core.chat_send_all("▶️ MATCH RESUMED!")
+	return true, "Match resumed."
+end
+
+core.register_chatcommand("pause", {
+	description = "Pause the current match (Admin only)",
+	privs = {server = true},
+	func = function(name, param)
+		return esports_core.match.pause()
+	end,
+})
+
+core.register_chatcommand("resume", {
+	description = "Resume the current match (Admin only)",
+	privs = {server = true},
+	func = function(name, param)
+		return esports_core.match.resume()
+	end,
+})
 
 

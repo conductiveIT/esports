@@ -137,64 +137,25 @@ core.register_globalstep(function(dtime)
 
 		-- Use optimized count instead of find_nodes_in_area
 		if esports_loot.box_count < dynamic_max then
-			-- Try to find a spawn spot within the Storm's Safe Zone
+			-- Try to find a spawn spot within the Storm's Safe Zone using pre-calculated grass coordinates
 			local storm_center = esports_storm.center
 			local storm_radius = esports_storm.current_radius
+			local spots = esports_mapgen.valid_crate_spots or {}
+			local num_spots = #spots
 
-			for i = 1, 15 do  -- increased attempts to find valid island ground
-				local angle = math.random() * math.pi * 2
-				local dist = math.random() * (storm_radius * 0.9)  -- Spawn within 90% of radius to be safe
-				local x = math.floor(storm_center.x + math.cos(angle) * dist + 0.5)
-				local z = math.floor(storm_center.z + math.sin(angle) * dist + 0.5)
-
-				-- Check if within active map layout geometry boundary
-				local on_island = false
-				local layout = (esports_core and esports_core.match and esports_core.match.current_map_layout) or "circular"
-				local scale = (esports_core and esports_core.match and esports_core.match.current_map_scale) or 1.0
-
-				if layout == "lobby" then
-					on_island = (x*x + z*z <= 15*15)
-				elseif layout == "circular" then
-					on_island = (x*x + z*z <= 100*100 * scale*scale)
-				elseif layout == "choke_point" then
-					local base_r = 30 * scale
-					local base_r2 = base_r * base_r
-					local dist_red2 = (x - 80*scale)*(x - 80*scale) + z*z
-					local dist_blue2 = (x + 80*scale)*(x + 80*scale) + z*z
-					local is_bridge = (x >= -60*scale and x <= 60*scale) and (z >= -8*scale and z <= 8*scale)
-					on_island = (dist_red2 <= base_r2) or (dist_blue2 <= base_r2) or is_bridge
-				elseif layout == "three_lanes" then
-					local base_r = 30 * scale
-					local base_r2 = base_r * base_r
-					local dist_red2 = (x - 80*scale)*(x - 80*scale) + z*z
-					local dist_blue2 = (x + 80*scale)*(x + 80*scale) + z*z
-					local mid_bridge = (x >= -60*scale and x <= 60*scale) and (z >= -5*scale and z <= 5*scale)
-					local top_bridge = (x >= -60*scale and x <= 60*scale) and (z >= 25*scale - 4*scale and z <= 25*scale + 4*scale)
-					local btm_bridge = (x >= -60*scale and x <= 60*scale) and (z >= -25*scale - 4*scale and z <= -25*scale + 4*scale)
-					on_island = (dist_red2 <= base_r2) or (dist_blue2 <= base_r2) or mid_bridge or top_bridge or btm_bridge
-				elseif layout == "split_center" then
-					local base_r = 25 * scale
-					local base_r2 = base_r * base_r
-					local dist_red2 = (x - 80*scale)*(x - 80*scale) + z*z
-					local dist_blue2 = (x + 80*scale)*(x + 80*scale) + z*z
-
-					local center_r = 25 * scale
-					local center_r2 = center_r * center_r
-					local dist_center2 = x*x + z*z
-
-					local left_bridge = (x >= -60*scale and x <= -20*scale) and (z >= -4*scale and z <= 4*scale)
-					local right_bridge = (x >= 20*scale and x <= 60*scale) and (z >= -4*scale and z <= 4*scale)
-					on_island = (dist_red2 <= base_r2) or (dist_blue2 <= base_r2) or (dist_center2 <= center_r2) or left_bridge or right_bridge
-				end
-
-				if on_island then
-					local pos = {x=x, y=1, z=z}
-					local node_below = core.get_node({x=x, y=0, z=z}).name
-					local node_at = core.get_node(pos).name
-
-					if node_below == "esports_mapgen:grass" and node_at == "air" then
-						core.set_node(pos, {name = "esports_loot:box"})
-						break
+			if num_spots > 0 then
+				local safe_r = storm_radius * 0.9
+				local safe_r2 = safe_r * safe_r
+				for attempt = 1, 30 do
+					local spot = spots[math.random(num_spots)]
+					local dx = spot.x - storm_center.x
+					local dz = spot.z - storm_center.z
+					if dx*dx + dz*dz <= safe_r2 then
+						local node_at = core.get_node(spot).name
+						if node_at == "air" then
+							core.set_node(spot, {name = "esports_loot:box"})
+							break
+						end
 					end
 				end
 			end

@@ -59,47 +59,109 @@ function esports_storm.randomize_center()
 	core.log("action", "[TDM Storm] Randomized center to: " .. core.pos_to_string(esports_storm.center))
 end
 
--- Draw a highly-optimized circular storm using spaced 2x20x2 columns
+-- Draw a highly-optimized circular storm using spaced 2x20x2 columns in bulk VoxelManip
 local function draw_circular_storm(center, R)
 	local old_nodes = esports_storm.placed_nodes or {}
 
-	-- 1. Clear old nodes
-	for _, pos in ipairs(old_nodes) do
-		local node = core.get_node(pos)
-		if node.name == "esports_storm:gas_column" or node.name == "esports_storm:gas_wall" then
-			core.set_node(pos, {name = "air"})
-		end
-	end
-	esports_storm.placed_nodes = {}
-
-	-- If match is not active, don't draw new ones
-	if esports_core.match.state ~= "active" then
+	-- If match is not active, and we have no old nodes to clear, do nothing
+	if esports_core.match.state ~= "active" and #old_nodes == 0 then
 		return
 	end
 
+	-- Calculate the new column positions
 	local new_nodes = {}
-	local Y = 1  -- Place at default ground/sea level
-
-	-- Calculate number of columns needed based on circumference
-	-- We place a column roughly every 2 meters for a visually continuous circle
-	local circumference = 2 * math.pi * R
-	local num_columns = math.max(8, math.floor(circumference / 2.0))
-
+	local Y = 1
 	local seen = {}
 
-	for i = 1, num_columns do
-		local angle = (i / num_columns) * math.pi * 2
-		local px = math.floor(center.x + math.cos(angle) * R + 0.5)
-		local pz = math.floor(center.z + math.sin(angle) * R + 0.5)
+	if esports_core.match.state == "active" then
+		local circumference = 2 * math.pi * R
+		local num_columns = math.max(8, math.floor(circumference / 2.0))
 
-		local hash = px .. "," .. pz
-		if not seen[hash] then
-			seen[hash] = true
-			local pos = {x = px, y = Y, z = pz}
-			core.set_node(pos, {name = "esports_storm:gas_column"})
-			table.insert(new_nodes, pos)
+		for i = 1, num_columns do
+			local angle = (i / num_columns) * math.pi * 2
+			local px = math.floor(center.x + math.cos(angle) * R + 0.5)
+			local pz = math.floor(center.z + math.sin(angle) * R + 0.5)
+
+			local hash = px .. "," .. pz
+			if not seen[hash] then
+				seen[hash] = true
+				table.insert(new_nodes, {x = px, y = Y, z = pz})
+			end
 		end
 	end
+
+	-- If both old_nodes and new_nodes are empty, nothing to do
+	if #old_nodes == 0 and #new_nodes == 0 then
+		return
+	end
+
+	-- OPTIMIZATION: If new storm column coordinates are identical to old coordinates,
+	-- skip expensive VoxelManip read/write entirely.
+	if #new_nodes == #old_nodes then
+		local identical = true
+		for i = 1, #new_nodes do
+			local n = new_nodes[i]
+			local o = old_nodes[i]
+			if n.x ~= o.x or n.z ~= o.z then
+				identical = false
+				break
+			end
+		end
+		if identical then
+			return
+		end
+	end
+
+	-- Find the bounding box containing all old and new nodes to manipulate
+	local minx, maxx = 0, 0
+	local minz, maxz = 0, 0
+	local first = true
+
+	local function expand_bounds(pos)
+		if first then
+			minx, maxx = pos.x, pos.x
+			minz, maxz = pos.z, pos.z
+			first = false
+		else
+			if pos.x < minx then minx = pos.x end
+			if pos.x > maxx then maxx = pos.x end
+			if pos.z < minz then minz = pos.z end
+			if pos.z > maxz then maxz = pos.z end
+		end
+	end
+
+	for _, pos in ipairs(old_nodes) do expand_bounds(pos) end
+	for _, pos in ipairs(new_nodes) do expand_bounds(pos) end
+
+	-- Add a 1-block safety buffer to bounds
+	local minp = {x = minx - 1, y = Y, z = minz - 1}
+	local maxp = {x = maxx + 1, y = Y, z = maxz + 1}
+
+	-- Load area using VoxelManip
+	local vm = VoxelManip()
+	local emin, emax = vm:read_from_map(minp, maxp)
+	local area = VoxelArea:new{MinEdge = emin, MaxEdge = emax}
+	local data = vm:get_data()
+
+	local c_air = core.CONTENT_AIR
+	local c_gas = core.get_content_id("esports_storm:gas_column")
+
+	-- Clear old nodes in VoxelManip data
+	for _, pos in ipairs(old_nodes) do
+		local vi = area:index(pos.x, Y, pos.z)
+		if data[vi] == c_gas then
+			data[vi] = c_air
+		end
+	end
+
+	-- Place new nodes in VoxelManip data
+	for _, pos in ipairs(new_nodes) do
+		local vi = area:index(pos.x, Y, pos.z)
+		data[vi] = c_gas
+	end
+
+	vm:set_data(data)
+	vm:write_to_map()
 
 	esports_storm.placed_nodes = new_nodes
 end
@@ -144,7 +206,7 @@ core.register_globalstep(function(dtime)
 			if dist > current_radius then
 				-- Player is outside the storm
 				if not esports_core.is_spectator(pname) and player:get_hp() > 0 then
-					player:set_hp(player:get_hp() - 2)
+					player:set_hp(player:get_hp() - 4)
 
 					-- Play cough sound with 2s cooldown
 					local now = core.get_gametime()

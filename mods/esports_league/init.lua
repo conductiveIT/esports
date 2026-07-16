@@ -404,8 +404,8 @@ core.register_chatcommand("team", {
 			if esports_league.player_to_team[name] and not is_admin then
 				return false, "You are already in a team!"
 			end
-			local team_name, tag = arg:match("^(%S+)%s+(%S+)$")
-			if not team_name or not tag then
+			local team_name, tag = arg:match("^%s*(.-)%s+(%S+)%s*$")
+			if not team_name or team_name == "" or not tag then
 				return false, "Usage: /team create <team_name> <3_letter_tag>"
 			end
 			tag = tag:upper()
@@ -554,8 +554,8 @@ core.register_chatcommand("leaguesetleader", {
 	description = "Assign a player as the leader/owner of a team (Admin only)",
 	privs = {server = true},
 	func = function(name, param)
-		local team_name, player_name = param:match("^(%S+)%s+(%S+)$")
-		if not team_name or not player_name then
+		local team_name, player_name = param:match("^%s*(.-)%s+(%S+)%s*$")
+		if not team_name or team_name == "" or not player_name then
 			return false, "Usage: /leaguesetleader <team_name> <player_name>"
 		end
 
@@ -608,8 +608,8 @@ core.register_chatcommand("leaguerename", {
 	description = "Rename a team in the league (Admin only)",
 	privs = {server = true},
 	func = function(name, param)
-		local old_name, new_name = param:match("^(%S+)%s+(%S+)$")
-		if not old_name or not new_name then
+		local old_name, new_name = param:match("^%s*(.-)%s+(%S+)%s*$")
+		if not old_name or old_name == "" or not new_name then
 			return false, "Usage: /leaguerename <old_name> <new_name>"
 		end
 		return esports_league.rename_team(name, old_name, new_name)
@@ -621,8 +621,8 @@ core.register_chatcommand("leaguesettag", {
 	description = "Change/set a team's 3-letter tag (Admin only)",
 	privs = {server = true},
 	func = function(name, param)
-		local team_name, tag = param:match("^(%S+)%s+(%S+)$")
-		if not team_name or not tag then
+		local team_name, tag = param:match("^%s*(.-)%s+(%S+)%s*$")
+		if not team_name or team_name == "" or not tag then
 			return false, "Usage: /leaguesettag <team_name> <tag>"
 		end
 		tag = tag:upper()

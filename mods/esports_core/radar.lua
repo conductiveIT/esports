@@ -51,31 +51,6 @@ function esports_core.radar.update(player)
 	local lines = {}
 	table.insert(lines, "=== TACTICAL RADAR ===")
 
-	-- 1. Gather Teammates
-	local teammates = {}
-	for pname, side in pairs(esports_core.teams.players) do
-		if pname ~= name and side == p_side then
-			local tm = core.get_player_by_name(pname)
-			if tm and tm:get_hp() > 0 then
-				local tm_pos = tm:get_pos()
-				local dx = tm_pos.x - p_pos.x
-				local dz = tm_pos.z - p_pos.z
-				local dist = math.floor(math.sqrt(dx*dx + dz*dz))
-				local target_yaw = math.atan2(-dx, dz)
-				local rel_angle = target_yaw - p_yaw
-				local arrow = get_arrow(rel_angle)
-				table.insert(teammates, string.format("• %s (%dm %s)", esports_core.get_nick(pname), dist, arrow))
-			end
-		end
-	end
-
-	if #teammates > 0 then
-		table.insert(lines, "Teammates:")
-		for _, tm_str in ipairs(teammates) do
-			table.insert(lines, tm_str)
-		end
-	end
-
 	-- 2. Gather Objectives
 	local objectives = {}
 
@@ -174,6 +149,9 @@ function esports_core.radar.update(player)
 		for _, obj_str in ipairs(objectives) do
 			table.insert(lines, obj_str)
 		end
+	else
+		esports_core.radar.clear(player)
+		return
 	end
 
 	local text = table.concat(lines, "\n")
@@ -188,11 +166,11 @@ function esports_core.radar.update(player)
 	local hud = esports_core.radar.player_huds[name]
 	if not hud then
 		esports_core.radar.player_huds[name] = player:hud_add({
-			hud_elem_type = "text",
+			type = "text",
 			position = {x = 0.95, y = 0.15},
 			offset = {x = 0, y = 0},
 			text = text,
-			alignment = {x = 1, y = -1},
+			alignment = {x = -1, y = -1},
 			scale = {x = 100, y = 100},
 			number = 0xFFFFFF,
 		})

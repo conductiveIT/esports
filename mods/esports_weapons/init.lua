@@ -7,15 +7,8 @@ core.register_on_joinplayer(function(player)
 	inv:set_size("ammo", 8)
 end)
 
--- Simple globalstep to handle cooldowns
-local dtime_acc = 0
-core.register_globalstep(function(dtime)
-	for p_name, cd in pairs(esports_weapons.cooldowns) do
-		if cd > 0 then
-			esports_weapons.cooldowns[p_name] = cd - dtime
-		end
-	end
-end)
+-- Cooldowns are checked and set using absolute timestamps (core.get_us_time)
+-- to avoid running a high-frequency globalstep loop on every server tick.
 
 esports_weapons.damage_node = function(pos, node, damage, player)
 	if core.get_item_group(node.name, "player_built") > 0 then
@@ -63,7 +56,7 @@ end
 
 esports_weapons.shoot_raycast = function(player, damage, range, spread)
 	local p_name = player:get_player_name()
-	if esports_core.is_spectator(p_name) then return false end
+	if esports_core.is_spectator(p_name) or (esports_core.is_in_lobby and esports_core.is_in_lobby(p_name)) then return false end
 
 	local dir = player:get_look_dir()
 	local pos = player:get_pos()
@@ -92,11 +85,11 @@ esports_weapons.shoot_raycast = function(player, damage, range, spread)
 		if pointed_thing.type == "object" then
 			local obj = pointed_thing.ref
 			if obj ~= player then
-				-- Ignore spectators
-				if obj:is_player() and esports_core.is_spectator(obj:get_player_name()) then
-					-- Don't break the ray here, but don't hit either.
-					-- Actually, bullets should pass THROUGH spectators.
-				else
+				local ent = obj:get_luaentity()
+				local is_item = ent and ent.name == "__builtin:item"
+				local is_spec = obj:is_player() and esports_core.is_spectator(obj:get_player_name())
+
+				if not is_item and not is_spec then
 					-- Friendly Fire Check
 					if obj:is_player() and not esports_core.match.friendly_fire then
 						local shooter_team = esports_core.teams.get_player_team(player:get_player_name())
@@ -110,29 +103,28 @@ esports_weapons.shoot_raycast = function(player, damage, range, spread)
 						full_punch_interval = 1.0,
 						damage_groups = {fleshy = damage, is_gun = 1}
 					}, dir)
+
+					hit_pos = pointed_thing.intersection_point
+					-- Spawn some particle effect on hit
+					core.add_particlespawner({
+						amount = 5,
+						time = 0.1,
+						minpos = hit_pos,
+						maxpos = hit_pos,
+						minvel = {x=-1, y=-1, z=-1},
+						maxvel = {x=1, y=1, z=1},
+						minexptime = 0.5,
+						maxexptime = 1,
+						minsize = 1,
+						maxsize = 2,
+						texture = "esports_muzzle_flash.png^[colorize:#FF0000:200",
+					})
+					-- Play hit sound
+					core.sound_play("esports_hit", {pos = hit_pos, max_hear_distance = 16})
+					-- Fallback to a standard thud
+					core.sound_play("player_punch", {pos = hit_pos, max_hear_distance = 16, gain = 0.5})
+					break  -- hit an object, stop ray
 				end
-
-
-				hit_pos = pointed_thing.intersection_point
-				-- Spawn some particle effect on hit
-				core.add_particlespawner({
-					amount = 5,
-					time = 0.1,
-					minpos = hit_pos,
-					maxpos = hit_pos,
-					minvel = {x=-1, y=-1, z=-1},
-					maxvel = {x=1, y=1, z=1},
-					minexptime = 0.5,
-					maxexptime = 1,
-					minsize = 1,
-					maxsize = 2,
-					texture = "esports_muzzle_flash.png^[colorize:#FF0000:200",
-				})
-				-- Play hit sound
-				core.sound_play("esports_hit", {pos = hit_pos, max_hear_distance = 16})
-				-- Fallback to a standard thud
-				core.sound_play("player_punch", {pos = hit_pos, max_hear_distance = 16, gain = 0.5})
-				break  -- hit an object, stop ray
 			end
 		elseif pointed_thing.type == "node" then
 			-- Hit a block
@@ -209,13 +201,14 @@ esports_weapons.register_gun = function(name, def)
 				return itemstack
 			end
 
+			local current_time = core.get_us_time() / 1000000
 			local cd = esports_weapons.cooldowns[p_name] or 0
 
-			if cd <= 0 then
+			if current_time >= cd then
 				for i = 1, (def.pellets or 1) do
 					esports_weapons.shoot_raycast(user, def.damage, def.range, def.spread or 0)
 				end
-				esports_weapons.cooldowns[p_name] = def.fire_rate
+				esports_weapons.cooldowns[p_name] = current_time + def.fire_rate
 
 				-- Play sound
 				core.sound_play("esports_shoot_" .. name, {pos = user:get_pos(), max_hear_distance = 32})
@@ -227,6 +220,10 @@ end
 
 -- HELPER: Allow interacting with crates/items while wielding weapons
 function esports_weapons.handle_interaction(user, pointed_thing)
+	local pname = user:get_player_name()
+	if esports_core.is_in_lobby and esports_core.is_in_lobby(pname) then
+		return true  -- Block weapon interaction in lobby
+	end
 	if pointed_thing.type == "node" then
 		local pos = pointed_thing.under
 		local node = core.get_node(pos)
@@ -272,10 +269,11 @@ core.register_tool("esports_weapons:assault_rifle", {
 			return itemstack
 		end
 
+		local current_time = core.get_us_time() / 1000000
 		local cd = esports_weapons.cooldowns[p_name] or 0
 		local inv = user:get_inventory()
 
-		if cd <= 0 then
+		if current_time >= cd then
 			-- Try to take from ammo stash first, fallback to main for legacy
 			local count = 0
 			if inv:contains_item("ammo", "esports_weapons:rifle_ammo") then
@@ -289,7 +287,7 @@ core.register_tool("esports_weapons:assault_rifle", {
 			if count > 0 then
 				-- Rifle deals 10 damage to players and nodes
 				esports_weapons.shoot_raycast(user, 10, 50, 0.05)
-				esports_weapons.cooldowns[p_name] = 0.15
+				esports_weapons.cooldowns[p_name] = current_time + 0.15
 
 				-- Play sound
 				core.sound_play("esports_shoot_assault_rifle", {pos = user:get_pos(), max_hear_distance = 32})
@@ -327,10 +325,11 @@ core.register_tool("esports_weapons:shotgun", {
 			return itemstack
 		end
 
+		local current_time = core.get_us_time() / 1000000
 		local cd = esports_weapons.cooldowns[p_name] or 0
 		local inv = user:get_inventory()
 
-		if cd <= 0 then
+		if current_time >= cd then
 			-- Try to take from ammo stash first, fallback to main for legacy
 			local count = 0
 			if inv:contains_item("ammo", "esports_weapons:shotgun_ammo") then
@@ -347,7 +346,7 @@ core.register_tool("esports_weapons:shotgun", {
 					-- 3 hits = 100.8 damage (Lethal for 100 HP players)
 					esports_weapons.shoot_raycast(user, 4.2, 30, 0.2)
 				end
-				esports_weapons.cooldowns[p_name] = 1.0
+				esports_weapons.cooldowns[p_name] = current_time + 1.0
 
 				-- Play sound
 				core.sound_play("esports_shoot_shotgun", {pos = user:get_pos(), max_hear_distance = 32})
@@ -374,6 +373,10 @@ core.register_craftitem("esports_weapons:health_pack", {
 	stack_max = 5,
 	on_use = function(itemstack, user, pointed_thing)
 		if esports_weapons.handle_interaction(user, pointed_thing) then
+			return itemstack
+		end
+		local pname = user:get_player_name()
+		if esports_core.is_in_lobby and esports_core.is_in_lobby(pname) then
 			return itemstack
 		end
 		local hp = user:get_hp()
@@ -480,7 +483,7 @@ end)
 core.register_on_punchnode(function(pos, node, puncher, pointed_thing)
 	if not puncher or not puncher:is_player() then return end
 	local pname = puncher:get_player_name()
-	if esports_core.is_spectator(pname) then return end
+	if esports_core.is_spectator(pname) or (esports_core.is_in_lobby and esports_core.is_in_lobby(pname)) then return end
 
 	-- Melee Damage:
 	-- If holding pickaxe, deal 25 damage to the block.

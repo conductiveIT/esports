@@ -9,12 +9,15 @@ function esports_core.set_spectator(player, enable)
 	if enable then
 		-- Enable Spectator Mode
 		esports_core.spectators[target_name] = {target = nil}
-		player:set_properties({visual_size = {x=0, y=0, z=0}})
+		player:set_properties({
+			visual_size = {x=0, y=0, z=0},
+			interact_distance = 0,
+		})
 		esports_core.teams.update_nametag(player)
 		player:set_physics_override({gravity = 1.0, speed = 2.0})
 
 		-- Hide HUD for cinematic view
-		player:hud_set_flags({hotbar = false, healthbar = false, breathbar = false, chat = false})
+		player:hud_set_flags({hotbar = false, healthbar = false, breathbar = false, chat = false, minimap = false, minimap_radar = false})
 
 		-- Grant privs
 		local privs = core.get_player_privs(target_name)
@@ -28,15 +31,24 @@ function esports_core.set_spectator(player, enable)
 			esports_core.teams.players[target_name] = nil
 		end
 
+		local inv = player:get_inventory()
+		if inv then
+			inv:set_list("main", {})
+			inv:set_list("ammo", {})
+		end
+
 		esports_core.hud.init_hud(player)
 	else
 		-- Disable Spectator Mode
 		esports_core.spectators[target_name] = nil
-		player:set_properties({visual_size = {x=1, y=1, z=1}})
+		player:set_properties({
+			visual_size = {x=1, y=1, z=1},
+			interact_distance = 10,
+		})
 		player:set_nametag_attributes({color = {a=255, r=255, g=255, b=255}})
 
 		-- Restore HUD
-		player:hud_set_flags({hotbar = true, healthbar = true, breathbar = true, chat = true})
+		player:hud_set_flags({hotbar = true, healthbar = true, breathbar = true, chat = true, minimap = true, minimap_radar = true})
 
 		-- Remove privs and restore physics
 		player:set_physics_override({gravity = 1.0, speed = 1.2, jump = 1.1})
@@ -180,7 +192,11 @@ core.register_on_chat_message(function(name, message)
 end)
 
 -- CINEMATIC UPDATE
+local spec_timer = 0
 core.register_globalstep(function(dtime)
+	spec_timer = spec_timer + dtime
+	if spec_timer < 0.1 then return end
+	spec_timer = 0
 	for spec_name, data in pairs(esports_core.spectators) do
 		local spectator = core.get_player_by_name(spec_name)
 		if spectator then
