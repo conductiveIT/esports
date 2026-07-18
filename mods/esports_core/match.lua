@@ -1473,6 +1473,31 @@ esports_core.match.current_map_scale = 1.0
 
 function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_count, bot_diff, game_mode, map_size, friendly_fire, melee_damage, map_layout, spleef_levels)
 	esports_core.match.spleef_levels = tonumber(spleef_levels) or 1
+
+	-- Force exit practice mode for any player currently in it before freezing and generating/resetting the map
+	local had_practice_players = false
+	if esports_core.practice and esports_core.practice.players then
+		for pname, _ in pairs(esports_core.practice.players) do
+			local p = core.get_player_by_name(pname)
+			if p then
+				esports_core.practice.players[pname] = nil
+				p:set_pos({x=0, y=1.5, z=0})
+				esports_core.reset_to_lobby(p)
+				had_practice_players = true
+			end
+		end
+	end
+
+	if had_practice_players then
+		local arena_pos = {x = 2000, y = 100, z = 2000}
+		for _, obj in ipairs(core.get_objects_inside_radius(arena_pos, 30)) do
+			local ent = obj:get_luaentity()
+			if ent and ent.name == "esports_core:practice_target" then
+				obj:remove()
+			end
+		end
+	end
+
 	-- Freeze all players first to prevent them from falling into the void while the map is generating/resetting
 	for _, p in ipairs(core.get_connected_players()) do
 		if not esports_core.is_spectator(p:get_player_name()) then
