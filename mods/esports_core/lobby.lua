@@ -349,6 +349,16 @@ local function build_league_tab(fs, settings, is_admin)
 	local match_active = (esports_core.match.state == "active" or esports_core.match.state == "countdown")
 	local league_subtab = settings.league_subtab or "standings"
 
+	if not is_admin then
+		if league_subtab == "schedule" and not (esports_league.fixtures and #esports_league.fixtures > 0) then
+			league_subtab = "standings"
+			settings.league_subtab = "standings"
+		elseif league_subtab == "playoffs" and not (esports_league.season_state == "playoffs" and esports_league.playoffs and esports_league.playoffs.semifinals) then
+			league_subtab = "standings"
+			settings.league_subtab = "standings"
+		end
+	end
+
 	-- Style active sub-tab button
 	local active_sub_btn = ""
 	if league_subtab == "standings" then active_sub_btn = "league_tab_standings"
@@ -360,10 +370,26 @@ local function build_league_tab(fs, settings, is_admin)
 		table.insert(fs, "style[" .. active_sub_btn .. ";bgcolor=#0077dd;textcolor=white]")
 	end
 
-	table.insert(fs, "button[0.5,3.4;3.9,0.6;league_tab_standings;STANDINGS]")
-	table.insert(fs, "button[4.8,3.4;3.9,0.6;league_tab_schedule;SCHEDULE]")
-	table.insert(fs, "button[9.1,3.4;3.9,0.6;league_tab_history;HISTORY]")
-	table.insert(fs, "button[13.4,3.4;3.9,0.6;league_tab_playoffs;PLAYOFFS]")
+	local buttons = {
+		{id = "league_tab_standings", label = "STANDINGS", show = true},
+		{id = "league_tab_schedule", label = "SCHEDULE", show = is_admin or (esports_league.fixtures and #esports_league.fixtures > 0)},
+		{id = "league_tab_history", label = "HISTORY", show = true},
+		{id = "league_tab_playoffs", label = "PLAYOFFS", show = is_admin or (esports_league.season_state == "playoffs" and esports_league.playoffs and esports_league.playoffs.semifinals)}
+	}
+
+	local visible_buttons = {}
+	for _, btn in ipairs(buttons) do
+		if btn.show then
+			table.insert(visible_buttons, btn)
+		end
+	end
+
+	local num_visible = #visible_buttons
+	local btn_width = (16.5 - (num_visible - 1) * 0.4) / num_visible
+	for idx, btn in ipairs(visible_buttons) do
+		local x = 0.5 + (idx - 1) * (btn_width + 0.4)
+		table.insert(fs, string.format("button[%.2f,3.4;%.2f,0.6;%s;%s]", x, btn_width, btn.id, btn.label))
+	end
 
 	if league_subtab == "standings" then
 		local sorted = {}
@@ -900,6 +926,74 @@ local function build_locker_tab(fs, name, is_admin)
 	end
 end
 
+local function build_main_tab(fs, name)
+	local stats = esports_league.player_stats[name] or {kills = 0, deaths = 0, captures = 0, hill_time = 0, dom_points = 0}
+	local pk = stats.kills or 0
+	local pd = stats.deaths or 0
+	local pc = stats.captures or 0
+	local ph = stats.hill_time or 0
+	local pdom = stats.dom_points or 0
+	local prating = pk - pd + (pc * 10) + math.floor(ph / 10) + (pdom * 2)
+	local pkd = pd > 0 and (math.floor((pk / pd) * 100) / 100) or pk
+
+	local p_team = esports_league.get_team(name)
+
+	-- Personal Stats Container
+	table.insert(fs, "box[0.5,3.8;8.0,8.2;#222222aa]")
+	table.insert(fs, "label[1.0,4.3;PERSONAL STATS]")
+	table.insert(fs, "box[1.0,4.7;7.0,0.05;#555555]")
+
+	local rating_color = "#33ff33"
+	if prating < 0 then rating_color = "#ff3333" end
+
+	table.insert(fs, "label[1.0,5.2;Player: " .. core.colorize("#ffff00", core.formspec_escape(esports_core.get_nick(name))) .. "]")
+	table.insert(fs, "label[1.0,5.9;League Rating: " .. core.colorize(rating_color, tostring(prating)) .. "]")
+	table.insert(fs, "label[1.0,6.6;Kills: " .. pk .. "]")
+	table.insert(fs, "label[1.0,7.3;Deaths: " .. pd .. "]")
+	table.insert(fs, "label[1.0,8.0;K/D Ratio: " .. pkd .. "]")
+	table.insert(fs, "label[1.0,8.7;Flag Captures: " .. pc .. "]")
+	table.insert(fs, "label[1.0,9.4;Hill Control Time: " .. ph .. "s]")
+	table.insert(fs, "label[1.0,10.1;Domination Points: " .. pdom .. "]")
+
+	-- Team Stats Container
+	table.insert(fs, "box[9.0,3.8;8.0,8.2;#222222aa]")
+	table.insert(fs, "label[9.5,4.3;TEAM PROFILE]")
+	table.insert(fs, "box[9.5,4.7;7.0,0.05;#555555]")
+
+	if p_team then
+		local team_data = esports_league.teams[p_team]
+		if team_data then
+			local twins = team_data.wins or 0
+			local tlosses = team_data.losses or 0
+			local tkills = team_data.kills_scored or 0
+			local tdeaths = team_data.deaths_conceded or 0
+			local ttag = team_data.tag or "???"
+			local tdiff = tkills - tdeaths
+			local leader = team_data.leader or ""
+
+			table.insert(fs, "label[9.5,5.2;Team Name: " .. core.colorize("#ffff00", core.formspec_escape(p_team)) .. " " .. core.formspec_escape("[" .. ttag .. "]") .. "]")
+			table.insert(fs, "label[9.5,5.9;Leader: " .. core.formspec_escape(leader ~= "" and esports_core.get_nick(leader) or "None") .. "]")
+			table.insert(fs, "label[9.5,6.6;Wins: " .. core.colorize("#33ff33", tostring(twins)) .. "]")
+			table.insert(fs, "label[9.5,7.3;Losses: " .. core.colorize("#ff3333", tostring(tlosses)) .. "]")
+			table.insert(fs, "label[9.5,8.0;Kills Scored: " .. tkills .. "]")
+			table.insert(fs, "label[9.5,8.7;Deaths Conceded: " .. tdeaths .. "]")
+
+			local diff_color = "#33ff33"
+			if tdiff < 0 then diff_color = "#ff3333" end
+			table.insert(fs, "label[9.5,9.4;Kill/Death Diff: " .. core.colorize(diff_color, string.format("%+d", tdiff)) .. "]")
+		else
+			table.insert(fs, "label[9.5,5.2;Team data not found.]")
+		end
+	else
+		table.insert(fs, "label[9.5,5.2;Team Name: None (Free Agent)]")
+		table.insert(fs, "label[9.5,6.2;You are not in a team yet.]")
+		table.insert(fs, "label[9.5,7.0;Go to the TEAM tab to either:]")
+		table.insert(fs, "label[9.5,7.6;- Request to join an existing team]")
+		table.insert(fs, "label[9.5,8.2;- Accept a pending invite]")
+		table.insert(fs, "label[9.5,8.8;- Create a new team (if allowed)]")
+	end
+end
+
 local function get_formspec(name)
 	local is_admin = core.check_player_privs(name, {server = true})
 	local side = esports_core.match.get_player_match_side(name)
@@ -923,7 +1017,7 @@ local function get_formspec(name)
 		end
 	end
 
-	local tab = player_tabs[name] or (is_admin and "matchmaking" or "league")
+	local tab = player_tabs[name] or "main"
 	local p_team = esports_league.get_team(name) or "NONE"
 	local settings = player_settings[name]
 	if not settings.spleef_levels then
@@ -941,7 +1035,7 @@ local function get_formspec(name)
 		-- Header (Dynamic Team Logo)
 		"image[0.5,0.2;2,2;" .. esports_core.get_team_logo(p_team, "esports_logo_red.png") .. "]",
 		"label[2.5,1;LUANTI ESPORTS - MAIN LOBBY v" .. esports_core.version .. " (build " .. esports_core.build .. ")]",
-		"label[2.5,1.5;Current Team: " .. p_team .. "]",
+		"label[2.5,1.5;Current Team: " .. core.formspec_escape(p_team) .. "]",
 		"style[exit_server;bgcolor=#770000;textcolor=white]",
 		"button[14.0,1.3;3.0,0.9;exit_server;DISCONNECT]"
 	}
@@ -957,7 +1051,8 @@ local function get_formspec(name)
 
 	-- Dynamic Tab Highlighting Style
 	local active_btn = ""
-	if tab == "matchmaking" then active_btn = "tab_match"
+	if tab == "main" then active_btn = "tab_main"
+	elseif tab == "matchmaking" then active_btn = "tab_match"
 	elseif tab == "league" then active_btn = "tab_league"
 	elseif tab == "team" then active_btn = "tab_team"
 	elseif tab == "locker" then active_btn = "tab_locker"
@@ -968,23 +1063,27 @@ local function get_formspec(name)
 	end
 
 	if is_admin then
-		table.insert(fs, "button[0.5,2.5;2.5,0.8;tab_match;MATCH]")
-		table.insert(fs, "button[3.3,2.5;2.5,0.8;tab_league;LEAGUE]")
-		table.insert(fs, "button[6.1,2.5;2.5,0.8;tab_team;TEAM]")
-		table.insert(fs, "button[8.9,2.5;2.5,0.8;tab_locker;LOCKER]")
-		table.insert(fs, "button[11.7,2.5;2.5,0.8;tab_settings;ADMIN]")
+		table.insert(fs, "button[0.5,2.5;2.18,0.8;tab_main;MAIN]")
+		table.insert(fs, "button[2.88,2.5;2.18,0.8;tab_match;MATCH]")
+		table.insert(fs, "button[5.26,2.5;2.18,0.8;tab_team;TEAM]")
+		table.insert(fs, "button[7.64,2.5;2.18,0.8;tab_locker;LOCKER]")
+		table.insert(fs, "button[10.02,2.5;2.18,0.8;tab_league;LEAGUE]")
+		table.insert(fs, "button[12.4,2.5;2.18,0.8;tab_settings;ADMIN]")
 		table.insert(fs, "style[btn_practice;bgcolor=#005533;textcolor=white]")
-		table.insert(fs, "button[14.5,2.5;2.5,0.8;btn_practice;PRACTICE]")
+		table.insert(fs, "button[14.78,2.5;2.22,0.8;btn_practice;PRACTICE]")
 	else
-		table.insert(fs, "button[0.5,2.5;3.8,0.8;tab_league;LEAGUE]")
-		table.insert(fs, "button[4.7,2.5;3.8,0.8;tab_team;TEAM]")
-		table.insert(fs, "button[8.9,2.5;3.8,0.8;tab_locker;LOCKER]")
+		table.insert(fs, "button[0.5,2.5;2.98,0.8;tab_main;MAIN]")
+		table.insert(fs, "button[3.88,2.5;2.98,0.8;tab_team;TEAM]")
+		table.insert(fs, "button[7.26,2.5;2.98,0.8;tab_locker;LOCKER]")
+		table.insert(fs, "button[10.64,2.5;2.98,0.8;tab_league;LEAGUE]")
 		table.insert(fs, "style[btn_practice;bgcolor=#005533;textcolor=white]")
-		table.insert(fs, "button[13.1,2.5;3.9,0.8;btn_practice;PRACTICE]")
+		table.insert(fs, "button[14.02,2.5;2.98,0.8;btn_practice;PRACTICE]")
 	end
 
 	-- Assemble active tab UI
-	if tab == "matchmaking" then
+	if tab == "main" then
+		build_main_tab(fs, name)
+	elseif tab == "matchmaking" then
 		build_matchmaking_tab(fs, settings)
 	elseif tab == "league" then
 		build_league_tab(fs, settings, is_admin)
@@ -1067,6 +1166,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	end
 
 	-- Tab Switching
+	if fields.tab_main then player_tabs[name] = "main" end
 	if fields.tab_match and is_admin then player_tabs[name] = "matchmaking" end
 	if fields.tab_league then player_tabs[name] = "league" end
 	if fields.tab_team then player_tabs[name] = "team" end
