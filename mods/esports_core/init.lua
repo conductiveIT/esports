@@ -59,6 +59,10 @@ function esports_core.is_in_lobby(player)
 			if side and not esports_core.is_spectator(name) then
 				return false -- Active player, not in lobby mode
 			end
+			-- In PVE mode, all non-spectator players are active participants
+			if esports_core.match.is_pve and not esports_core.is_spectator(name) then
+				return false
+			end
 		end
 	end
 

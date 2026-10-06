@@ -180,7 +180,11 @@ core.register_globalstep(function(dtime)
 				local is_participant = esports_core.match.get_player_match_side(pname)
 
 				if is_participant or core.check_player_privs(pname, {server = true}) then
-					 p:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1.0})
+					if esports_core.sprint then
+						esports_core.sprint.reset_player(p)
+					else
+						p:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1.0, sneak = true})
+					end
 				end
 				esports_core.hud.hide_intro(p)
 			end
@@ -1341,14 +1345,19 @@ function esports_core.match.get_player_match_side(name)
 		return nil
 	end
 
-	-- Check for temporary PVE/Join overrides first
-	if esports_core.match.player_sides and esports_core.match.player_sides[name] then
-		return esports_core.match.player_sides[name]
-	end
-
 	-- Strictly gate side detection to running matches
 	if esports_core.match.state ~= "active" and esports_core.match.state ~= "countdown" then
 		return nil
+	end
+
+	-- In PVE, all active human combatants fight on Team Blue against the bots
+	if esports_core.match and esports_core.match.is_pve then
+		return "blue"
+	end
+
+	-- Check for temporary PVE/Join overrides first
+	if esports_core.match.player_sides and esports_core.match.player_sides[name] then
+		return esports_core.match.player_sides[name]
 	end
 
 	if not esports_core.match.active_teams then
@@ -1704,12 +1713,11 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 			end
 		end
 	elseif is_pve then
-		-- PVE: Team 1 is players, Team 2 is Bots
+		-- PVE: Team 1 is human players, Team 2 is Bots
 		for _, p in ipairs(players) do
 			local pname = p:get_player_name()
 			if not esports_core.is_spectator(pname) then
-				local pteam = esports_league.player_to_team[pname]
-				if pteam == t1 then table.insert(t1_online, p) end
+				table.insert(t1_online, p)
 			end
 		end
 	else
@@ -1732,7 +1740,7 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 		return false, "Each team needs at least 1 player online. (Found: " .. t1 .. ": " .. #t1_online .. ", " .. t2 .. ": " .. #t2_online .. ")"
 	end
 	if is_pve and #t1_online < 1 then
-		return false, "Your team must have at least 1 player online."
+		return false, "Need at least 1 player online to start PVE practice."
 	end
 
 	-- Start match (with countdown)
@@ -1831,14 +1839,36 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 			local pname = p:get_player_name()
 			local my_team = esports_league.get_team(pname)
 
-			-- PVE Overdrive: If in PVE, everyone not spectating should join the fight
-			if is_pve and not esports_core.is_spectator(pname) and (not my_team or my_team == "NONE") then
-				my_team = t1
-				-- Temporarily assign them for the duration of this match
-				esports_core.match.player_sides[pname] = "red"
-			end
+			if is_pve and not esports_core.is_spectator(pname) then
+				local side = "blue"
+				esports_core.match.player_sides[pname] = side
+				esports_core.teams.players[pname] = side
+				esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0}
 
-			if is_ffa and not esports_core.is_spectator(pname) then
+				-- Full Match Setup (Inventory, Physics, HUD, Sprint)
+				esports_core.reset_player(p, esports_core.match.is_debug)
+				
+				-- Teleport directly to safe spawn position
+				local target_pos = esports_core.get_safe_spawn_pos(side, true)
+				p:set_pos(target_pos)
+				p:set_physics_override({speed = 0, jump = 0, gravity = 0})
+
+				esports_core.hud.init_hud(p)
+				if esports_core.sprint then
+					esports_core.sprint.reset_player(p)
+				end
+
+				-- Close lobby and hide blackout after a short delay to allow chunk loading
+				core.after(0.5, function()
+					local player_obj = core.get_player_by_name(pname)
+					if player_obj then
+						if esports_core.lobby and esports_core.lobby.blackout_hide then
+							esports_core.lobby.blackout_hide(player_obj)
+						end
+						core.close_formspec(pname, "esports_core:lobby")
+					end
+				end)
+			elseif is_ffa and not esports_core.is_spectator(pname) then
 				esports_core.match.player_sides[pname] = "ffa"
 				esports_core.teams.players[pname] = "ffa"
 				esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0}
@@ -1862,12 +1892,7 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 					end
 				end)
 			elseif my_team == t1 or my_team == t2 then
-				local side
-				if is_pve then
-					side = "blue"  -- Everyone online is on the player side
-				else
-					side = (my_team == t1) and "red" or "blue"
-				end
+				local side = (my_team == t1) and "red" or "blue"
 				esports_core.match.player_sides[pname] = side
 
 				-- Full Match Setup (Inventory, Physics, HUD)

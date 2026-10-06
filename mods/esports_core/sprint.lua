@@ -62,7 +62,7 @@ function esports_core.sprint.reset_player(player)
 	local base = esports_core.sprint.get_base_speed(player, pname)
 	pdata.last_speed = base
 	pdata.last_sneak = true
-	player:set_physics_override({speed = base, sneak = true})
+	player:set_physics_override({speed = base, sneak = true, jump = 1.1, gravity = 1.0})
 
 	esports_core.sprint.update_hud(player, pdata, true)
 end
@@ -143,7 +143,7 @@ function esports_core.sprint.update_physics(player, pname)
 			-- Multiply by CROUCH_COMPENSATION (4.0 / 1.35 = ~2.963) to cancel out the engine's crouch slowdown
 			target_speed = target_speed * CROUCH_COMPENSATION
 		end
-		allow_sneak = false
+		allow_sneak = true
 	end
 
 	-- Performance Optimization: Only send physics packet on change
