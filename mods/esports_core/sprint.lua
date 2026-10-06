@@ -11,7 +11,6 @@ esports_core.sprint.players = {}
 -- Balance & Tuning Constants
 local MAX_STAMINA = 100
 local SPRINT_SPEED_MULT = 1.4          -- Base 1.2 * 1.4 = 1.68
-local CROUCH_COMPENSATION = 4.0 / 1.35 -- Compensates for Luanti's hardcoded movement_speed_crouch when sneak is held
 local DRAIN_RATE = 22                 -- Stamina points drained per second (~4.5s sprint)
 local JUMP_COST = 8                   -- Stamina drained instantly per jump while sprinting
 local REGEN_RATE = 25                 -- Stamina points regenerated per second (0 to 100 in 4s)
@@ -137,13 +136,7 @@ function esports_core.sprint.update_physics(player, pname)
 	local allow_sneak = true
 	if pdata.is_sprinting then
 		target_speed = base * sprint_mult
-		local ctrl = player:get_player_control()
-		if ctrl.sneak then
-			-- Luanti engine applies movement_speed_crouch (1.35 m/s) instead of movement_speed_walk (4.0 m/s)
-			-- Multiply by CROUCH_COMPENSATION (4.0 / 1.35 = ~2.963) to cancel out the engine's crouch slowdown
-			target_speed = target_speed * CROUCH_COMPENSATION
-		end
-		allow_sneak = true
+		allow_sneak = false
 	end
 
 	-- Performance Optimization: Only send physics packet on change
@@ -295,10 +288,7 @@ core.register_globalstep(function(dtime)
 				end
 
 				local can_sprint = wants_sprint and not pdata.exhausted and pdata.stamina > 0
-				local sneak_toggled = pdata.is_sprinting and (ctrl.sneak ~= pdata.last_ctrl_sneak)
-				pdata.last_ctrl_sneak = ctrl.sneak
-
-				local state_changed = (pdata.is_sprinting ~= can_sprint) or sneak_toggled
+				local state_changed = (pdata.is_sprinting ~= can_sprint)
 				pdata.is_sprinting = can_sprint
 
 				if can_sprint then
