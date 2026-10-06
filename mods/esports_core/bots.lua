@@ -478,7 +478,9 @@ core.register_entity("esports_core:bot", {
 				-- Broadcast to Kill Feed
 				local tool = puncher:get_wielded_item():get_name()
 				local weapon = "pickaxe"
-				if tool:find("rifle") then weapon = "rifle"
+				if tool:find("sniper") then weapon = "rifle"
+				elseif tool:find("smg") then weapon = "rifle"
+				elseif tool:find("rifle") then weapon = "rifle"
 				elseif tool:find("shotgun") then weapon = "shotgun" end
 				esports_core.hud.add_kill_event(pname, p_team, "Sentry", "bots", weapon)
 

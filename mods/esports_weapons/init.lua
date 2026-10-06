@@ -446,14 +446,59 @@ core.register_entity("esports_weapons:sniper_bullet", {
 							return
 						end
 					end
-				elseif obj and obj:get_luaentity() and obj:get_luaentity().name == "esports_core:practice_target" then
-					local shooter_player = core.get_player_by_name(pname)
-					obj:punch(shooter_player or obj, 1.0, {
-						full_punch_interval = 0.5,
-						damage_groups = {fleshy = 75, is_gun = 1}
-					}, vector.direction(self._last_pos, pos))
-					self.object:remove()
-					return
+				elseif obj and obj:get_luaentity() then
+					local ent = obj:get_luaentity()
+					if ent.name == "esports_core:bot" then
+						local shooter_player = core.get_player_by_name(pname)
+						local target_pos = obj:get_pos()
+						local hit_y = pt.intersection_point and pt.intersection_point.y or pos.y
+						local is_headshot = target_pos and ((hit_y - target_pos.y) >= 1.35)
+
+						local damage = is_headshot and 110 or 75
+						if is_headshot and shooter_player then
+							core.chat_send_player(pname, "🎯 HEADSHOT CRITICAL! (110 DMG)")
+							core.sound_play("player_damage", {to_player = pname, gain = 1.0, pitch = 1.6})
+						end
+
+						obj:punch(shooter_player or obj, 1.0, {
+							full_punch_interval = 0.5,
+							damage_groups = {fleshy = damage, is_gun = 1}
+						}, vector.direction(self._last_pos, pos))
+
+						-- Impact blood/spark particles
+						core.add_particlespawner({
+							amount = 8,
+							time = 0.1,
+							minpos = pt.intersection_point or pos,
+							maxpos = pt.intersection_point or pos,
+							minvel = {x=-1, y=0, z=-1},
+							maxvel = {x=1, y=2, z=1},
+							texture = "esports_tracer.png^[colorize:#FF0000:200",
+							minexptime = 0.2,
+							maxexptime = 0.5,
+							minsize = 1,
+							maxsize = 2,
+						})
+
+						self.object:remove()
+						return
+					elseif ent.name == "esports_core:practice_target" then
+						local shooter_player = core.get_player_by_name(pname)
+						obj:punch(shooter_player or obj, 1.0, {
+							full_punch_interval = 0.5,
+							damage_groups = {fleshy = 75, is_gun = 1}
+						}, vector.direction(self._last_pos, pos))
+						self.object:remove()
+						return
+					elseif ent.name ~= "__builtin:item" and ent.name ~= "esports_weapons:sniper_bullet" then
+						local shooter_player = core.get_player_by_name(pname)
+						obj:punch(shooter_player or obj, 1.0, {
+							full_punch_interval = 0.5,
+							damage_groups = {fleshy = 75, is_gun = 1}
+						}, vector.direction(self._last_pos, pos))
+						self.object:remove()
+						return
+					end
 				end
 			elseif pt.type == "node" then
 				local node_pos = pt.under
