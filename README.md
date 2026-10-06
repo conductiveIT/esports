@@ -32,7 +32,7 @@ A fast-paced hitscan team combat base game and esports platform for [Luanti](htt
 - **Instant Blueprints & Destructive Cover**: Rapid tactical building of walls and ramps with hit-point tracking and damage modeling.
 - **Spectator Broadcast Suite**: Real-time spectator HUD overlays, cinematic follow cameras, team radar widgets, and 3D ping waypoints.
 - **Integrated League Platform**: In-game round-robin fixture generator, standings leaderboards, tie-breaker logic, match history archives, and 4-team playoff brackets.
-- **External Companion Tooling**: Xbox gamepad mappers (Python and PowerShell), SQLite league stats exporter, school fair presentation generators, and responsive web dashboards.
+- **External Companion Tooling**: Xbox gamepad mappers (Python and PowerShell), SQLite league stats exporter, and responsive web dashboards.
 
 ---
 
@@ -204,10 +204,6 @@ The repository includes several companion scripts:
   - `run_controller.ps1`: Zero-dependency PowerShell script compiling C# in memory to achieve native XInput controller mapping on Windows.
 - **Static League Stats Generator (`generate_static_stats.py`)**:
   - Python utility that connects directly to Luanti's `mod_storage.sqlite`, parses and deserializes compressed Lua tables, and renders static dashboards (`league_stats.html` / `league_stats.aspx`).
-- **Sheldon Arena Fair Display (`Sheldon_Arena_Fair_Display.html`)**:
-  - A standalone, self-contained interactive web display showcasing school esports fixtures, timetables, rules, and live standings.
-- **Presentation Generator (`generate_sheldon_arena_presentation.py`)**:
-  - Automated Python script generating 16:9 widescreen PowerPoint presentations (`.pptx`) with custom school branding, club timetables, and season roadmaps.
 - **Intro Portal Exporter (`website/intro/update_teams.py`)**:
   - Extracts registered teams and player nicknames from SQLite storage into clean JSON for web portals.
 

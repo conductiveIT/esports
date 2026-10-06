@@ -2,4 +2,5 @@
 worlds/
 bin/
 __pycache__/
-
+Sheldon_Arena*
+generate_sheldon*
