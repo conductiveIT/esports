@@ -262,11 +262,15 @@ function esports_weapons.unscope(player)
 		esports_weapons.scoped_players[pname] = nil
 		player:set_fov(0)
 
-		-- Restore wielded weapon and crosshair
-		local flags = player:hud_get_flags()
-		flags.wielditem = true
-		flags.crosshair = true
-		player:hud_set_flags(flags)
+		-- Restore all HUD elements (health, stamina, hotbar, ammo, stats, crosshair, etc.)
+		if esports_core.hud and esports_core.hud.set_scope_mode then
+			esports_core.hud.set_scope_mode(player, false)
+		else
+			local flags = player:hud_get_flags()
+			flags.wielditem = true
+			flags.crosshair = true
+			player:hud_set_flags(flags)
+		end
 
 		if esports_core.sprint then
 			esports_core.sprint.update_physics(player)
@@ -295,11 +299,15 @@ function esports_weapons.toggle_scope(player)
 		})
 		esports_weapons.scoped_players[pname] = hid
 
-		-- Hide wielded weapon and default crosshair so only the tactical scope reticle is shown
-		local flags = player:hud_get_flags()
-		flags.wielditem = false
-		flags.crosshair = false
-		player:hud_set_flags(flags)
+		-- Remove other HUD elements (health, stamina, hotbar, ammo, stats, crosshair) in zoom mode
+		if esports_core.hud and esports_core.hud.set_scope_mode then
+			esports_core.hud.set_scope_mode(player, true)
+		else
+			local flags = player:hud_get_flags()
+			flags.wielditem = false
+			flags.crosshair = false
+			player:hud_set_flags(flags)
+		end
 
 		-- Movement slow for steady breathing/stabilization
 		player:set_physics_override({speed = 0.65})

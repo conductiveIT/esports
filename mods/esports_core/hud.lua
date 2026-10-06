@@ -931,6 +931,44 @@ esports_core.hud.update_ammo = function(player)
 	end
 end
 
+-- Optical Scope ADS HUD manager: toggles all HUD elements (health, stamina, hotbar, etc.)
+esports_core.hud.set_scope_mode = function(player, scoped)
+	if not player or not player:is_player() then return end
+	local pname = player:get_player_name()
+
+	if scoped then
+		-- 1. Disable all built-in engine HUD flags
+		local flags = player:hud_get_flags()
+		flags.healthbar = false
+		flags.hotbar = false
+		flags.wielditem = false
+		flags.crosshair = false
+		flags.breathbar = false
+		flags.minimap = false
+		player:hud_set_flags(flags)
+
+		-- 2. Remove all custom HUD elements (stamina, ammo, stats, team, match timer/scores)
+		if esports_core.hud.player_huds[pname] then
+			for _, id in pairs(esports_core.hud.player_huds[pname]) do
+				player:hud_remove(id)
+			end
+			esports_core.hud.player_huds[pname] = {}
+		end
+	else
+		-- 1. Restore all built-in engine HUD flags
+		local flags = player:hud_get_flags()
+		flags.healthbar = true
+		flags.hotbar = true
+		flags.wielditem = true
+		flags.crosshair = true
+		flags.breathbar = true
+		player:hud_set_flags(flags)
+
+		-- 2. Cleanly reconstruct and restore full player HUD
+		esports_core.hud.init_hud(player)
+	end
+end
+
 -- NEW STATS HUD LOGIC
 local player_scoreboard_visible = {}  -- [pname] = bool
 
