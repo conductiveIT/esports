@@ -3,7 +3,7 @@
 A fast-paced hitscan team combat base game and esports platform for [Luanti](https://www.luanti.org/) (formerly Minetest) featuring instant building, storm mechanics, procedural arena layouts, sprint stamina, full league tournament management, and spectator broadcasting.
 
 > [!IMPORTANT]
-> This game is currently in **active development** (v0.8.0). Features, APIs, and mechanics are actively maintained and subject to refinement.
+> This game is currently in **active development** (v0.9.0). Features, APIs, and mechanics are actively maintained and subject to refinement.
 > Note: Built using Antigravity with Gemini Pro.
 
 ---
@@ -110,11 +110,11 @@ Solo or cooperative match mode against difficulty-scaled AI sentries that replac
 | Action | Key / Input | Notes |
 | :--- | :--- | :--- |
 | **Move** | `W`, `A`, `S`, `D` | Standard movement |
-| **Tactical Sprint** | `W` + **Shift** (Sneak) | 1.4x–1.5x speed multiplier, consumes stamina |
+| **Tactical Sprint** | `W` + **Shift** (Sneak) or `W` + **E** (Aux1) | 1.4x–1.5x speed multiplier, consumes stamina (engine crouch penalty compensated) |
 | **Sprint Jump** | **Space** (while sprinting) | Tactical leap, expends burst stamina (6–10 stm) |
 | **Fire / Mine / Build** | **Left Mouse Button (LMB)** | Shooting, pickaxe harvesting, or instant blueprint placing |
 | **ADS / Optical Scope** | **Right Mouse Button (RMB)** (Sniper) | Toggles 20° FOV optical zoom with custom mil-dot overlay |
-| **Live Scoreboard** | **Zoom (`Z`)** or **Aux1 (`E`)** | Hold or toggle full-match overlay scoreboard |
+| **Live Scoreboard** | **Zoom (`Z`)** or **Aux1 (`E` while idle)** | Hold or toggle full-match overlay scoreboard |
 | **Main Menu / Lobby** | `/lobby` or `/l` | Opens character locker, standings, schedule, and playoffs |
 | **Personal Stats** | `/stats` or `/score` | Prints live match performance metrics directly in chat |
 | **Review Last Outro** | `/lastmatch` | Re-opens previous match post-game summary screen |

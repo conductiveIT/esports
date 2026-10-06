@@ -1040,7 +1040,7 @@ core.register_globalstep(function(dtime)
 		local name = player:get_player_name()
 		if not esports_core.is_spectator(name) then
 			local controls = player:get_player_control()
-			local show_score = controls.zoom or controls.aux1
+			local show_score = controls.zoom or (controls.aux1 and not controls.up)
 			esports_core.hud.toggle_scoreboard(player, show_score)
 		end
 	end

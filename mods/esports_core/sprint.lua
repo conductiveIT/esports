@@ -11,6 +11,7 @@ esports_core.sprint.players = {}
 -- Balance & Tuning Constants
 local MAX_STAMINA = 100
 local SPRINT_SPEED_MULT = 1.4          -- Base 1.2 * 1.4 = 1.68
+local CROUCH_COMPENSATION = 4.0 / 1.35 -- Compensates for Luanti's hardcoded movement_speed_crouch when sneak is held
 local DRAIN_RATE = 22                 -- Stamina points drained per second (~4.5s sprint)
 local JUMP_COST = 8                   -- Stamina drained instantly per jump while sprinting
 local REGEN_RATE = 25                 -- Stamina points regenerated per second (0 to 100 in 4s)
@@ -33,6 +34,7 @@ function esports_core.sprint.init_player(player)
 		last_jump = false,
 		last_speed = cdef and cdef.base_speed or 1.2,
 		last_sneak = true,
+		last_ctrl_sneak = false,
 		last_hud_pct = -1,
 		last_hud_tier = "",
 		last_hud_text = "",
@@ -135,6 +137,12 @@ function esports_core.sprint.update_physics(player, pname)
 	local allow_sneak = true
 	if pdata.is_sprinting then
 		target_speed = base * sprint_mult
+		local ctrl = player:get_player_control()
+		if ctrl.sneak then
+			-- Luanti engine applies movement_speed_crouch (1.35 m/s) instead of movement_speed_walk (4.0 m/s)
+			-- Multiply by CROUCH_COMPENSATION (4.0 / 1.35 = ~2.963) to cancel out the engine's crouch slowdown
+			target_speed = target_speed * CROUCH_COMPENSATION
+		end
 		allow_sneak = false
 	end
 
@@ -267,8 +275,8 @@ core.register_globalstep(function(dtime)
 				pdata.max_stamina = max_stm
 
 				local ctrl = player:get_player_control()
-				-- Sprint condition: moving forward (up) while holding Shift (sneak key), not backing up
-				local wants_sprint = ctrl.sneak and ctrl.up and not ctrl.down
+				-- Sprint condition: moving forward (up) while holding Shift (sneak key) OR Aux1 (E key), not backing up
+				local wants_sprint = (ctrl.sneak or ctrl.aux1) and ctrl.up and not ctrl.down
 
 				-- Jumping while sprinting expends a burst of stamina
 				if ctrl.jump and not pdata.last_jump and pdata.is_sprinting then
@@ -286,7 +294,10 @@ core.register_globalstep(function(dtime)
 				end
 
 				local can_sprint = wants_sprint and not pdata.exhausted and pdata.stamina > 0
-				local state_changed = (pdata.is_sprinting ~= can_sprint)
+				local sneak_toggled = pdata.is_sprinting and (ctrl.sneak ~= pdata.last_ctrl_sneak)
+				pdata.last_ctrl_sneak = ctrl.sneak
+
+				local state_changed = (pdata.is_sprinting ~= can_sprint) or sneak_toggled
 				pdata.is_sprinting = can_sprint
 
 				if can_sprint then
