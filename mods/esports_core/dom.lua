@@ -26,6 +26,7 @@ function esports_core.dom.setup()
 	esports_core.dom.reset()
 
 	local layout = esports_core.match.current_map_layout or "circular"
+	local scale = esports_core.match.current_map_scale or 1.0
 
 	if layout == "circular" then
 		-- Triangle Layout

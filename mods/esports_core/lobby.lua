@@ -804,11 +804,12 @@ local function build_admin_tab(fs, settings)
 
 	table.insert(fs, "checkbox[0.5,7.9;chk_allow_team_create;Allow Team Creation;" .. (esports_league.allow_team_creation and "true" or "false") .. "]")
 	table.insert(fs, "checkbox[0.5,8.5;chk_allow_nicks;Allow Nickname Changes;" .. (esports_core.allow_nicks and "true" or "false") .. "]")
+	table.insert(fs, "checkbox[0.5,9.1;chk_classes_enabled;Skin Class Stats;" .. (esports_core.classes_enabled and "true" or "false") .. "]")
 
-	table.insert(fs, "label[0.5,9.4;TIPS]")
-	table.insert(fs, "label[0.5,9.9;- Bots spawn with 0 ammo.]")
-	table.insert(fs, "label[0.5,10.4;- They hunt crates to reload.]")
-	table.insert(fs, "label[0.5,10.9;- Hard bots move faster/hit harder.]")
+	table.insert(fs, "label[0.5,9.8;TIPS]")
+	table.insert(fs, "label[0.5,10.2;- Bots spawn with 0 ammo.]")
+	table.insert(fs, "label[0.5,10.6;- They hunt crates to reload.]")
+	table.insert(fs, "label[0.5,11.0;- Hard bots move faster/hit harder.]")
 
 	-- Nicknames mappings display for admins
 	local mapping_items = {}
@@ -883,46 +884,70 @@ local function build_locker_tab(fs, name, is_admin)
 	local match_side = esports_core.match.get_player_match_side(name)
 	local is_spectator = esports_core.is_spectator(name)
 
-	table.insert(fs, "label[1,4;CHARACTER LOCKER]")
+	table.insert(fs, "label[1.0,3.5;CHARACTER LOCKER & TACTICAL CLASSES]")
 
 	if match_side or is_spectator then
 		table.insert(fs, "style_type[label;textcolor=#FF4444]")
-		table.insert(fs, "label[1,5.5;OUTFIT MODIFICATION DISABLED DURING ACTIVE SESSION]")
+		table.insert(fs, "label[1.0,5.5;OUTFIT MODIFICATION DISABLED DURING ACTIVE SESSION]")
 		table.insert(fs, "style_type[label;textcolor=white]")
-		table.insert(fs, "label[1,6.0;Finish your match or stop spectating to customize your character.]")
+		table.insert(fs, "label[1.0,6.0;Finish your match or stop spectating to customize your character.]")
 	else
-		table.insert(fs, "label[1,3.5;Select your base field outfit:]")
-
 		local skins = {
-			{id = "sam", name = "Tactical Sam", file = "character.png", portrait = "esports_portrait_sam.png", x = 1.1},
-			{id = "elite", name = "Elite Soldier", file = "skin_1.png", portrait = "esports_portrait_elite.png", x = 5.2},
-			{id = "recon", name = "Ghost Recon", file = "skin_2.png", portrait = "esports_portrait_recon.png", x = 9.3},
-			{id = "infil", name = "Infiltrator", file = "skin_3.png", portrait = "esports_portrait_infil.png", x = 13.4},
+			{id = "sam", name = "Tactical Sam", file = "character.png", portrait = "esports_portrait_sam.png", x = 1.0},
+			{id = "elite", name = "Elite Soldier", file = "skin_1.png", portrait = "esports_portrait_elite.png", x = 5.0},
+			{id = "recon", name = "Ghost Recon", file = "skin_2.png", portrait = "esports_portrait_recon.png", x = 9.0},
+			{id = "infil", name = "Infiltrator", file = "skin_3.png", portrait = "esports_portrait_infil.png", x = 13.0},
 		}
 
 		for _, s in ipairs(skins) do
-			table.insert(fs, "image[" .. s.x .. ",4.6;3.0,5.5;" .. s.portrait .. "]")
+			local cdef = esports_core.skins and esports_core.skins.classes and esports_core.skins.classes[s.file] or {
+				role = "Operator", subrole = "Standard", hp = 100, sprint_mult = 1.40, max_stamina = 100, jump_cost = 8, regen_delay = 1.0, perk = "Standard"
+			}
+
+			table.insert(fs, "label[" .. s.x .. ",3.9;" .. s.name .. "]")
+			table.insert(fs, "style[lbl_role_" .. s.id .. ";textcolor=#00E5FF;font=bold]")
+			table.insert(fs, "label[" .. s.x .. ",4.3;" .. cdef.role .. " (" .. cdef.subrole .. ")]")
+
+			table.insert(fs, "image[" .. s.x .. ",4.7;3.6,3.8;" .. s.portrait .. "]")
+
+			-- Tactical Stat Card
+			table.insert(fs, "box[" .. s.x .. ",8.6;3.6,2.0;#141414dd]")
+			table.insert(fs, "style[lbl_s1_" .. s.id .. ";textcolor=#FFFFFF;font=bold]")
+			table.insert(fs, "label[" .. (s.x + 0.15) .. ",8.7;HP: " .. cdef.hp .. "   SPD: " .. string.format("%.2fx", cdef.sprint_mult) .. "]")
+			table.insert(fs, "label[" .. (s.x + 0.15) .. ",9.15;STM: " .. cdef.max_stamina .. "  JUMP: -" .. cdef.jump_cost .. "]")
+			table.insert(fs, "style[lbl_s3_" .. s.id .. ";textcolor=#FFC72C;font=bold]")
+			table.insert(fs, "label[" .. (s.x + 0.15) .. ",9.6;" .. core.formspec_escape(cdef.perk) .. "]")
+			table.insert(fs, "style[lbl_s4_" .. s.id .. ";textcolor=#AAAAAA;font=normal]")
+			table.insert(fs, "label[" .. (s.x + 0.15) .. ",10.15;Regen Delay: " .. string.format("%.1fs", cdef.regen_delay) .. "]")
 
 			if current == s.file then
-				table.insert(fs, "style[set_skin_" .. s.id .. ";bgcolor=#00FF00;textcolor=black]")
-				table.insert(fs, "button[" .. s.x .. ",10.3;3.0,0.6;set_skin_" .. s.id .. ";ACTIVE]")
+				table.insert(fs, "style[set_skin_" .. s.id .. ";bgcolor=#00FF88;textcolor=black;font=bold]")
+				table.insert(fs, "button[" .. s.x .. ",10.75;3.6,0.65;set_skin_" .. s.id .. ";ACTIVE CLASS]")
 			else
-				table.insert(fs, "button[" .. s.x .. ",10.3;3.0,0.6;set_skin_" .. s.id .. ";SELECT]")
+				table.insert(fs, "style[set_skin_" .. s.id .. ";bgcolor=#333333;textcolor=white;font=bold]")
+				table.insert(fs, "button[" .. s.x .. ",10.75;3.6,0.65;set_skin_" .. s.id .. ";SELECT CLASS]")
 			end
-			table.insert(fs, "label[" .. s.x .. ",4.2;" .. s.name .. "]")
 		end
 
-		table.insert(fs, "label[1.1,11.1;Team colors will overlay these choices during a match.]")
+		if esports_core.classes_enabled then
+			table.insert(fs, "style[lbl_cls_status;textcolor=#00FF88;font=bold]")
+			table.insert(fs, "label[1.0,11.55;CLASS MODIFIERS ACTIVE: Outfits apply unique Health, Sprint Speed, Stamina, and Tactical Perks.]")
+		else
+			table.insert(fs, "style[lbl_cls_status;textcolor=#FFB700;font=bold]")
+			table.insert(fs, "label[1.0,11.55;CLASS MODIFIERS DISABLED: Outfits are currently cosmetic only (all players have identical base stats).]")
+		end
+		table.insert(fs, "style[lbl_sub_info;textcolor=#AAAAAA;font=normal]")
+		table.insert(fs, "label[1.0,11.9;Team colors (Red/Blue) overlay outfit textures during competitive matches.]")
 	end
 
 	-- Nickname Editor at the very bottom
 	if esports_core.allow_nicks or is_admin then
 		local raw_nick = esports_core.nicknames[name] or name
-		table.insert(fs, "field[1.5,12.2;7.0,0.8;txt_nickname;Lobby Nickname;" .. core.formspec_escape(raw_nick) .. "]")
-		table.insert(fs, "button[8.8,12.2;4.0,0.8;btn_set_nickname;UPDATE NICKNAME]")
-		table.insert(fs, "button[13.1,12.2;3.0,0.8;btn_clear_nickname;RESET]")
+		table.insert(fs, "field[1.5,12.4;7.0,0.8;txt_nickname;Lobby Nickname;" .. core.formspec_escape(raw_nick) .. "]")
+		table.insert(fs, "button[8.8,12.4;4.0,0.8;btn_set_nickname;UPDATE NICKNAME]")
+		table.insert(fs, "button[13.1,12.4;3.0,0.8;btn_clear_nickname;RESET]")
 	else
-		table.insert(fs, "label[1.5,12.2;Nickname changes are currently disabled by an administrator. (Current: " .. core.formspec_escape(esports_core.get_nick(name)) .. ")]")
+		table.insert(fs, "label[1.5,12.4;Nickname changes are currently disabled by an administrator. (Current: " .. core.formspec_escape(esports_core.get_nick(name)) .. ")]")
 	end
 end
 
@@ -954,6 +979,8 @@ local function build_main_tab(fs, name)
 	table.insert(fs, "label[1.0,8.7;Flag Captures: " .. pc .. "]")
 	table.insert(fs, "label[1.0,9.4;Hill Control Time: " .. ph .. "s]")
 	table.insert(fs, "label[1.0,10.1;Domination Points: " .. pdom .. "]")
+	table.insert(fs, "style[btn_view_last_stats;bgcolor=#0055aa;textcolor=white;font=bold]")
+	table.insert(fs, "button[1.0,10.8;7.0,0.9;btn_view_last_stats;VIEW LAST MATCH STATS]")
 
 	-- Team Stats Container
 	table.insert(fs, "box[9.0,3.8;8.0,8.2;#222222aa]")
@@ -1145,6 +1172,18 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	end
 	if not fields.quit then
 		player_settings[name].err_msg = nil
+	end
+
+	-- View Last Match Stats
+	if fields.btn_view_last_stats then
+		if esports_core.last_match_data then
+			esports_core.lobby.blackout_hide(player)
+			core.close_formspec(name, "esports_core:lobby")
+			esports_core.hud.show_outro(player, esports_core.last_match_data, true)
+			return
+		else
+			core.chat_send_player(name, "LOBBY: No previous match statistics available.")
+		end
 	end
 
 	-- Disconnect Logic
@@ -1358,6 +1397,9 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		if fields.set_skin_infil then meta:set_string("esports_selected_skin", "skin_3.png") end
 
 		esports_core.skins.apply(player, nil)
+		if esports_core.sprint then
+			esports_core.sprint.reset_player(player)
+		end
 		esports_core.lobby.show(player)
 		return
 	end
@@ -1736,8 +1778,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	end
 
 	if fields.stop_match and is_admin then
-		esports_core.match.state = "over"
-		esports_core.match.timer = 1
+		esports_core.match.state = "waiting"
+		esports_core.match.timer = 0
 		esports_core.match.paused = false
 		-- Clear state immediately to prevent stale data on instant restarts
 		esports_core.match.player_sides = {}
@@ -1749,13 +1791,21 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			esports_mapgen.reset_island("lobby")
 		end
 
-		-- Teleport all players back to the lobby center spawn to prevent falling into the void
+		if esports_core.spectators then
+			for pname, _ in pairs(esports_core.spectators) do
+				local p = core.get_player_by_name(pname)
+				if p then esports_core.set_spectator(p, false) end
+			end
+			esports_core.spectators = {}
+		end
+
+		-- Teleport all players back to the lobby center spawn and reset to lobby
 		for _, p in ipairs(core.get_connected_players()) do
-			p:set_pos({x=0, y=1.5, z=0})
-			p:set_physics_override({speed = 0, jump = 0, gravity = 1})
+			esports_core.hud.hide_outro(p)
+			esports_core.reset_to_lobby(p)
+			esports_core.lobby.show(p)
 		end
 		core.chat_send_all("ADMIN: Match has been stopped by " .. name)
-		esports_core.lobby.show(player)
 		return
 	end
 
@@ -1800,6 +1850,14 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	if fields.chk_allow_team_create then
 		esports_league.allow_team_creation = (fields.chk_allow_team_create == "true")
 		esports_league.save()
+		esports_core.lobby.show(player)
+		return
+	end
+
+	if fields.chk_classes_enabled then
+		esports_core.classes_enabled = (fields.chk_classes_enabled == "true")
+		esports_core.save_classes_enabled()
+		core.chat_send_all("ADMIN: Skin class modifiers have been " .. (esports_core.classes_enabled and "ENABLED" or "DISABLED (Cosmetic only)"))
 		esports_core.lobby.show(player)
 		return
 	end
@@ -1924,8 +1982,10 @@ core.register_globalstep(function(dtime)
 			esports_core.match.join_player_to_ongoing(player)
 		end
 
-		-- If NOT in a match side, NOT an admin, and NOT already a spectator
-		if not side and not is_admin and not esports_core.is_spectator(name) then
+		local in_practice = esports_core.practice and esports_core.practice.players and esports_core.practice.players[name]
+
+		-- If NOT in a match side, NOT an admin, NOT already a spectator, and NOT in practice
+		if not side and not is_admin and not esports_core.is_spectator(name) and not in_practice then
 			local huds = esports_core.hud and esports_core.hud.player_huds and esports_core.hud.player_huds[name]
 			local is_viewing_outro = huds and huds.outro_bg ~= nil
 			if not is_viewing_outro then
@@ -1939,11 +1999,11 @@ core.register_globalstep(function(dtime)
 			player:override_day_night_ratio(nil)
 			local settings = player_settings[name]
 			local is_spectator_view = settings and settings.spectator_view
-			if match_active and is_admin and not side and not is_spectator_view then
+			if match_active and is_admin and not side and not is_spectator_view and not in_practice then
 				-- Force live scoreboard refresh/stay open for spectating admins who are not in 3D spectate view
 				esports_core.lobby.show(player)
-			elseif (side or esports_core.is_spectator(name)) and not is_admin then
-				-- Close lobby formspec and hide blackout for participants/spectators (except admins!)
+			elseif match_active and (side or esports_core.is_spectator(name) or in_practice) and not is_admin then
+				-- Close lobby formspec and hide blackout for participants/spectators/practice (except admins!)
 				esports_core.lobby.blackout_hide(player)
 				core.close_formspec(name, "esports_core:lobby")
 			end
@@ -2026,11 +2086,18 @@ core.register_chatcommand("lobby", {
 
 			-- Reset player from practice range if they are inside
 			if esports_core.practice and esports_core.practice.players[name] then
-				esports_core.practice.players[name] = nil
-				player:set_pos({x=0, y=1.5, z=0})
-				esports_core.reset_to_lobby(player)
+				esports_core.practice.leave(name)
+				return
 			end
 
+			-- Cleanly hide outro, reset spectator and ensure lobby reset
+			if esports_core.hud and esports_core.hud.hide_outro then
+				esports_core.hud.hide_outro(player)
+			end
+			if esports_core.is_spectator and esports_core.is_spectator(name) then
+				esports_core.set_spectator(player, false)
+			end
+			esports_core.reset_to_lobby(player)
 			esports_core.lobby.show(player)
 		end
 	end

@@ -62,11 +62,14 @@ esports_weapons.shoot_raycast = function(player, damage, range, spread)
 	local pos = player:get_pos()
 	pos.y = pos.y + player:get_properties().eye_height
 
-	-- Apply spread
+	-- Apply spread (with class modifier support)
 	if spread > 0 then
-		dir.x = dir.x + (math.random() - 0.5) * spread
-		dir.y = dir.y + (math.random() - 0.5) * spread
-		dir.z = dir.z + (math.random() - 0.5) * spread
+		local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(player)
+		local spread_mult = cdef and cdef.spread_mult or 1.0
+		local eff_spread = spread * spread_mult
+		dir.x = dir.x + (math.random() - 0.5) * eff_spread
+		dir.y = dir.y + (math.random() - 0.5) * eff_spread
+		dir.z = dir.z + (math.random() - 0.5) * eff_spread
 		local len = math.sqrt(dir.x^2 + dir.y^2 + dir.z^2)
 		dir.x = dir.x / len
 		dir.y = dir.y / len
@@ -505,6 +508,12 @@ core.register_on_punchnode(function(pos, node, puncher)
 				return  -- Protected area, don't allow damage
 			end
 		end
+	end
+
+	-- Apply Class Demolition Multiplier (e.g. Elite Soldier Tank perk)
+	local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(puncher)
+	if cdef and cdef.demo_mult and cdef.demo_mult ~= 1.0 then
+		damage = math.floor(damage * cdef.demo_mult + 0.5)
 	end
 
 	esports_weapons.damage_node(pos, node, damage, puncher)

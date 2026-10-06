@@ -194,8 +194,9 @@ end)
 -- CINEMATIC UPDATE
 local spec_timer = 0
 core.register_globalstep(function(dtime)
+	if next(esports_core.spectators) == nil then return end
 	spec_timer = spec_timer + dtime
-	if spec_timer < 0.1 then return end
+	if spec_timer < 0.25 then return end
 	spec_timer = 0
 	for spec_name, data in pairs(esports_core.spectators) do
 		local spectator = core.get_player_by_name(spec_name)

@@ -56,14 +56,26 @@ local function attack_obstacle(self, pos, dir, obstacle_pos, def, cdef)
 
 			-- Tracer
 			local t_dir = vector_direction(bullet_pos, obstacle_pos)
-			local tracer_dist = vector_distance(bullet_pos, obstacle_pos)
-			local step = 2.0
-			for d = 1.0, tracer_dist, step do
-				local tpos = vector.add(bullet_pos, vector.multiply(t_dir, d))
-				core.add_particle({
-					pos = tpos, velocity = {x=0, y=0, z=0}, expirationtime = 0.1,
-					size = 0.4, texture = "esports_tracer.png^[colorize:#33FF33:200", glow = 14,
-				})
+			if t_dir then
+				local tracer_dist = vector_distance(bullet_pos, obstacle_pos) or 0
+				local step = 2.0
+				for d = 1.0, tracer_dist, step do
+					local tpos = {
+						x = bullet_pos.x + t_dir.x * d,
+						y = bullet_pos.y + t_dir.y * d,
+						z = bullet_pos.z + t_dir.z * d
+					}
+					core.add_particle({
+						pos = tpos,
+						velocity = {x = 0, y = 0, z = 0},
+						acceleration = {x = 0, y = 0, z = 0},
+						expirationtime = 0.1,
+						size = 0.4,
+						texture = "esports_tracer.png^[colorize:#33FF33:200",
+						glow = 14,
+						vertical = false,
+					})
+				end
 			end
 
 			-- Damage node
@@ -200,7 +212,7 @@ core.register_entity("esports_core:bot", {
 	_scan_timer = 0,  -- Throttle node scans
 
 	set_class = function(self, class)
-		self._class = class or "standard"
+		self._class = (type(class) == "string" and class_settings[class]) and class or "standard"
 		local cdef = class_settings[self._class]
 		if cdef then
 			local tex = "character.png" .. cdef.tint
@@ -209,7 +221,7 @@ core.register_entity("esports_core:bot", {
 	end,
 
 	set_difficulty = function(self, diff)
-		self._difficulty = diff or "medium"
+		self._difficulty = (type(diff) == "string" and difficulty_settings[diff]) and diff or "medium"
 		local def = difficulty_settings[self._difficulty]
 		if def then
 			self.object:set_properties({hp_max = def.hp})
@@ -247,6 +259,20 @@ core.register_entity("esports_core:bot", {
 		self._scan_timer = self._scan_timer - dtime
 
 		local pos = self.object:get_pos()
+		if not pos then return end
+
+		-- Void death check for bots
+		if pos.y < -10 then
+			local diff = self._difficulty
+			local class = self._class or "standard"
+			core.after(2, function()
+				if esports_core.match.state == "active" and esports_core.match.is_pve then
+					esports_core.bots.spawn(esports_core.get_safe_spawn_pos("red"), diff, class)
+				end
+			end)
+			self.object:remove()
+			return
+		end
 
 		-- Update dynamic nametag with health for bots/sentries
 		local hp = self.object:get_hp()
@@ -266,7 +292,7 @@ core.register_entity("esports_core:bot", {
 				local target_crate = nil
 
 				if esports_loot and esports_loot.crate_positions then
-					for _, cp in pairs(esports_loot.crate_positions) do
+					for _, cp in ipairs(esports_loot.crate_positions) do
 						local d = vector_distance(pos, cp)
 						if d < min_dist then
 							min_dist = d
@@ -478,12 +504,20 @@ core.register_entity("esports_core:bot", {
 })
 
 function esports_core.bots.shoot(bot_obj, target_player, damage, spread)
+	if not bot_obj or not target_player then return end
 	local pos = bot_obj:get_pos()
-	pos.y = pos.y + 1.5
+	if not pos then return end
 	local target_pos = target_player:get_pos()
-	target_pos.y = target_pos.y + 1.0
+	if not target_pos then return end
+
+	pos = {x = pos.x, y = pos.y + 1.5, z = pos.z}
+	target_pos = {x = target_pos.x, y = target_pos.y + 1.0, z = target_pos.z}
+
+	damage = tonumber(damage) or 10
+	spread = tonumber(spread) or 0.1
 
 	local dir = vector.direction(pos, target_pos)
+	if not dir then return end
 
 	if spread > 0 then
 		dir.x = dir.x + (math.random() - 0.5) * spread
@@ -493,7 +527,11 @@ function esports_core.bots.shoot(bot_obj, target_player, damage, spread)
 	end
 
 	local range = 40
-	local end_pos = vector.add(pos, vector.multiply(dir, range))
+	local end_pos = {
+		x = pos.x + dir.x * range,
+		y = pos.y + dir.y * range,
+		z = pos.z + dir.z * range
+	}
 	local hit_pos = end_pos
 	local ray = core.raycast(pos, end_pos, true, true)
 
@@ -507,11 +545,11 @@ function esports_core.bots.shoot(bot_obj, target_player, damage, spread)
 						damage_groups = {fleshy = damage, is_gun = 1}
 					}, dir)
 				end
-				hit_pos = pointed_thing.intersection_point
+				hit_pos = pointed_thing.intersection_point or end_pos
 				break
 			end
 		elseif pointed_thing.type == "node" then
-			hit_pos = pointed_thing.intersection_point
+			hit_pos = pointed_thing.intersection_point or end_pos
 			local node_pos = pointed_thing.under
 			local node = core.get_node(node_pos)
 			if core.get_item_group(node.name, "player_built") > 0 then
@@ -533,13 +571,26 @@ function esports_core.bots.shoot(bot_obj, target_player, damage, spread)
 
 	core.sound_play("esports_shoot_assault_rifle", {pos = pos, max_hear_distance = 32, gain = 0.5})
 
+	if not hit_pos then hit_pos = end_pos end
 	local dist = vector.distance(pos, hit_pos)
-	local step = 2.0  -- Optimized: 75% fewer particles for massive network and rendering performance gains
-	for d = 1.0, dist, step do
-		local tpos = vector.add(pos, vector.multiply(dir, d))
-		core.add_particle({
-			pos = tpos, velocity = {x=0, y=0, z=0}, expirationtime = 0.1,
-			size = 0.4, texture = "esports_tracer.png^[colorize:#33FF33:200", glow = 14,
-		})
+	if dist and dist > 0 then
+		local step = 2.0  -- Optimized: 75% fewer particles for massive network and rendering performance gains
+		for d = 1.0, dist, step do
+			local tpos = {
+				x = pos.x + dir.x * d,
+				y = pos.y + dir.y * d,
+				z = pos.z + dir.z * d
+			}
+			core.add_particle({
+				pos = tpos,
+				velocity = {x = 0, y = 0, z = 0},
+				acceleration = {x = 0, y = 0, z = 0},
+				expirationtime = 0.1,
+				size = 0.4,
+				texture = "esports_tracer.png^[colorize:#33FF33:200",
+				glow = 14,
+				vertical = false,
+			})
+		end
 	end
 end

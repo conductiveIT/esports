@@ -1,5 +1,123 @@
 esports_core.skins = {}
 
+-- Tactical Class Archetypes for the 4 Locker Outfits
+esports_core.skins.classes = {
+	["character.png"] = {
+		id = "sam",
+		name = "Tactical Sam",
+		role = "Operator",
+		subrole = "All-Rounder",
+		hp = 100,
+		base_speed = 1.20,
+		sprint_mult = 1.40,
+		max_stamina = 100,
+		drain_rate = 22,
+		regen_rate = 25,
+		regen_delay = 1.0,
+		jump_cost = 8,
+		demo_mult = 1.0,
+		spread_mult = 1.0,
+		flag_speed = 0.90,
+		flag_drain_mult = 1.5,
+		perk = "Balanced baseline stats",
+	},
+	["skin_1.png"] = {
+		id = "elite",
+		name = "Elite Soldier",
+		role = "Juggernaut",
+		subrole = "Tank",
+		hp = 120,
+		base_speed = 1.15,
+		sprint_mult = 1.30,
+		max_stamina = 100,
+		drain_rate = 22,
+		regen_rate = 22,
+		regen_delay = 1.2,
+		jump_cost = 10,
+		demo_mult = 1.5,
+		spread_mult = 1.0,
+		flag_speed = 0.90,
+		flag_drain_mult = 1.5,
+		perk = "+20 HP, +50% Demo dmg",
+	},
+	["skin_2.png"] = {
+		id = "recon",
+		name = "Ghost Recon",
+		role = "Marksman",
+		subrole = "Precision",
+		hp = 90,
+		base_speed = 1.20,
+		sprint_mult = 1.40,
+		max_stamina = 100,
+		drain_rate = 20,
+		regen_rate = 30,
+		regen_delay = 0.4,
+		jump_cost = 8,
+		demo_mult = 1.0,
+		spread_mult = 0.75,
+		flag_speed = 0.90,
+		flag_drain_mult = 1.5,
+		perk = "0.4s Regen delay, -25% Spread",
+	},
+	["skin_3.png"] = {
+		id = "infil",
+		name = "Infiltrator",
+		role = "Rusher",
+		subrole = "Flanker",
+		hp = 85,
+		base_speed = 1.25,
+		sprint_mult = 1.50,
+		max_stamina = 120,
+		drain_rate = 22,
+		regen_rate = 25,
+		regen_delay = 0.8,
+		jump_cost = 6,
+		demo_mult = 1.0,
+		spread_mult = 1.0,
+		flag_speed = 0.98,
+		flag_drain_mult = 1.2,
+		perk = "120 Stamina, 1.5x Sprint, Swift Flag",
+	},
+}
+
+local default_class = {
+	id = "sam",
+	name = "Tactical Sam",
+	role = "Operator",
+	subrole = "Standard",
+	hp = 100,
+	base_speed = 1.20,
+	sprint_mult = 1.40,
+	max_stamina = 100,
+	drain_rate = 22,
+	regen_rate = 25,
+	regen_delay = 1.0,
+	jump_cost = 8,
+	demo_mult = 1.0,
+	spread_mult = 1.0,
+	flag_speed = 0.90,
+	flag_drain_mult = 1.5,
+	perk = "Standard baseline",
+}
+
+function esports_core.skins.get_player_class(player_or_name)
+	if not esports_core.classes_enabled then
+		return default_class
+	end
+
+	local player = type(player_or_name) == "string" and core.get_player_by_name(player_or_name) or player_or_name
+	if not player or not player:is_player() then
+		return default_class
+	end
+
+	local skin = player:get_meta():get_string("esports_selected_skin")
+	if not skin or skin == "" then
+		skin = "character.png"
+	end
+
+	return esports_core.skins.classes[skin] or default_class
+end
+
 -- Initialize the player to use the 3D model
 core.register_on_joinplayer(function(player)
 	player:set_properties({

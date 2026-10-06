@@ -1,15 +1,16 @@
 core.log("action", "====================================================")
-core.log("action", "[TDM Mapgen] Starting Luanti Deathmatch Mapgen v0.5.2")
+core.log("action", "[TDM Mapgen] Starting Luanti Deathmatch Mapgen v0.8.0")
 core.log("action", "====================================================")
 
 -- Force the world's map generator to Singlenode (void) to prevent natural v7/v6 hills/oceans
 core.set_mapgen_setting("mg_name", "singlenode", true)
 
--- Increase server block update sending range to 128 blocks (8 chunks)
-core.settings:set("active_block_range", "8")
+-- Set optimal active block range (2 chunks / 32 blocks radius around players)
+-- Prevents server tick stalls across 20+ players
+core.settings:set("active_block_range", "2")
 
 -- Increase packet quota per iteration to prevent client send quota warnings on join
-core.settings:set("max_packets_per_iteration", "4096")
+core.settings:set("max_packets_per_iteration", "8192")
 
 core.register_node("esports_mapgen:grass", {
 	description = "Grass",

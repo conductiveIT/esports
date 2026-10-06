@@ -3,6 +3,58 @@ esports_core.hud.player_huds = {}
 esports_core.hud.kill_feed_events = {}  -- Global list of recent kills {killer, k_col, victim, v_col, icon, age}
 esports_core.hud.spectator_feed_huds = {}  -- pname -> { {id1, id2, id3}, ... }
 
+esports_core.hud.get_personal_stats_text = function(player_name)
+	local is_practice = esports_core.practice and esports_core.practice.players and esports_core.practice.players[player_name]
+	if is_practice then
+		local session = esports_core.practice.players[player_name]
+		local acc = (session.shots and session.shots > 0) and math.floor((session.hits / session.shots) * 100) or 0
+		return string.format("HITS: %d | SHOTS: %d | ACC: %d%%", session.hits or 0, session.shots or 0, acc)
+	end
+
+	local stats = (esports_core.match and esports_core.match.player_stats and esports_core.match.player_stats[player_name]) or {kills = 0, deaths = 0}
+	local kills = stats.kills or 0
+	local deaths = stats.deaths or 0
+	local kd = deaths > 0 and string.format("%.1f", kills / deaths) or tostring(kills)
+
+	if esports_core.match then
+		if esports_core.match.is_ctf then
+			local caps = stats.captures or 0
+			return string.format("K: %d | D: %d (%s K/D) | FLAGS: %d", kills, deaths, kd, caps)
+		elseif esports_core.match.is_koth then
+			local hill = stats.hill_time or 0
+			return string.format("K: %d | D: %d (%s K/D) | HILL: %ds", kills, deaths, kd, hill)
+		elseif esports_core.match.is_domination then
+			local dom = stats.dom_points or 0
+			return string.format("K: %d | D: %d (%s K/D) | DOM: %d", kills, deaths, kd, dom)
+		elseif esports_core.match.is_payload then
+			local escort = stats.escort_time or 0
+			return string.format("K: %d | D: %d (%s K/D) | ESCORT: %ds", kills, deaths, kd, escort)
+		elseif esports_core.match.is_spleef then
+			local surv = stats.spleef_survival or 0
+			local blks = stats.spleef_blocks or 0
+			return string.format("SURVIVAL: %ds | BLOCKS: %d", surv, blks)
+		end
+	end
+
+	return string.format("KILLS: %d | DEATHS: %d  (%s K/D)", kills, deaths, kd)
+end
+
+esports_core.hud.update_personal_stats = function(player)
+	if not player or not player:is_player() then return end
+	local pname = player:get_player_name()
+	local huds = esports_core.hud.player_huds[pname]
+	if huds and huds.personal_stats then
+		local text = esports_core.hud.get_personal_stats_text(pname)
+		player:hud_change(huds.personal_stats, "text", text)
+	end
+end
+
+esports_core.hud.update_all_personal_stats = function()
+	for _, player in ipairs(core.get_connected_players()) do
+		esports_core.hud.update_personal_stats(player)
+	end
+end
+
 esports_core.hud.init_hud = function(player)
 	local player_name = player:get_player_name()
 
@@ -22,7 +74,11 @@ esports_core.hud.init_hud = function(player)
 	local r_text = esports_core.get_team_logo(esports_core.teams.active_team_names.red, "esports_logo_red.png")
 	local b_text = esports_core.get_team_logo(esports_core.teams.active_team_names.blue, "esports_logo_blue.png")
 
-	if esports_core.match.is_ffa then
+	if esports_core.practice and esports_core.practice.players and esports_core.practice.players[player_name] then
+		default_score = "AIM TRAINING RANGE"
+		r_text = ""
+		b_text = ""
+	elseif esports_core.match.is_ffa then
 		local l_name, l_kills = esports_core.match.get_ffa_leader()
 		local leader_display = l_name == "None" and "None" or esports_core.get_nick(l_name)
 		local my_kills = (esports_core.match.player_stats[player_name] and esports_core.match.player_stats[player_name].kills) or 0
@@ -100,7 +156,10 @@ esports_core.hud.init_hud = function(player)
 		local team = esports_core.teams.get_player_team(player_name)
 		local color = 0xFF0000
 		local text_display = "Team: " .. (team or "None")
-		if esports_core.match.is_ffa or team == "ffa" then
+		if esports_core.practice and esports_core.practice.players and esports_core.practice.players[player_name] then
+			color = 0x00FF88
+			text_display = "PRACTICE RANGE"
+		elseif esports_core.match.is_ffa or team == "ffa" then
 			color = 0xFFD700
 			text_display = "FREE FOR ALL"
 		elseif team == "blue" then
@@ -116,6 +175,17 @@ esports_core.hud.init_hud = function(player)
 			number = color,
 		})
 
+		-- Personal Match Stats (Bottom Left, directly above Team badge)
+		huds.personal_stats = player:hud_add({
+			type = "text",
+			position = {x = 0.05, y = 0.92},
+			offset = {x = 0, y = 0},
+			text = esports_core.hud.get_personal_stats_text(player_name),
+			alignment = {x = 1, y = 0},
+			scale = {x = 100, y = 100},
+			number = 0xFFD700,  -- Bright gold for visibility
+		})
+
 		-- Ammo HUD (Bottom Right)
 		huds.ammo = player:hud_add({
 			type = "text",
@@ -126,8 +196,42 @@ esports_core.hud.init_hud = function(player)
 			number = 0xFFFFFF,
 		})
 
-		-- Initial update
+		-- Initial updates
 		esports_core.hud.update_ammo(player)
+		esports_core.hud.update_personal_stats(player)
+
+		-- Stamina HUD (Bottom Center, above Hotbar)
+		huds.stamina_bg = player:hud_add({
+			type = "image",
+			position = {x = 0.5, y = 0.885},
+			offset = {x = -82, y = 0},
+			alignment = {x = 1, y = 0},
+			scale = {x = 1, y = 1},
+			text = "esports_stamina_bg.png",
+		})
+
+		huds.stamina_fill = player:hud_add({
+			type = "image",
+			position = {x = 0.5, y = 0.885},
+			offset = {x = -80, y = 2},
+			alignment = {x = 1, y = 0},
+			scale = {x = 1, y = 1},
+			text = "esports_stamina_fill.png^[colorize:#00E5FF:255",
+		})
+
+		huds.stamina_text = player:hud_add({
+			type = "text",
+			position = {x = 0.5, y = 0.865},
+			offset = {x = 0, y = 0},
+			alignment = {x = 0, y = 0},
+			number = 0x00E5FF,
+			text = "STAMINA 100%",
+			scale = {x = 1, y = 1},
+		})
+
+		if esports_core.sprint then
+			esports_core.sprint.update_hud(player, nil, true)
+		end
 	end
 
 	-- CTF STATUS HUD (Top left area)
@@ -301,6 +405,9 @@ esports_core.hud.update_scores = function()
 			end
 		end
 	end
+
+	-- Also refresh everyone's personal match stats during score updates
+	esports_core.hud.update_all_personal_stats()
 end
 
 -- Broadcast Feed API
@@ -406,14 +513,15 @@ end
 -- Cleanup loop
 local feed_timer = 0
 core.register_globalstep(function(dtime)
+	if #esports_core.hud.kill_feed_events == 0 then return end
 	feed_timer = feed_timer + dtime
-	if feed_timer < 0.2 then return end
+	if feed_timer < 0.3 then return end
 	feed_timer = 0
 
 	local changed = false
 	local new_list = {}
 	for i, event in ipairs(esports_core.hud.kill_feed_events) do
-		event.age = event.age - 0.2
+		event.age = event.age - 0.3
 		if event.age > 0 then
 			table.insert(new_list, event)
 		else
@@ -435,12 +543,12 @@ function esports_core.hud.show_intro(player, time, r_name, b_name)
 	local huds = esports_core.hud.player_huds[pname]
 	if not huds then return end
 
-	-- Resolve Logos
-	local r_logo = esports_core.get_team_logo(r_name, "esports_logo_red.png")
-	local b_logo = esports_core.get_team_logo(b_name, "esports_logo_blue.png")
-
 	-- Create elements if they don't exist
 	if not huds.intro_vs then
+		-- Resolve Logos once on creation
+		local r_logo = esports_core.get_team_logo(r_name, "esports_logo_red.png")
+		local b_logo = esports_core.get_team_logo(b_name, "esports_logo_blue.png")
+
 		-- Branding Bars for Contrast (Responsive)
 		huds.intro_bar_red = player:hud_add({
 			type = "image",
@@ -536,7 +644,21 @@ function esports_core.hud.hide_intro(player)
 	end
 end
 
-function esports_core.hud.show_outro(player, data)
+esports_core.hud.outro_lockout = esports_core.hud.outro_lockout or {}
+
+function esports_core.hud.get_outro_formspec(lock_seconds)
+	if lock_seconds and lock_seconds > 0 then
+		return "size[8,2]position[0.5,0.85]anchor[0.5,0.5]bgcolor[#00000000;false]" ..
+			"style[return_lobby_locked;bgcolor=#333333;textcolor=#aaaaaa;font=bold;font_size=20]" ..
+			"button[0,0;8,1.5;return_lobby_locked;RETURN TO LOBBY (" .. lock_seconds .. "s...)]"
+	else
+		return "size[8,2]position[0.5,0.85]anchor[0.5,0.5]bgcolor[#00000000;false]" ..
+			"style[return_lobby;bgcolor=#555555;textcolor=gold;font=bold;font_size=24]" ..
+			"button[0,0;8,1.5;return_lobby;RETURN TO LOBBY]"
+	end
+end
+
+function esports_core.hud.show_outro(player, data, is_reopen)
 	local pname = player:get_player_name()
 	local huds = esports_core.hud.player_huds[pname]
 	if not huds then
@@ -580,11 +702,44 @@ function esports_core.hud.show_outro(player, data)
 		alignment = {x = 0, y = 0},
 	})
 
-	-- 3.5 Interactive Return Button (Manual Transition) - Anchored Bottom
-	core.show_formspec(pname, "esports_core:outro_return",
-		"size[8,2]position[0.5,0.85]anchor[0.5,0.5]bgcolor[#00000000;false]" ..
-		"style[return_lobby;bgcolor=#555555;textcolor=gold;font=bold;font_size=24]" ..
-		"button[0,0;8,1.5;return_lobby;RETURN TO LOBBY]")
+	-- Store for lobby re-viewing
+	esports_core.last_match_data = data
+
+	-- 3.5 Interactive Return Button with Grace Period Lockout (prevents accidental closing)
+	if is_reopen then
+		esports_core.hud.outro_lockout[pname] = 0
+		core.show_formspec(pname, "esports_core:outro_return", esports_core.hud.get_outro_formspec(0))
+	else
+		esports_core.hud.outro_lockout[pname] = 3
+		core.show_formspec(pname, "esports_core:outro_return", esports_core.hud.get_outro_formspec(3))
+
+		core.after(1, function()
+			local p = core.get_player_by_name(pname)
+			local h = p and esports_core.hud.player_huds[pname]
+			if p and h and h.outro_bg and (esports_core.hud.outro_lockout[pname] or 0) > 0 then
+				esports_core.hud.outro_lockout[pname] = 2
+				core.show_formspec(pname, "esports_core:outro_return", esports_core.hud.get_outro_formspec(2))
+			end
+		end)
+
+		core.after(2, function()
+			local p = core.get_player_by_name(pname)
+			local h = p and esports_core.hud.player_huds[pname]
+			if p and h and h.outro_bg and (esports_core.hud.outro_lockout[pname] or 0) > 0 then
+				esports_core.hud.outro_lockout[pname] = 1
+				core.show_formspec(pname, "esports_core:outro_return", esports_core.hud.get_outro_formspec(1))
+			end
+		end)
+
+		core.after(3, function()
+			local p = core.get_player_by_name(pname)
+			local h = p and esports_core.hud.player_huds[pname]
+			if p and h and h.outro_bg and (esports_core.hud.outro_lockout[pname] or 0) > 0 then
+				esports_core.hud.outro_lockout[pname] = 0
+				core.show_formspec(pname, "esports_core:outro_return", esports_core.hud.get_outro_formspec(0))
+			end
+		end)
+	end
 
 	-- 4. MVP Highlight (Gold Text)
 	local mvp_label = "KILLS"
@@ -695,6 +850,7 @@ end
 
 function esports_core.hud.hide_outro(player)
 	local pname = player:get_player_name()
+	esports_core.hud.outro_lockout[pname] = nil
 	local huds = esports_core.hud.player_huds[pname]
 	if not huds then return end
 
@@ -864,27 +1020,52 @@ esports_core.hud.toggle_scoreboard = function(player, visible)
 	end
 end
 
--- Input Update Loop (Event-driven scoreboard toggle)
+-- Input Update Loop (Event-driven scoreboard toggle, 5 Hz)
 local input_timer = 0
 core.register_globalstep(function(dtime)
 	input_timer = input_timer + dtime
-	if input_timer < 0.1 then return end
+	if input_timer < 0.2 then return end
 	input_timer = 0
 	for _, player in ipairs(core.get_connected_players()) do
 		local name = player:get_player_name()
 		if not esports_core.is_spectator(name) then
 			local controls = player:get_player_control()
-			esports_core.hud.toggle_scoreboard(player, controls.aux1)
+			local show_score = controls.zoom or controls.aux1
+			esports_core.hud.toggle_scoreboard(player, show_score)
 		end
 	end
 end)
 
 core.register_on_player_receive_fields(function(player, formname, fields)
-	if formname == "esports_core:outro_return" and fields.return_lobby then
-		esports_core.hud.hide_outro(player)
-		esports_core.lobby.show(player)
-		esports_core.reset_to_lobby(player)
-		return true
+	if formname == "esports_core:outro_return" then
+		local pname = player:get_player_name()
+		local remaining = esports_core.hud.outro_lockout[pname] or 0
+
+		if fields.return_lobby_locked then
+			core.chat_send_player(pname, "Stats screen protected: return button unlocks in " .. remaining .. "s...")
+			return true
+		end
+
+		if fields.quit and remaining > 0 then
+			-- Accidental escape press during initial combat lockout period: keep outro return open
+			core.after(0.05, function()
+				local p = core.get_player_by_name(pname)
+				local huds = p and esports_core.hud.player_huds[pname]
+				if p and huds and huds.outro_bg then
+					local rem = esports_core.hud.outro_lockout[pname] or 0
+					core.show_formspec(pname, "esports_core:outro_return", esports_core.hud.get_outro_formspec(rem))
+				end
+			end)
+			return true
+		end
+
+		if fields.return_lobby or fields.quit then
+			esports_core.hud.outro_lockout[pname] = nil
+			esports_core.hud.hide_outro(player)
+			esports_core.reset_to_lobby(player)
+			esports_core.lobby.show(player)
+			return true
+		end
 	end
 end)
 
@@ -898,4 +1079,39 @@ end)
 core.register_on_leaveplayer(function(player)
 	local pname = player:get_player_name()
 	esports_core.hud.player_huds[pname] = nil
+	esports_core.hud.outro_lockout[pname] = nil
 end)
+
+core.register_chatcommand("stats", {
+	description = "View your live match performance and stats",
+	func = function(name)
+		local text = esports_core.hud.get_personal_stats_text(name)
+		core.chat_send_player(name, ">>> YOUR MATCH STATS: " .. text)
+		return true
+	end
+})
+
+core.register_chatcommand("score", {
+	description = "View your live match performance and stats",
+	func = function(name)
+		local text = esports_core.hud.get_personal_stats_text(name)
+		core.chat_send_player(name, ">>> YOUR MATCH STATS: " .. text)
+		return true
+	end
+})
+
+core.register_chatcommand("lastmatch", {
+	description = "View the end-of-match stats screen from the last played match",
+	func = function(name)
+		local player = core.get_player_by_name(name)
+		if player and esports_core.last_match_data then
+			esports_core.lobby.blackout_hide(player)
+			core.close_formspec(name, "esports_core:lobby")
+			esports_core.hud.show_outro(player, esports_core.last_match_data, true)
+			return true
+		elseif player then
+			core.chat_send_player(name, "LOBBY: No previous match statistics available.")
+			return false
+		end
+	end
+})

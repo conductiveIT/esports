@@ -118,7 +118,11 @@ function esports_core.ctf.pickup(player, flag_team)
 		-- Player Meta / Speed Penalty
 		local meta = player:get_meta()
 		meta:set_int("has_flag", 1)
-		player:set_physics_override({speed = 0.9})
+		if esports_core.sprint then
+			esports_core.sprint.update_physics(player)
+		else
+			player:set_physics_override({speed = 0.9})
+		end
 
 		core.chat_send_all("LOBBY: " .. flag_team:upper() .. " flag taken by " .. pname .. "!")
 		core.sound_play("esports_pickup", {pos = player:get_pos(), gain = 1.0})
@@ -149,7 +153,11 @@ function esports_core.ctf.drop(player)
 
 				-- Clear Meta / speed
 				player:get_meta():set_int("has_flag", 0)
-				player:set_physics_override({speed = 1.2})
+				if esports_core.sprint then
+					esports_core.sprint.update_physics(player)
+				else
+					player:set_physics_override({speed = 1.2})
+				end
 
 				core.chat_send_all("LOBBY: The " .. team:upper() .. " flag fell into the void and returned home!")
 				esports_core.hud.update_scores()
@@ -170,7 +178,11 @@ function esports_core.ctf.drop(player)
 
 				-- Clear Meta
 				player:get_meta():set_int("has_flag", 0)
-				player:set_physics_override({speed = 1.2})
+				if esports_core.sprint then
+					esports_core.sprint.update_physics(player)
+				else
+					player:set_physics_override({speed = 1.2})
+				end
 
 				core.chat_send_all("LOBBY: " .. team:upper() .. " flag dropped!")
 				esports_core.hud.update_scores()
@@ -216,7 +228,11 @@ function esports_core.ctf.score(pname, team)
 	local player = core.get_player_by_name(pname)
 	if player then
 		player:get_meta():set_int("has_flag", 0)
-		player:set_physics_override({speed = 1.2})
+		if esports_core.sprint then
+			esports_core.sprint.update_physics(player)
+		else
+			player:set_physics_override({speed = 1.2})
+		end
 		if esports_core.ctf.visuals[pname] then
 			esports_core.ctf.visuals[pname]:remove()
 			esports_core.ctf.visuals[pname] = nil
@@ -354,7 +370,11 @@ function esports_core.ctf.check_proximity()
 								-- Player Meta / Speed Penalty
 								local meta = player:get_meta()
 								meta:set_int("has_flag", 1)
-								player:set_physics_override({speed = 0.9})
+								if esports_core.sprint then
+									esports_core.sprint.update_physics(player)
+								else
+									player:set_physics_override({speed = 0.9})
+								end
 
 								core.chat_send_all("LOBBY: " .. flag_team:upper() .. " flag taken by " .. pname .. "!")
 								core.sound_play("esports_pickup", {pos = ppos, gain = 1.0})
@@ -463,11 +483,14 @@ function esports_core.ctf.update_waypoints()
 	end
 end
 
--- Refresh waypoints and check proximity periodically
+-- Refresh waypoints and check proximity periodically (4 Hz, CTF only)
 local waypoint_timer = 0
 core.register_globalstep(function(dtime)
+	if not esports_core.match or not esports_core.match.is_ctf or (esports_core.match.state ~= "active" and esports_core.match.state ~= "countdown") then
+		return
+	end
 	waypoint_timer = waypoint_timer + dtime
-	if waypoint_timer >= 0.1 then
+	if waypoint_timer >= 0.25 then
 		waypoint_timer = 0
 		esports_core.ctf.update_waypoints()
 		esports_core.ctf.check_proximity()

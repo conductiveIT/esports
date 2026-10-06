@@ -38,16 +38,48 @@ core.register_on_leaveplayer(function(player)
 	last_nametags[player:get_player_name()] = nil
 end)
 
-core.register_globalstep(function(dtime)
-	proximity_accumulator = proximity_accumulator + dtime
-	if proximity_accumulator >= 0.1 then
-		proximity_accumulator = 0
-		local all_players = core.get_connected_players()
-		for _, p in ipairs(all_players) do
-			local pname = p:get_player_name()
+local nametag_accumulator = 0
 
-			-- Hidden completely if spectator
-			if esports_core.is_spectator(pname) then
+core.register_globalstep(function(dtime)
+	-- Void death check runs on every server tick for instantaneous fall elimination
+	local all_players = core.get_connected_players()
+	for _, p in ipairs(all_players) do
+		local pname = p:get_player_name()
+		if not esports_core.is_spectator(pname) then
+			local pos = p:get_pos()
+			if pos and pos.y < -10 then
+				p:set_armor_groups({fleshy = 100})
+				p:set_hp(0)  -- Instant elimination
+			end
+		end
+	end
+
+	-- Tactical Nametag Proximity: Throttled to 0.4s (2.5 Hz) to save CPU across 20+ players
+	nametag_accumulator = nametag_accumulator + dtime
+	if nametag_accumulator >= 0.4 then
+		nametag_accumulator = 0
+		local match_active = (esports_core.match.state == "active" or esports_core.match.state == "countdown")
+
+		-- Pre-cache positions and combatant status to avoid redundant engine calls in O(N^2) inner loops
+		local player_data = {}
+		for i, p in ipairs(all_players) do
+			local pname = p:get_player_name()
+			local is_spec = esports_core.is_spectator(pname)
+			player_data[i] = {
+				player = p,
+				name = pname,
+				is_spec = is_spec,
+				pos = (match_active and not is_spec) and p:get_pos() or nil,
+			}
+		end
+
+		local num_p = #player_data
+		for i = 1, num_p do
+			local p_entry = player_data[i]
+			local p = p_entry.player
+			local pname = p_entry.name
+
+			if p_entry.is_spec then
 				local last = last_nametags[pname]
 				if not last or last.a ~= 0 then
 					p:set_nametag_attributes({color = {a=0, r=0, g=0, b=0}})
@@ -55,25 +87,24 @@ core.register_globalstep(function(dtime)
 				end
 			else
 				local show_name = false
-				local match_active = (esports_core.match.state == "active" or esports_core.match.state == "countdown")
-
 				if not match_active then
-					-- Lobby mode: Always show names for players
 					show_name = true
 				else
-					-- Active match: Show names only if another combatant is within 15 meters (Tactical Proximity)
-					local p_pos = p:get_pos()
-					for _, other in ipairs(all_players) do
-						local other_name = other:get_player_name()
-						if other_name ~= pname and not esports_core.is_spectator(other_name) then
-							local o_pos = other:get_pos()
-							local dx = p_pos.x - o_pos.x
-							local dy = p_pos.y - o_pos.y
-							local dz = p_pos.z - o_pos.z
-							-- Optimized: inline squared distance check avoids math.sqrt and function call overhead
-							if (dx*dx + dy*dy + dz*dz) < 225 then
-								show_name = true
-								break
+					local p_pos = p_entry.pos
+					if p_pos then
+						for j = 1, num_p do
+							if i ~= j then
+								local other_entry = player_data[j]
+								if not other_entry.is_spec and other_entry.pos then
+									local o_pos = other_entry.pos
+									local dx = p_pos.x - o_pos.x
+									local dy = p_pos.y - o_pos.y
+									local dz = p_pos.z - o_pos.z
+									if (dx*dx + dy*dy + dz*dz) < 225 then
+										show_name = true
+										break
+									end
+								end
 							end
 						end
 					end
@@ -98,7 +129,6 @@ core.register_globalstep(function(dtime)
 				elseif last.a ~= a then
 					needs_update = true
 				elseif a == 255 then
-					-- Only send text/color updates if the nametag is actually visible
 					if last.text ~= tag_text or last.r ~= r or last.g ~= g or last.b ~= b then
 						needs_update = true
 					end
@@ -127,14 +157,6 @@ core.register_globalstep(function(dtime)
 	local players = core.get_connected_players()
 	local num_players = #players
 
-	-- Void death check
-	for _, p in ipairs(players) do
-		local pname = p:get_player_name()
-		if p:get_pos().y < -10 and not esports_core.is_spectator(pname) then
-			p:set_hp(0)  -- Instant elimination
-		end
-	end
-
 	if esports_core.match.state == "waiting" then
 		esports_core.hud.update_timer("Waiting for Admin...")
 
@@ -146,7 +168,6 @@ core.register_globalstep(function(dtime)
 
 		for _, p in ipairs(players) do
 			if not esports_core.is_spectator(p:get_player_name()) then
-				p:set_physics_override({speed = 0, jump = 0, gravity = 0})
 				esports_core.hud.show_intro(p, esports_core.match.timer, r_name, b_name)
 			end
 		end
@@ -356,6 +377,21 @@ core.register_globalstep(function(dtime)
 				end
 
 				core.chat_send_all(">> MATCH OVER! " .. winner_name:upper())
+
+				-- Reset Arena to default lobby layout at the end of the match
+				if esports_mapgen and esports_mapgen.reset_island then
+					esports_mapgen.reset_island("lobby")
+				end
+
+				-- Teleport all players back to the lobby center spawn and lock them
+				for _, p in ipairs(core.get_connected_players()) do
+					p:set_pos({x=0, y=1.5, z=0})
+					esports_core.reset_to_lobby(p)
+				end
+
+				-- Immediately clear participants to lock back to lobby
+				esports_core.match.active_teams = {red = nil, blue = nil}
+				esports_core.match.player_sides = {}
 				return
 			end
 
@@ -596,7 +632,7 @@ core.register_globalstep(function(dtime)
 				blue_roster = blue_list
 			}
 
-			-- Restore temporary spectators before showing outro so init_hud does not wipe it
+			-- Restore temporary and permanent spectators before showing outro so init_hud does not wipe it
 			if esports_core.match.temp_spectators then
 				for pname, _ in pairs(esports_core.match.temp_spectators) do
 					local p = core.get_player_by_name(pname)
@@ -605,6 +641,15 @@ core.register_globalstep(function(dtime)
 					end
 				end
 				esports_core.match.temp_spectators = nil
+			end
+			if esports_core.spectators then
+				for pname, _ in pairs(esports_core.spectators) do
+					local p = core.get_player_by_name(pname)
+					if p then
+						esports_core.set_spectator(p, false)
+					end
+				end
+				esports_core.spectators = {}
 			end
 
 			for _, player in ipairs(core.get_connected_players()) do
@@ -636,18 +681,18 @@ core.register_globalstep(function(dtime)
 
 	elseif esports_core.match.state == "over" then
 		esports_core.match.timer = esports_core.match.timer - 1
-		-- Safety Reset: Automatically return to lobby after 2 minutes of idle viewing
-		if esports_core.match.timer <= -120 then
+		-- Safety Reset: Automatically return to lobby after 45 seconds of idle viewing
+		if esports_core.match.timer <= -45 then
 			esports_core.match.state = "waiting"
 			esports_core.match.active_teams = {red = nil, blue = nil}
 
 			for _, player in ipairs(core.get_connected_players()) do
 				esports_core.hud.hide_outro(player)
-				esports_core.lobby.show(player)
 				esports_core.reset_to_lobby(player)
+				esports_core.lobby.show(player)
 			end
 
-			core.chat_send_all("Idle timeout: Returning to lobby.")
+			core.chat_send_all("Match outro ended: Returned to lobby.")
 		end
 	end
 end)
@@ -831,6 +876,10 @@ function esports_core.match.add_kill(name)
 	if esports_core.hud.update_scoreboard then
 		esports_core.hud.update_scoreboard()
 	end
+	if esports_core.hud and esports_core.hud.update_personal_stats then
+		local p = core.get_player_by_name(name)
+		if p then esports_core.hud.update_personal_stats(p) end
+	end
 
 	-- Persist to league (PVP ONLY, NO FFA!)
 	if not esports_core.match.is_pve and not esports_core.match.is_ffa then
@@ -854,6 +903,10 @@ function esports_core.match.add_death(name)
 	if esports_core.hud.update_scoreboard then
 		esports_core.hud.update_scoreboard()
 	end
+	if esports_core.hud and esports_core.hud.update_personal_stats then
+		local p = core.get_player_by_name(name)
+		if p then esports_core.hud.update_personal_stats(p) end
+	end
 
 	-- Persist to league (PVP ONLY, NO FFA!)
 	if not esports_core.match.is_pve and not esports_core.match.is_ffa then
@@ -875,6 +928,10 @@ function esports_core.match.add_capture(name)
 
 	if esports_core.hud.update_scoreboard then
 		esports_core.hud.update_scoreboard()
+	end
+	if esports_core.hud and esports_core.hud.update_personal_stats then
+		local p = core.get_player_by_name(name)
+		if p then esports_core.hud.update_personal_stats(p) end
 	end
 
 	-- Persist to league (PVP ONLY!)
@@ -901,6 +958,10 @@ function esports_core.match.add_spleef_block(name)
 
 	if esports_core.hud.update_scoreboard then
 		esports_core.hud.update_scoreboard()
+	end
+	if esports_core.hud and esports_core.hud.update_personal_stats then
+		local p = core.get_player_by_name(name)
+		if p then esports_core.hud.update_personal_stats(p) end
 	end
 end
 
@@ -1209,20 +1270,28 @@ function esports_core.reset_player(player, provide_weapons)
 		esports_weapons.cooldowns[pname] = 0
 	end
 
-	-- Reset HP and Physics (Combat Mode)
+	-- Reset HP and Physics (Combat Mode with Class Modifiers)
+	local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(player)
+	local class_hp = cdef and cdef.hp or 100
+	local class_spd = cdef and cdef.base_speed or 1.2
+
 	player:set_properties({
-		hp_max = 100,
+		hp_max = class_hp,
 		visual_size = {x=1, y=1, z=1},  -- Restore model size
 		eye_height = 1.625,
 		interact_distance = 10,  -- Combat reach
 	})
-	player:set_hp(100)
+	player:set_hp(class_hp)
 	player:set_physics_override({
-		speed = 1.2,  -- Combat Speed
+		speed = class_spd,  -- Combat Speed
 		jump = 1.1,
 		gravity = 1.0
 	})
 	player:set_armor_groups({fleshy = 100})
+
+	if esports_core.sprint then
+		esports_core.sprint.reset_player(player)
+	end
 
 	-- Revoke survival-breaking privileges (flight etc)
 	local privs = core.get_player_privs(pname)
@@ -1449,7 +1518,9 @@ core.register_on_respawnplayer(function(player)
 		player:set_physics_override({speed = 0, jump = 0, gravity = 0})
 		core.after(0.8, function()
 			if player:is_player() then
-				player:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1.0})
+				local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(player)
+				local class_spd = cdef and cdef.base_speed or 1.2
+				player:set_physics_override({speed = class_spd, jump = 1.1, gravity = 1.0})
 			end
 		end)
 
@@ -1463,8 +1534,15 @@ core.register_on_respawnplayer(function(player)
 	else
 		-- Respawn player in lobby center to prevent void death loop
 		player:set_pos({x=0, y=1.5, z=0})
-		esports_core.reset_player(player, false)
-		player:set_physics_override({speed = 0, jump = 0, gravity = 1})
+		esports_core.reset_to_lobby(player)
+		core.after(0.1, function()
+			if not player:is_player() then return end
+			if esports_core.match.state == "over" and esports_core.last_match_data then
+				esports_core.hud.show_outro(player, esports_core.last_match_data)
+			else
+				esports_core.lobby.show(player)
+			end
+		end)
 	end
 	return true
 end)
@@ -1534,8 +1612,8 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 	core.chat_send_all(">> MATCH: Map layout selected: " .. layout:upper():gsub("_", " "))
 
 	-- 3. Map Scaling
-	local scales = {Small = 0.5, Medium = 0.75, Large = 1.0}
-	local scale = scales[map_size or "Small"] or 0.5
+	local scales = {Small = 0.375, Medium = 0.75, Large = 1.0}
+	local scale = scales[map_size or "Small"] or 0.375
 	esports_core.match.current_map_scale = scale
 
 	-- 3. Apply Scaling to Environment & CTF Data

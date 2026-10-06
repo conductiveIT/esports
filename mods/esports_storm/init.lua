@@ -75,7 +75,8 @@ local function draw_circular_storm(center, R)
 
 	if esports_core.match.state == "active" then
 		local circumference = 2 * math.pi * R
-		local num_columns = math.max(8, math.floor(circumference / 2.0))
+		-- Columns are 2 blocks wide, so spacing every 3.0 blocks provides seamless visual wall with ~35% fewer nodes
+		local num_columns = math.max(8, math.floor(circumference / 3.0))
 
 		for i = 1, num_columns do
 			local angle = (i / num_columns) * math.pi * 2
@@ -195,15 +196,18 @@ core.register_globalstep(function(dtime)
 
 		local current_center = esports_storm.center
 		local current_radius = esports_storm.current_radius
+		local current_radius_sq = current_radius * current_radius
 
 		for _, player in ipairs(core.get_connected_players()) do
 			local pname = player:get_player_name()
 			local pos = player:get_pos()
 
-			-- Circular distance check to match the map shape
-			local dist = math.sqrt((pos.x - current_center.x)^2 + (pos.z - current_center.z)^2)
+			-- Inlined squared distance check avoids math.sqrt overhead across all players
+			local dx = pos.x - current_center.x
+			local dz = pos.z - current_center.z
+			local dist_sq = dx*dx + dz*dz
 
-			if dist > current_radius then
+			if dist_sq > current_radius_sq then
 				-- Player is outside the storm
 				if not esports_core.is_spectator(pname) and player:get_hp() > 0 then
 					player:set_hp(player:get_hp() - 4)

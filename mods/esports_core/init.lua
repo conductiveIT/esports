@@ -1,6 +1,6 @@
 esports_core = {}
-esports_core.version = "0.6"
-esports_core.build = 3
+esports_core.version = "0.8"
+esports_core.build = 1
 core.log("action", "====================================================")
 core.log("action", "[TDM Core] Starting Luanti Deathmatch Core v" .. esports_core.version .. " (build " .. esports_core.build .. ")")
 core.log("action", "====================================================")
@@ -10,6 +10,13 @@ local modpath = core.get_modpath("esports_core")
 local storage = core.get_mod_storage()
 esports_core.nicknames = core.deserialize(storage:get_string("nicknames")) or {}
 esports_core.allow_nicks = (storage:get_string("allow_nicks") ~= "false")
+
+-- Skin Class Stat Modifiers Toggle (defaults to true)
+esports_core.classes_enabled = (storage:get_string("classes_enabled") ~= "false")
+
+function esports_core.save_classes_enabled()
+	storage:set_string("classes_enabled", esports_core.classes_enabled and "true" or "false")
+end
 
 function esports_core.save_nicknames()
 	storage:set_string("nicknames", core.serialize(esports_core.nicknames))
@@ -63,6 +70,26 @@ function esports_core.reset_to_lobby(player)
 	local pname = player:get_player_name()
 	local inv = player:get_inventory()
 
+	-- Teleport back to lobby center spawn if outside lobby bounds
+	local pos = player:get_pos()
+	if not pos or math.abs(pos.x) > 6 or math.abs(pos.z) > 6 or pos.y < 0 or pos.y > 6 then
+		player:set_pos({x=0, y=1.5, z=0})
+	end
+
+	-- Disable spectator mode if active
+	if esports_core.is_spectator and esports_core.is_spectator(pname) then
+		esports_core.set_spectator(player, false)
+	end
+
+	-- Restore HUD flags
+	player:hud_set_flags({hotbar = true, healthbar = true, breathbar = true, chat = true, minimap = true, minimap_radar = true})
+
+	-- Reset sprint / stamina
+	if esports_core.sprint and esports_core.sprint.stamina then
+		esports_core.sprint.stamina[pname] = 100
+		esports_core.sprint.is_sprinting[pname] = false
+	end
+
 	if inv then
 		-- Wipe Inventories of weapons/ammo (only keep blueprints)
 		inv:set_list("main", {})
@@ -97,6 +124,7 @@ function esports_core.reset_to_lobby(player)
 	end
 end
 
+dofile(modpath .. "/skins.lua")
 dofile(modpath .. "/teams.lua")
 dofile(modpath .. "/hud.lua")
 dofile(modpath .. "/match.lua")
@@ -107,9 +135,9 @@ dofile(modpath .. "/practice_range.lua")
 dofile(modpath .. "/announcer.lua")
 dofile(modpath .. "/radar.lua")
 dofile(modpath .. "/bots.lua")
+dofile(modpath .. "/sprint.lua")
 
 dofile(modpath .. "/player_anim.lua")
-dofile(modpath .. "/skins.lua")
 dofile(modpath .. "/lobby.lua")
 dofile(modpath .. "/ctf.lua")
 dofile(modpath .. "/koth.lua")
@@ -263,6 +291,28 @@ core.register_chatcommand("nick", {
 			return true, "Set " .. target_name .. "'s nickname to: " .. new_nick
 		end
 	end,
+})
+
+-- Skin Class Stat Modifiers Command
+core.register_chatcommand("classes", {
+	params = "[on/off]",
+	description = "Toggle skin class stat modifiers (Admin only)",
+	privs = {server = true},
+	func = function(_name, param)
+		local p = param:lower():gsub("%s+", "")
+		if p == "on" then
+			esports_core.classes_enabled = true
+		elseif p == "off" then
+			esports_core.classes_enabled = false
+		elseif p == "" then
+			return true, "Skin class modifiers are currently: " .. (esports_core.classes_enabled and "ENABLED" or "DISABLED (Cosmetic only)")
+		else
+			return false, "Usage: /classes [on/off]"
+		end
+		esports_core.save_classes_enabled()
+		core.chat_send_all("ADMIN: Skin class modifiers have been " .. (esports_core.classes_enabled and "ENABLED" or "DISABLED (Cosmetic only)"))
+		return true
+	end
 })
 
 -- CTF ASSETS: Flag Stands and Carrying Entity
