@@ -1,5 +1,7 @@
 esports_weapons = {}
 esports_weapons.cooldowns = {}  -- player_name -> timer
+esports_weapons.last_ammo_warn = {}
+esports_weapons.last_lockout_warn = {}
 
 -- Initialize ammo stash on join
 core.register_on_joinplayer(function(player)
@@ -338,6 +340,14 @@ core.register_on_dieplayer(function(player)
 	esports_weapons.unscope(player)
 end)
 core.register_on_leaveplayer(function(player)
+	local pname = player:get_player_name()
+	esports_weapons.cooldowns[pname] = nil
+	if esports_weapons.last_ammo_warn then
+		esports_weapons.last_ammo_warn[pname] = nil
+	end
+	if esports_weapons.last_lockout_warn then
+		esports_weapons.last_lockout_warn[pname] = nil
+	end
 	esports_weapons.unscope(player)
 end)
 
@@ -468,6 +478,125 @@ core.register_entity("esports_weapons:sniper_bullet", {
 	end
 })
 
+-- Configuration for weapons capable of continuous full-automatic fire
+esports_weapons.auto_weapons = {
+	["esports_weapons:smg"] = {
+		ammo = "esports_weapons:smg_ammo",
+		damage = 12,
+		range = 35,
+		spread = 0.04,
+		fire_rate = 0.11,
+		sound = "esports_shoot_assault_rifle",
+		sound_gain = 0.5,
+		sound_pitch = 1.3,
+		sound_dist = 28,
+		out_msg = "Out of SMG ammo!",
+	},
+	["esports_weapons:assault_rifle"] = {
+		ammo = "esports_weapons:rifle_ammo",
+		damage = 10,
+		range = 50,
+		spread = 0.05,
+		fire_rate = 0.15,
+		sound = "esports_shoot_assault_rifle",
+		sound_gain = 1.0,
+		sound_pitch = 1.0,
+		sound_dist = 32,
+		out_msg = "Out of rifle ammo!",
+	},
+}
+
+function esports_weapons.try_fire_auto(user, item_name)
+	if not user or not user:is_player() then return false end
+	if user:get_hp() <= 0 then return false end
+	local p_name = user:get_player_name()
+
+	if esports_core.is_spectator(p_name) or (esports_core.is_in_lobby and esports_core.is_in_lobby(p_name)) then
+		return false
+	end
+
+	-- CTF TACTICAL LOCKOUT: Cannot fire while carrying flag
+	if user:get_meta():get_int("has_flag") == 1 then
+		local current_time = core.get_us_time() / 1000000
+		local last_warn = esports_weapons.last_lockout_warn[p_name] or 0
+		if current_time - last_warn >= 2.0 then
+			core.chat_send_player(p_name, "TACTICAL LOCKOUT: You cannot fire while carrying the flag! Rely on your team for cover.")
+			esports_weapons.last_lockout_warn[p_name] = current_time
+		end
+		return false
+	end
+
+	local wep = esports_weapons.auto_weapons[item_name]
+	if not wep then
+		return false
+	end
+
+	local current_time = core.get_us_time() / 1000000
+	local cd = esports_weapons.cooldowns[p_name] or 0
+
+	-- Jitter tolerance of 0.02s ensures sub-tick engine/step variance doesn't drop shots
+	if (current_time + 0.02) < cd then
+		return false
+	end
+
+	local inv = user:get_inventory()
+	local count = 0
+	if inv:contains_item("ammo", wep.ammo) then
+		inv:remove_item("ammo", wep.ammo .. " 1")
+		count = 1
+	elseif inv:contains_item("main", wep.ammo) then
+		inv:remove_item("main", wep.ammo .. " 1")
+		count = 1
+	end
+
+	if count > 0 then
+		-- Track shots in practice mode
+		if esports_core.practice and esports_core.practice.players then
+			local session = esports_core.practice.players[p_name]
+			if session then
+				session.shots = session.shots + 1
+			end
+		end
+
+		esports_weapons.shoot_raycast(user, wep.damage, wep.range, wep.spread)
+		esports_weapons.cooldowns[p_name] = current_time + wep.fire_rate
+
+		core.sound_play(wep.sound, {
+			pos = user:get_pos(),
+			max_hear_distance = wep.sound_dist or 32,
+			gain = wep.sound_gain or 1.0,
+			pitch = wep.sound_pitch or 1.0,
+		})
+
+		esports_core.hud.update_ammo(user)
+		return true
+	else
+		local last_warn = esports_weapons.last_ammo_warn[p_name] or 0
+		if current_time - last_warn >= 1.5 then
+			core.chat_send_player(p_name, wep.out_msg)
+			esports_weapons.last_ammo_warn[p_name] = current_time
+			core.sound_play("player_punch", {to_player = p_name, gain = 0.2, pitch = 2.0})
+		end
+		esports_weapons.cooldowns[p_name] = current_time + 0.25
+		return false
+	end
+end
+
+-- Continuous full-automatic fire loop: checks held LMB every server tick
+core.register_globalstep(function(_dtime)
+	for _, player in ipairs(core.get_connected_players()) do
+		if player:get_hp() > 0 then
+			local ctrl = player:get_player_control()
+			if ctrl.LMB then
+				local wielded = player:get_wielded_item():get_name()
+				if esports_weapons.auto_weapons[wielded] then
+					esports_weapons.try_fire_auto(player, wielded)
+				end
+			end
+		end
+	end
+end)
+
 core.register_tool("esports_weapons:assault_rifle", {
 	description = "Assault Rifle",
 	inventory_image = "esports_weapons_assault_rifle.png",
@@ -477,43 +606,7 @@ core.register_tool("esports_weapons:assault_rifle", {
 		if esports_weapons.handle_interaction(user, pointed_thing) then
 			return itemstack
 		end
-		local p_name = user:get_player_name()
-
-		-- CTF TACTICAL LOCKOUT: Cannot fire while carrying flag
-		if user:get_meta():get_int("has_flag") == 1 then
-			core.chat_send_player(p_name, "TACTICAL LOCKOUT: You cannot fire while carrying the flag! Rely on your team for cover.")
-			return itemstack
-		end
-
-		local current_time = core.get_us_time() / 1000000
-		local cd = esports_weapons.cooldowns[p_name] or 0
-		local inv = user:get_inventory()
-
-		if current_time >= cd then
-			-- Try to take from ammo stash first, fallback to main for legacy
-			local count = 0
-			if inv:contains_item("ammo", "esports_weapons:rifle_ammo") then
-				inv:remove_item("ammo", "esports_weapons:rifle_ammo 1")
-				count = 1
-			elseif inv:contains_item("main", "esports_weapons:rifle_ammo") then
-				inv:remove_item("main", "esports_weapons:rifle_ammo 1")
-				count = 1
-			end
-
-			if count > 0 then
-				-- Rifle deals 10 damage to players and nodes
-				esports_weapons.shoot_raycast(user, 10, 50, 0.05)
-				esports_weapons.cooldowns[p_name] = current_time + 0.15
-
-				-- Play sound
-				core.sound_play("esports_shoot_assault_rifle", {pos = user:get_pos(), max_hear_distance = 32})
-
-				-- Update HUD
-				esports_core.hud.update_ammo(user)
-			else
-				core.chat_send_player(p_name, "Out of rifle ammo!")
-			end
-		end
+		esports_weapons.try_fire_auto(user, "esports_weapons:assault_rifle")
 		return itemstack
 	end,
 })
@@ -557,6 +650,12 @@ core.register_tool("esports_weapons:shotgun", {
 			end
 
 			if count > 0 then
+				if esports_core.practice and esports_core.practice.players then
+					local session = esports_core.practice.players[p_name]
+					if session then
+						session.shots = session.shots + 1
+					end
+				end
 				for _ = 1, 8 do
 					-- Shotgun deals 4.2 per pellet (33.6 total per blast)
 					-- 3 hits = 100.8 damage (Lethal for 100 HP players)
@@ -623,6 +722,12 @@ core.register_tool("esports_weapons:sniper_rifle", {
 			end
 
 			if count > 0 then
+				if esports_core.practice and esports_core.practice.players then
+					local session = esports_core.practice.players[p_name]
+					if session then
+						session.shots = session.shots + 1
+					end
+				end
 				local is_scoped = (esports_weapons.scoped_players[p_name] ~= nil)
 				local dir = user:get_look_dir()
 				local pos = user:get_pos()
@@ -697,41 +802,7 @@ core.register_tool("esports_weapons:smg", {
 		if esports_weapons.handle_interaction(user, pointed_thing) then
 			return itemstack
 		end
-		local p_name = user:get_player_name()
-
-		-- CTF TACTICAL LOCKOUT
-		if user:get_meta():get_int("has_flag") == 1 then
-			core.chat_send_player(p_name, "TACTICAL LOCKOUT: You cannot fire while carrying the flag! Rely on your team for cover.")
-			return itemstack
-		end
-
-		local current_time = core.get_us_time() / 1000000
-		local cd = esports_weapons.cooldowns[p_name] or 0
-		local inv = user:get_inventory()
-
-		if current_time >= cd then
-			local count = 0
-			if inv:contains_item("ammo", "esports_weapons:smg_ammo") then
-				inv:remove_item("ammo", "esports_weapons:smg_ammo 1")
-				count = 1
-			elseif inv:contains_item("main", "esports_weapons:smg_ammo") then
-				inv:remove_item("main", "esports_weapons:smg_ammo 1")
-				count = 1
-			end
-
-			if count > 0 then
-				-- SMG deals 12 damage, 35m range, 0.04 spread
-				esports_weapons.shoot_raycast(user, 12, 35, 0.04)
-				esports_weapons.cooldowns[p_name] = current_time + 0.11
-
-				-- Staccato shot sound
-				core.sound_play("esports_shoot_assault_rifle", {pos = user:get_pos(), max_hear_distance = 28, gain = 0.5, pitch = 1.3})
-
-				esports_core.hud.update_ammo(user)
-			else
-				core.chat_send_player(p_name, "Out of SMG ammo!")
-			end
-		end
+		esports_weapons.try_fire_auto(user, "esports_weapons:smg")
 		return itemstack
 	end,
 })
