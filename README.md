@@ -3,7 +3,7 @@
 A fast-paced hitscan team combat base game and esports platform for [Luanti](https://www.luanti.org/) (formerly Minetest) featuring instant building, storm mechanics, procedural arena layouts, sprint stamina, full league tournament management, and spectator broadcasting.
 
 > [!IMPORTANT]
-> This game is currently in **active development** (v0.9.0). Features, APIs, and mechanics are actively maintained and subject to refinement.
+> This game is currently in **active development** (v0.9.1). Features, APIs, and mechanics are actively maintained and subject to refinement.
 > Note: Built using Antigravity with Gemini Pro.
 
 ---
