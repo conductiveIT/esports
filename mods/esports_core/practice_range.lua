@@ -259,8 +259,12 @@ function esports_core.practice.enter(name)
 	inv:set_list("ammo", {})
 	inv:add_item("main", "esports_weapons:assault_rifle")
 	inv:add_item("main", "esports_weapons:shotgun")
+	inv:add_item("main", "esports_weapons:sniper_rifle")
+	inv:add_item("main", "esports_weapons:smg")
 	inv:add_item("ammo", "esports_weapons:rifle_ammo 500")
 	inv:add_item("ammo", "esports_weapons:shotgun_ammo 100")
+	inv:add_item("ammo", "esports_weapons:sniper_ammo 100")
+	inv:add_item("ammo", "esports_weapons:smg_ammo 500")
 	inv:set_stack("main", 8, ItemStack("esports_core:return_to_lobby"))
 
 	-- 12. Initialize HUD & Stamina

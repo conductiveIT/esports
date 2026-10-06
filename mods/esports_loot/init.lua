@@ -42,14 +42,20 @@ core.register_node("esports_loot:box", {
 			loot_options = {
 				"esports_weapons:assault_rifle",
 				"esports_weapons:shotgun",
+				"esports_weapons:sniper_rifle",
+				"esports_weapons:smg",
 			}
 			meta:set_int("needs_weapon_from_crate", 0)
 		else
 			loot_options = {
 				"esports_weapons:assault_rifle",
 				"esports_weapons:shotgun",
+				"esports_weapons:sniper_rifle",
+				"esports_weapons:smg",
 				"esports_weapons:rifle_ammo 20",
 				"esports_weapons:shotgun_ammo 10",
+				"esports_weapons:sniper_ammo 5",
+				"esports_weapons:smg_ammo 30",
 				"esports_weapons:health_pack",
 			}
 		end

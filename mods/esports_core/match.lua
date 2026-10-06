@@ -1312,8 +1312,12 @@ function esports_core.reset_player(player, provide_weapons)
 	if provide_weapons then
 		inv:add_item("main", "esports_weapons:assault_rifle")
 		inv:add_item("main", "esports_weapons:shotgun")
+		inv:add_item("main", "esports_weapons:sniper_rifle")
+		inv:add_item("main", "esports_weapons:smg")
 		inv:add_item("ammo", "esports_weapons:rifle_ammo 100")
 		inv:add_item("ammo", "esports_weapons:shotgun_ammo 50")
+		inv:add_item("ammo", "esports_weapons:sniper_ammo 20")
+		inv:add_item("ammo", "esports_weapons:smg_ammo 150")
 	end
 
 	-- Update HUD

@@ -88,11 +88,13 @@ Solo or cooperative match mode against difficulty-scaled AI sentries that replac
 - **CTF Flag Carrier Weight**: Carrying a flag reduces base speed to 0.9x and increases sprint stamina drain by 1.5x.
 - **Visuals**: Dynamic ground dust particles and dedicated sprint animations (`sprint`, `sprint_mine`).
 
-### Hitscan Weapons & Combat
-- **Assault Rifle**: High fire-rate hitscan rifle with raycast projectile traces, bullet spread, and medium range.
-- **Pump Shotgun**: High-damage close-quarters weapon firing multiple hitscan pellets in a tactical spread pattern.
+### Weapons & Combat Arsenal
+- **Assault Rifle**: Versatile automatic rifle with raycast projectile traces, progressive recoil spread, and balanced mid-range combat capabilities.
+- **Pump Shotgun**: High-damage close-quarters weapon firing a 6-pellet tactical spread pattern for devastating point-blank stopping power.
+- **Ballistic Sniper Rifle**: Heavy bolt-action precision rifle firing high-velocity ballistic rounds (200 m/s with realistic gravity drop). Features right-click ADS optical zoom with a custom 20° FOV mil-dot tactical reticle overlay, lethal headshots (110 damage), and punchy building penetration.
+- **Tactical SMG**: Rapid-fire close-quarters submachine gun (0.11s fire rate, 12 damage per bullet) with tight close-range spray, perfect for flanking and aggressive run-and-gun combat.
 - **Harvesting Pickaxe**: High block-damage tool specialized for rapid structural demolition and Spleef arenas.
-- **Ammo Stash**: Dedicated `ammo` inventory compartment that automatically stashes picked-up ammunition without cluttering hotbar slots. Duplicate weapon pickups are automatically converted into bonus ammunition.
+- **Ammo Stash**: Dedicated hidden `ammo` inventory compartment that automatically stashes picked-up ammunition (`rifle_ammo`, `shotgun_ammo`, `sniper_ammo`, `smg_ammo`) without cluttering hotbar slots. Duplicate weapon pickups are automatically converted into bonus ammunition.
 - **Structure Demolition**: All weapons and pickaxes damage blocks in the `player_built` group and supply crates (`esports_loot:box`).
 
 ### Instant Building System
@@ -110,7 +112,8 @@ Solo or cooperative match mode against difficulty-scaled AI sentries that replac
 | **Move** | `W`, `A`, `S`, `D` | Standard movement |
 | **Tactical Sprint** | `W` + **Shift** (Sneak) | 1.4x–1.5x speed multiplier, consumes stamina |
 | **Sprint Jump** | **Space** (while sprinting) | Tactical leap, expends burst stamina (6–10 stm) |
-| **Fire / Mine / Build** | **Left Mouse Button (LMB)** | Raycast hitscan shooting, pickaxe harvesting, or instant blueprint placing |
+| **Fire / Mine / Build** | **Left Mouse Button (LMB)** | Shooting, pickaxe harvesting, or instant blueprint placing |
+| **ADS / Optical Scope** | **Right Mouse Button (RMB)** (Sniper) | Toggles 20° FOV optical zoom with custom mil-dot overlay |
 | **Live Scoreboard** | **Zoom (`Z`)** or **Aux1 (`E`)** | Hold or toggle full-match overlay scoreboard |
 | **Main Menu / Lobby** | `/lobby` or `/l` | Opens character locker, standings, schedule, and playoffs |
 | **Personal Stats** | `/stats` or `/score` | Prints live match performance metrics directly in chat |

@@ -191,7 +191,7 @@ esports_core.hud.init_hud = function(player)
 			type = "text",
 			position = {x = 0.95, y = 0.95},
 			offset = {x = 0, y = 0},
-			text = "Rifle: 0 | Shotgun: 0",
+			text = "AR: 0 | SG: 0 | Sniper: 0 | SMG: 0",
 			alignment = {x = -1, y = 0},
 			number = 0xFFFFFF,
 		})
@@ -887,6 +887,8 @@ esports_core.hud.update_ammo = function(player)
 	local inv = player:get_inventory()
 	local rifle_count = 0
 	local shotgun_count = 0
+	local sniper_count = 0
+	local smg_count = 0
 
 	-- Check hidden ammo list
 	local ammo_list = inv:get_list("ammo")
@@ -897,6 +899,10 @@ esports_core.hud.update_ammo = function(player)
 				rifle_count = rifle_count + stack:get_count()
 			elseif name == "esports_weapons:shotgun_ammo" then
 				shotgun_count = shotgun_count + stack:get_count()
+			elseif name == "esports_weapons:sniper_ammo" then
+				sniper_count = sniper_count + stack:get_count()
+			elseif name == "esports_weapons:smg_ammo" then
+				smg_count = smg_count + stack:get_count()
 			end
 		end
 	end
@@ -910,11 +916,15 @@ esports_core.hud.update_ammo = function(player)
 				rifle_count = rifle_count + stack:get_count()
 			elseif name == "esports_weapons:shotgun_ammo" then
 				shotgun_count = shotgun_count + stack:get_count()
+			elseif name == "esports_weapons:sniper_ammo" then
+				sniper_count = sniper_count + stack:get_count()
+			elseif name == "esports_weapons:smg_ammo" then
+				smg_count = smg_count + stack:get_count()
 			end
 		end
 	end
 
-	local text = string.format("Rifle: %d | Shotgun: %d", rifle_count, shotgun_count)
+	local text = string.format("AR: %d | SG: %d | Sniper: %d | SMG: %d", rifle_count, shotgun_count, sniper_count, smg_count)
 	local huds = esports_core.hud.player_huds[player:get_player_name()]
 	if huds and huds.ammo then
 		player:hud_change(huds.ammo, "text", text)

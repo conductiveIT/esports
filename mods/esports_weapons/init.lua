@@ -251,9 +251,190 @@ function esports_weapons.handle_interaction(user, pointed_thing)
 	return false
 end
 
--- Wait, Minetest usually relies on image files to not error out completely,
--- But we can use colorization on a dummy transparent or white texture if we don't have images.
--- For now, we will create simple colored squares for textures using texturing modifiers.
+-- Scope & ADS Manager for Sniper Rifles
+esports_weapons.scoped_players = {} -- [pname] = hud_id
+
+function esports_weapons.unscope(player)
+	if not player or not player:is_player() then return end
+	local pname = player:get_player_name()
+	if esports_weapons.scoped_players[pname] then
+		player:hud_remove(esports_weapons.scoped_players[pname])
+		esports_weapons.scoped_players[pname] = nil
+		player:set_fov(0)
+		if esports_core.sprint then
+			esports_core.sprint.update_physics(player)
+		else
+			player:set_physics_override({speed = 1.2})
+		end
+	end
+end
+
+function esports_weapons.toggle_scope(player)
+	if not player or not player:is_player() then return end
+	local pname = player:get_player_name()
+	if esports_weapons.scoped_players[pname] then
+		esports_weapons.unscope(player)
+	else
+		-- Scope in: 20 deg optical zoom + fullscreen tactical reticle
+		player:set_fov(20, false, 0.15)
+		local hid = player:hud_add({
+			hud_elem_type = "image",
+			position = {x = 0.5, y = 0.5},
+			alignment = {x = 0, y = 0},
+			offset = {x = 0, y = 0},
+			scale = {x = -100, y = -100},
+			text = "esports_scope_overlay.png",
+			z_index = 100,
+		})
+		esports_weapons.scoped_players[pname] = hid
+		-- Movement slow for steady breathing/stabilization
+		player:set_physics_override({speed = 0.65})
+		core.sound_play("player_damage", {to_player = pname, gain = 0.2, pitch = 2.0})
+	end
+end
+
+-- Automatic unscope monitor (on death, weapon switch, or lobby transition)
+local scope_monitor_timer = 0
+core.register_globalstep(function(dtime)
+	scope_monitor_timer = scope_monitor_timer + dtime
+	if scope_monitor_timer < 0.15 then return end
+	scope_monitor_timer = 0
+	for pname, _ in pairs(esports_weapons.scoped_players) do
+		local player = core.get_player_by_name(pname)
+		if not player or not player:is_player() then
+			esports_weapons.scoped_players[pname] = nil
+		else
+			local item = player:get_wielded_item():get_name()
+			if item ~= "esports_weapons:sniper_rifle" or player:get_hp() <= 0 or (esports_core.is_in_lobby and esports_core.is_in_lobby(player)) then
+				esports_weapons.unscope(player)
+			end
+		end
+	end
+end)
+
+core.register_on_dieplayer(function(player)
+	esports_weapons.unscope(player)
+end)
+core.register_on_leaveplayer(function(player)
+	esports_weapons.unscope(player)
+end)
+
+-- Ballistic Sniper Projectile Entity (Gravity Drop & Travel Time)
+core.register_entity("esports_weapons:sniper_bullet", {
+	initial_properties = {
+		visual = "sprite",
+		textures = {"esports_tracer.png^[colorize:#00E5FF:255"},
+		visual_size = {x = 0.5, y = 0.5},
+		physical = false,
+		pointable = false,
+		glow = 14,
+		collisionbox = {-0.1, -0.1, -0.1, 0.1, 0.1, 0.1},
+	},
+	_shooter = "",
+	_shooter_team = nil,
+	_last_pos = nil,
+	_age = 0,
+
+	on_step = function(self, dtime)
+		self._age = self._age + dtime
+		local pos = self.object:get_pos()
+		if not pos or self._age > 1.5 or pos.y < -20 then
+			self.object:remove()
+			return
+		end
+
+		if not self._last_pos then
+			self._last_pos = vector.new(pos)
+			return
+		end
+
+		local ray = core.raycast(self._last_pos, pos, true, false)
+		for pt in ray do
+			if pt.type == "object" then
+				local obj = pt.ref
+				local pname = self._shooter
+				if obj and obj:is_player() and obj:get_player_name() ~= pname then
+					local target_name = obj:get_player_name()
+					if not esports_core.is_spectator(target_name) and not (esports_core.is_in_lobby and esports_core.is_in_lobby(target_name)) then
+						local shooter_player = core.get_player_by_name(pname)
+						local target_team = esports_core.match.get_player_match_side(target_name)
+						local same_team = self._shooter_team and target_team and (self._shooter_team == target_team)
+
+						if not same_team or esports_core.match.friendly_fire then
+							-- Headshot Check (eye height is ~1.62m, upper head is >= 1.35m relative to origin)
+							local target_pos = obj:get_pos()
+							local hit_y = pt.intersection_point and pt.intersection_point.y or pos.y
+							local is_headshot = (hit_y - target_pos.y) >= 1.35
+
+							local damage = is_headshot and 110 or 75
+							if is_headshot then
+								core.chat_send_player(pname, "🎯 HEADSHOT CRITICAL! (110 DMG)")
+								core.sound_play("player_damage", {to_player = pname, gain = 1.0, pitch = 1.6})
+							end
+
+							obj:punch(shooter_player or obj, 1.0, {
+								full_punch_interval = 0.5,
+								damage_groups = {fleshy = damage, is_gun = 1}
+							}, vector.direction(self._last_pos, pos))
+
+							-- Impact blood/spark particles
+							core.add_particlespawner({
+								amount = 8,
+								time = 0.1,
+								minpos = pt.intersection_point or pos,
+								maxpos = pt.intersection_point or pos,
+								minvel = {x=-1, y=0, z=-1},
+								maxvel = {x=1, y=2, z=1},
+								texture = "esports_tracer.png^[colorize:#FF0000:200",
+								minexptime = 0.2,
+								maxexptime = 0.5,
+								minsize = 1,
+								maxsize = 2,
+							})
+
+							self.object:remove()
+							return
+						end
+					end
+				elseif obj and obj:get_luaentity() and obj:get_luaentity().name == "esports_core:practice_target" then
+					local shooter_player = core.get_player_by_name(pname)
+					obj:punch(shooter_player or obj, 1.0, {
+						full_punch_interval = 0.5,
+						damage_groups = {fleshy = 75, is_gun = 1}
+					}, vector.direction(self._last_pos, pos))
+					self.object:remove()
+					return
+				end
+			elseif pt.type == "node" then
+				local node_pos = pt.under
+				local node = core.get_node(node_pos)
+				local shooter_player = core.get_player_by_name(self._shooter)
+				if core.get_item_group(node.name, "player_built") > 0 then
+					esports_weapons.damage_node(node_pos, node, 45, shooter_player)
+				elseif node.name == "esports_loot:box" then
+					esports_weapons.damage_node(node_pos, node, 45, shooter_player)
+				end
+
+				-- Impact dust
+				core.add_particlespawner({
+					amount = 6,
+					time = 0.1,
+					minpos = pt.intersection_point or pos,
+					maxpos = pt.intersection_point or pos,
+					minvel = {x=-0.5, y=0.5, z=-0.5},
+					maxvel = {x=0.5, y=1.5, z=0.5},
+					texture = "esports_muzzle_flash.png^[colorize:#CCCCCC:150",
+					minexptime = 0.2,
+					maxexptime = 0.4,
+				})
+				self.object:remove()
+				return
+			end
+		end
+
+		self._last_pos = vector.new(pos)
+	end
+})
 
 core.register_tool("esports_weapons:assault_rifle", {
 	description = "Assault Rifle",
@@ -370,6 +551,165 @@ core.register_craftitem("esports_weapons:shotgun_ammo", {
 	stack_max = 50,
 })
 
+core.register_tool("esports_weapons:sniper_rifle", {
+	description = "Ballistic Sniper Rifle (Right-Click Scope)",
+	inventory_image = "esports_weapons_sniper_rifle.png",
+	wield_image = "esports_weapons_sniper_rifle_wield.png",
+	wield_scale = {x=1.6, y=1.6, z=1.6},
+	on_secondary_use = function(itemstack, user)
+		esports_weapons.toggle_scope(user)
+		return itemstack
+	end,
+	on_place = function(itemstack, user, _pointed_thing)
+		esports_weapons.toggle_scope(user)
+		return itemstack
+	end,
+	on_use = function(itemstack, user, pointed_thing)
+		if esports_weapons.handle_interaction(user, pointed_thing) then
+			return itemstack
+		end
+		local p_name = user:get_player_name()
+
+		-- CTF TACTICAL LOCKOUT
+		if user:get_meta():get_int("has_flag") == 1 then
+			core.chat_send_player(p_name, "TACTICAL LOCKOUT: You cannot fire while carrying the flag! Rely on your team for cover.")
+			return itemstack
+		end
+
+		local current_time = core.get_us_time() / 1000000
+		local cd = esports_weapons.cooldowns[p_name] or 0
+		local inv = user:get_inventory()
+
+		if current_time >= cd then
+			local count = 0
+			if inv:contains_item("ammo", "esports_weapons:sniper_ammo") then
+				inv:remove_item("ammo", "esports_weapons:sniper_ammo 1")
+				count = 1
+			elseif inv:contains_item("main", "esports_weapons:sniper_ammo") then
+				inv:remove_item("main", "esports_weapons:sniper_ammo 1")
+				count = 1
+			end
+
+			if count > 0 then
+				local is_scoped = (esports_weapons.scoped_players[p_name] ~= nil)
+				local dir = user:get_look_dir()
+				local pos = user:get_pos()
+				pos.y = pos.y + user:get_properties().eye_height
+
+				-- Spread: Scoped has 0 spread; hip-fire has slight spread
+				local spread = is_scoped and 0 or 0.05
+				local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(user)
+				if cdef and cdef.spread_mult then
+					spread = spread * cdef.spread_mult
+				end
+
+				if spread > 0 then
+					dir.x = dir.x + (math.random() - 0.5) * spread
+					dir.y = dir.y + (math.random() - 0.5) * spread
+					dir.z = dir.z + (math.random() - 0.5) * spread
+					local len = math.sqrt(dir.x*dir.x + dir.y*dir.y + dir.z*dir.z)
+					dir = vector.divide(dir, len)
+				end
+
+				-- Spawn Ballistic Projectile: 200 m/s velocity with -9.8 gravity
+				local spawn_pos = vector.add(pos, vector.multiply(dir, 1.2))
+				local bullet = core.add_entity(spawn_pos, "esports_weapons:sniper_bullet")
+				if bullet then
+					local ent = bullet:get_luaentity()
+					if ent then
+						ent._shooter = p_name
+						ent._shooter_team = esports_core.match.get_player_match_side(p_name)
+						ent._last_pos = vector.new(spawn_pos)
+					end
+					bullet:set_velocity(vector.multiply(dir, 200))
+					bullet:set_acceleration({x = 0, y = -9.8, z = 0})
+				end
+
+				-- Muzzle Flash
+				core.add_particle({
+					pos = spawn_pos,
+					velocity = {x=0, y=0, z=0},
+					acceleration = {x=0, y=0, z=0},
+					expirationtime = 0.1,
+					size = 2.0,
+					texture = "esports_muzzle_flash.png",
+					glow = 14,
+				})
+
+				esports_weapons.cooldowns[p_name] = current_time + 1.5 -- Bolt Action
+
+				-- Deep rifle sound
+				core.sound_play("esports_shoot_shotgun", {pos = user:get_pos(), max_hear_distance = 64, gain = 1.0, pitch = 0.75})
+
+				esports_core.hud.update_ammo(user)
+			else
+				core.chat_send_player(p_name, "Out of sniper ammo!")
+			end
+		end
+		return itemstack
+	end,
+})
+
+core.register_craftitem("esports_weapons:sniper_ammo", {
+	description = "Sniper Ammo",
+	inventory_image = "esports_weapons_sniper_ammo.png",
+	stack_max = 30,
+})
+
+core.register_tool("esports_weapons:smg", {
+	description = "Tactical SMG",
+	inventory_image = "esports_weapons_smg.png",
+	wield_image = "esports_weapons_smg_wield.png",
+	wield_scale = {x=1.3, y=1.3, z=1.3},
+	on_use = function(itemstack, user, pointed_thing)
+		if esports_weapons.handle_interaction(user, pointed_thing) then
+			return itemstack
+		end
+		local p_name = user:get_player_name()
+
+		-- CTF TACTICAL LOCKOUT
+		if user:get_meta():get_int("has_flag") == 1 then
+			core.chat_send_player(p_name, "TACTICAL LOCKOUT: You cannot fire while carrying the flag! Rely on your team for cover.")
+			return itemstack
+		end
+
+		local current_time = core.get_us_time() / 1000000
+		local cd = esports_weapons.cooldowns[p_name] or 0
+		local inv = user:get_inventory()
+
+		if current_time >= cd then
+			local count = 0
+			if inv:contains_item("ammo", "esports_weapons:smg_ammo") then
+				inv:remove_item("ammo", "esports_weapons:smg_ammo 1")
+				count = 1
+			elseif inv:contains_item("main", "esports_weapons:smg_ammo") then
+				inv:remove_item("main", "esports_weapons:smg_ammo 1")
+				count = 1
+			end
+
+			if count > 0 then
+				-- SMG deals 12 damage, 35m range, 0.04 spread
+				esports_weapons.shoot_raycast(user, 12, 35, 0.04)
+				esports_weapons.cooldowns[p_name] = current_time + 0.11
+
+				-- Staccato shot sound
+				core.sound_play("esports_shoot_assault_rifle", {pos = user:get_pos(), max_hear_distance = 28, gain = 0.5, pitch = 1.3})
+
+				esports_core.hud.update_ammo(user)
+			else
+				core.chat_send_player(p_name, "Out of SMG ammo!")
+			end
+		end
+		return itemstack
+	end,
+})
+
+core.register_craftitem("esports_weapons:smg_ammo", {
+	description = "SMG Ammo",
+	inventory_image = "esports_weapons_smg_ammo.png",
+	stack_max = 120,
+})
+
 core.register_craftitem("esports_weapons:health_pack", {
 	description = "Health Pack (+20% HP)",
 	inventory_image = "esports_weapons_health_pack.png",
@@ -428,7 +768,8 @@ core.register_on_item_pickup(function(itemstack, picker, pointed_thing)
 	local inv = picker:get_inventory()
 
 	-- Auto-sort ammo into the hidden stash
-	if item_name == "esports_weapons:rifle_ammo" or item_name == "esports_weapons:shotgun_ammo" then
+	if item_name == "esports_weapons:rifle_ammo" or item_name == "esports_weapons:shotgun_ammo" or
+	   item_name == "esports_weapons:sniper_ammo" or item_name == "esports_weapons:smg_ammo" then
 		local leftover = inv:add_item("ammo", itemstack)
 		if leftover:get_count() < itemstack:get_count() then
 			if pointed_thing and pointed_thing.ref then
@@ -440,9 +781,20 @@ core.register_on_item_pickup(function(itemstack, picker, pointed_thing)
 		return leftover
 	end
 
-	if item_name == "esports_weapons:assault_rifle" or item_name == "esports_weapons:shotgun" then
-		local ammo_name = (item_name == "esports_weapons:assault_rifle") and "esports_weapons:rifle_ammo" or "esports_weapons:shotgun_ammo"
-		local count = (item_name == "esports_weapons:assault_rifle") and 20 or 8
+	if item_name == "esports_weapons:assault_rifle" or item_name == "esports_weapons:shotgun" or
+	   item_name == "esports_weapons:sniper_rifle" or item_name == "esports_weapons:smg" then
+		local ammo_name = "esports_weapons:rifle_ammo"
+		local count = 20
+		if item_name == "esports_weapons:shotgun" then
+			ammo_name = "esports_weapons:shotgun_ammo"
+			count = 8
+		elseif item_name == "esports_weapons:sniper_rifle" then
+			ammo_name = "esports_weapons:sniper_ammo"
+			count = 5
+		elseif item_name == "esports_weapons:smg" then
+			ammo_name = "esports_weapons:smg_ammo"
+			count = 30
+		end
 
 		if inv:contains_item("main", item_name) then
 			-- Convert duplicate to ammo
