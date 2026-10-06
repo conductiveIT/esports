@@ -261,6 +261,13 @@ function esports_weapons.unscope(player)
 		player:hud_remove(esports_weapons.scoped_players[pname])
 		esports_weapons.scoped_players[pname] = nil
 		player:set_fov(0)
+
+		-- Restore wielded weapon and crosshair
+		local flags = player:hud_get_flags()
+		flags.wielditem = true
+		flags.crosshair = true
+		player:hud_set_flags(flags)
+
 		if esports_core.sprint then
 			esports_core.sprint.update_physics(player)
 		else
@@ -287,6 +294,13 @@ function esports_weapons.toggle_scope(player)
 			z_index = 100,
 		})
 		esports_weapons.scoped_players[pname] = hid
+
+		-- Hide wielded weapon and default crosshair so only the tactical scope reticle is shown
+		local flags = player:hud_get_flags()
+		flags.wielditem = false
+		flags.crosshair = false
+		player:hud_set_flags(flags)
+
 		-- Movement slow for steady breathing/stabilization
 		player:set_physics_override({speed = 0.65})
 		core.sound_play("player_damage", {to_player = pname, gain = 0.2, pitch = 2.0})
@@ -648,8 +662,8 @@ core.register_tool("esports_weapons:sniper_rifle", {
 
 				esports_weapons.cooldowns[p_name] = current_time + 1.5 -- Bolt Action
 
-				-- Deep rifle sound
-				core.sound_play("esports_shoot_shotgun", {pos = user:get_pos(), max_hear_distance = 64, gain = 1.0, pitch = 0.75})
+				-- Booming high-caliber sniper gunshot sound
+				core.sound_play("esports_shoot_sniper", {pos = user:get_pos(), max_hear_distance = 80, gain = 1.0})
 
 				esports_core.hud.update_ammo(user)
 			else
