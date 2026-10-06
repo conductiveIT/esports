@@ -2,6 +2,7 @@ esports_weapons = {}
 esports_weapons.cooldowns = {}  -- player_name -> timer
 esports_weapons.last_ammo_warn = {}
 esports_weapons.last_lockout_warn = {}
+esports_weapons.spray_data = {}  -- player_name -> { count = 0, last_shot = 0, wielded = "" }
 
 -- Initialize ammo stash on join
 core.register_on_joinplayer(function(player)
@@ -337,6 +338,10 @@ core.register_globalstep(function(dtime)
 end)
 
 core.register_on_dieplayer(function(player)
+	local pname = player:get_player_name()
+	if esports_weapons.spray_data then
+		esports_weapons.spray_data[pname] = nil
+	end
 	esports_weapons.unscope(player)
 end)
 core.register_on_leaveplayer(function(player)
@@ -347,6 +352,9 @@ core.register_on_leaveplayer(function(player)
 	end
 	if esports_weapons.last_lockout_warn then
 		esports_weapons.last_lockout_warn[pname] = nil
+	end
+	if esports_weapons.spray_data then
+		esports_weapons.spray_data[pname] = nil
 	end
 	esports_weapons.unscope(player)
 end)
@@ -484,7 +492,10 @@ esports_weapons.auto_weapons = {
 		ammo = "esports_weapons:smg_ammo",
 		damage = 12,
 		range = 35,
-		spread = 0.04,
+		base_spread = 0.02,
+		max_spread = 0.12,
+		spread_growth = 0.010,
+		recovery_time = 0.30,
 		fire_rate = 0.11,
 		sound = "esports_shoot_assault_rifle",
 		sound_gain = 0.5,
@@ -496,7 +507,10 @@ esports_weapons.auto_weapons = {
 		ammo = "esports_weapons:rifle_ammo",
 		damage = 10,
 		range = 50,
-		spread = 0.05,
+		base_spread = 0.015,
+		max_spread = 0.09,
+		spread_growth = 0.008,
+		recovery_time = 0.35,
 		fire_rate = 0.15,
 		sound = "esports_shoot_assault_rifle",
 		sound_gain = 1.0,
@@ -550,6 +564,33 @@ function esports_weapons.try_fire_auto(user, item_name)
 	end
 
 	if count > 0 then
+		-- Dynamic spread bloom calculation based on continuous firing hold
+		local spray = esports_weapons.spray_data[p_name]
+		if not spray or spray.wielded ~= item_name then
+			spray = { count = 0, last_shot = 0, wielded = item_name }
+			esports_weapons.spray_data[p_name] = spray
+		end
+
+		local recovery = wep.recovery_time or 0.30
+		local dt_since_last = current_time - spray.last_shot
+
+		if dt_since_last > recovery then
+			-- Recoil fully recovered
+			spray.count = 0
+		elseif dt_since_last > (wep.fire_rate * 1.5) then
+			-- Partial recovery between quick bursts
+			local idle = dt_since_last - wep.fire_rate
+			local decay_shots = math.floor(idle / (recovery / 6))
+			spray.count = math.max(0, spray.count - decay_shots)
+		end
+
+		-- Spread for the current round
+		local dynamic_spread = math.min(wep.max_spread, wep.base_spread + (spray.count * wep.spread_growth))
+
+		-- Advance spray counter for next continuous round
+		spray.count = spray.count + 1
+		spray.last_shot = current_time
+
 		-- Track shots in practice mode
 		if esports_core.practice and esports_core.practice.players then
 			local session = esports_core.practice.players[p_name]
@@ -558,7 +599,7 @@ function esports_weapons.try_fire_auto(user, item_name)
 			end
 		end
 
-		esports_weapons.shoot_raycast(user, wep.damage, wep.range, wep.spread)
+		esports_weapons.shoot_raycast(user, wep.damage, wep.range, dynamic_spread)
 		esports_weapons.cooldowns[p_name] = current_time + wep.fire_rate
 
 		core.sound_play(wep.sound, {
