@@ -11,6 +11,9 @@ esports_core.sprint.players = {}
 -- Balance & Tuning Constants
 local MAX_STAMINA = 100
 local SPRINT_SPEED_MULT = 1.4          -- Base 1.2 * 1.4 = 1.68
+local EXHAUSTED_SPEED_MULT = 0.75      -- Penalty: 25% slower walk speed while exhausted (0.9 m/s)
+local NORMAL_JUMP = 1.1                -- Standard snappy jump height
+local EXHAUSTED_JUMP = 0.9             -- Reduced jump height while exhausted
 local DRAIN_RATE = 22                 -- Stamina points drained per second (~4.5s sprint)
 local JUMP_COST = 8                   -- Stamina drained instantly per jump while sprinting
 local REGEN_RATE = 25                 -- Stamina points regenerated per second (0 to 100 in 4s)
@@ -32,6 +35,7 @@ function esports_core.sprint.init_player(player)
 		rest_timer = 0,
 		last_jump = false,
 		last_speed = cdef and cdef.base_speed or 1.2,
+		last_jump_phys = NORMAL_JUMP,
 		last_sneak = true,
 		last_ctrl_sneak = false,
 		last_hud_pct = -1,
@@ -60,8 +64,9 @@ function esports_core.sprint.reset_player(player)
 
 	local base = esports_core.sprint.get_base_speed(player, pname)
 	pdata.last_speed = base
+	pdata.last_jump_phys = NORMAL_JUMP
 	pdata.last_sneak = true
-	player:set_physics_override({speed = base, sneak = true, jump = 1.1, gravity = 1.0})
+	player:set_physics_override({speed = base, sneak = true, jump = NORMAL_JUMP, gravity = 1.0})
 
 	esports_core.sprint.update_hud(player, pdata, true)
 end
@@ -133,18 +138,26 @@ function esports_core.sprint.update_physics(player, pname)
 	local sprint_mult = cdef and cdef.sprint_mult or SPRINT_SPEED_MULT
 
 	local target_speed = base
+	local target_jump = NORMAL_JUMP
 	local allow_sneak = true
 	if pdata.is_sprinting then
 		target_speed = base * sprint_mult
+		target_jump = NORMAL_JUMP
+		allow_sneak = true
+	elseif pdata.exhausted then
+		target_speed = base * EXHAUSTED_SPEED_MULT
+		target_jump = EXHAUSTED_JUMP
 		allow_sneak = true
 	end
 
 	-- Performance Optimization: Only send physics packet on change
 	local speed_changed = math.abs((pdata.last_speed or 1.2) - target_speed) > 0.01
+	local jump_changed = math.abs((pdata.last_jump_phys or NORMAL_JUMP) - target_jump) > 0.01
 	local sneak_changed = (pdata.last_sneak ~= allow_sneak)
-	if speed_changed or sneak_changed then
-		player:set_physics_override({speed = target_speed, sneak = allow_sneak})
+	if speed_changed or jump_changed or sneak_changed then
+		player:set_physics_override({speed = target_speed, jump = target_jump, sneak = allow_sneak})
 		pdata.last_speed = target_speed
+		pdata.last_jump_phys = target_jump
 		pdata.last_sneak = allow_sneak
 	end
 end
@@ -176,7 +189,7 @@ function esports_core.sprint.update_hud(player, pdata, force)
 	local fill_color = "#00E5FF:255"
 
 	if tier == "exhausted" then
-		label = "EXHAUSTED"
+		label = string.format("EXHAUSTED (%d%%)", pct)
 		text_color = 0xFF3333
 		fill_color = "#FF3333:255"
 	elseif tier == "low" then
@@ -283,6 +296,7 @@ core.register_globalstep(function(dtime)
 				pdata.last_jump = ctrl.jump
 
 				-- Exhaustion recovery check
+				local was_exhausted = pdata.exhausted
 				if pdata.exhausted and pdata.stamina >= EXHAUSTED_THRESHOLD then
 					pdata.exhausted = false
 				end
@@ -328,8 +342,9 @@ core.register_globalstep(function(dtime)
 					end
 				end
 
-				-- If sprint state changed, apply physics override immediately
-				if state_changed then
+				-- If sprint or exhaustion state changed, apply physics override immediately
+				local exhaustion_changed = (pdata.exhausted ~= was_exhausted)
+				if state_changed or exhaustion_changed then
 					esports_core.sprint.update_physics(player, pname)
 				end
 
