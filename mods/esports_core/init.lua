@@ -6,6 +6,13 @@ core.log("action", "[TDM Core] Starting Luanti Deathmatch Core v" .. esports_cor
 core.log("action", "====================================================")
 local modpath = core.get_modpath("esports_core")
 
+-- Modern FPS Movement Physics: Equalize engine crouch speed with walk speed
+-- Ensures holding Shift (sneak) sprints cleanly without engine-side crouch slowdown
+if core.settings then
+	core.settings:set("movement_speed_walk", "4.0")
+	core.settings:set("movement_speed_crouch", "4.0")
+end
+
 -- Persistent Nicknames System
 local storage = core.get_mod_storage()
 esports_core.nicknames = core.deserialize(storage:get_string("nicknames")) or {}

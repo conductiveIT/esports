@@ -136,7 +136,7 @@ function esports_core.sprint.update_physics(player, pname)
 	local allow_sneak = true
 	if pdata.is_sprinting then
 		target_speed = base * sprint_mult
-		allow_sneak = false
+		allow_sneak = true
 	end
 
 	-- Performance Optimization: Only send physics packet on change
