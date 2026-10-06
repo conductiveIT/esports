@@ -275,8 +275,9 @@ core.register_globalstep(function(dtime)
 				pdata.max_stamina = max_stm
 
 				local ctrl = player:get_player_control()
-				-- Sprint condition: moving forward (up) while holding Shift (sneak key) OR Aux1 (E key), not backing up
-				local wants_sprint = (ctrl.sneak or ctrl.aux1) and ctrl.up and not ctrl.down
+				-- Sprint condition: moving in any direction (W, A, S, D) while holding Shift (sneak) or Aux1 (E)
+				local is_moving = ctrl.up or ctrl.down or ctrl.left or ctrl.right
+				local wants_sprint = (ctrl.sneak or ctrl.aux1) and is_moving
 
 				-- Jumping while sprinting expends a burst of stamina
 				if ctrl.jump and not pdata.last_jump and pdata.is_sprinting then

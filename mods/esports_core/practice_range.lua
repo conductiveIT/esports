@@ -33,8 +33,8 @@ core.register_craftitem("esports_core:return_to_lobby", {
 })
 
 local function build_practice_arena()
-	local minp = {x = arena_pos.x - 18, y = arena_pos.y - 2, z = arena_pos.z - 18}
-	local maxp = {x = arena_pos.x + 18, y = arena_pos.y + 10, z = arena_pos.z + 18}
+	local minp = {x = arena_pos.x - 16, y = arena_pos.y - 2, z = arena_pos.z - 18}
+	local maxp = {x = arena_pos.x + 16, y = arena_pos.y + 12, z = arena_pos.z + 85}
 
 	-- Ensure map chunk is emerged before reading/writing voxelmanip
 	core.emerge_area(minp, maxp)
@@ -51,21 +51,27 @@ local function build_practice_arena()
 
 	local ystride = emax.x - emin.x + 1
 
-	for z = arena_pos.z - 15, arena_pos.z + 15 do
-		local abs_z = math.abs(z - arena_pos.z)
-		for x = arena_pos.x - 15, arena_pos.x + 15 do
+	for z = arena_pos.z - 15, arena_pos.z + 80 do
+		local is_end_z = (z == arena_pos.z - 15 or z == arena_pos.z + 80)
+		local is_marker_z = (z == arena_pos.z + 10 or z == arena_pos.z + 35 or z == arena_pos.z + 65)
+
+		for x = arena_pos.x - 12, arena_pos.x + 12 do
 			local abs_x = math.abs(x - arena_pos.x)
+			local is_side_wall = (abs_x == 12)
 			local vi = area:index(x, arena_pos.y - 1, z)
 
 			-- Floor (y = arena_pos.y - 1)
-			data[vi] = c_stone
+			if is_marker_z then
+				data[vi] = c_light  -- Illuminated distance line across floor
+			else
+				data[vi] = c_stone
+			end
 			vi = vi + ystride
 
-			-- Clear air & build walls (y = 0 to 8)
+			-- Air & Wall enclosure (y = 0 to 8)
 			for y = 0, 8 do
-				if (abs_x == 15 or abs_z == 15) and y <= 5 then
-					-- Border lights along the top for full visibility
-					if y == 5 and (abs_x == 15 and abs_z == 15 or abs_x == 0 or abs_z == 0) then
+				if (is_side_wall or is_end_z) and y <= 6 then
+					if (is_marker_z and is_side_wall) or (y == 6 and (is_side_wall or is_end_z)) then
 						data[vi] = c_light
 					else
 						data[vi] = c_wall
@@ -125,22 +131,35 @@ core.register_entity("esports_core:practice_target", {
 			end
 		end
 
-		-- Respawn target at new location in range
-		local new_x = arena_pos.x + math.random(-10, 10)
-		local new_z = arena_pos.z + math.random(3, 12)
-		local new_y = arena_pos.y + math.random(1, 3)
+		-- Respawn target at new location within its designated distance lane
+		local new_x = arena_pos.x + math.random(-8, 8)
+		local new_y
+		local new_z
+		if self._lane == "sniper" then
+			new_z = arena_pos.z + math.random(63, 67)
+			new_y = arena_pos.y + 2.5
+		elseif self._lane == "mid" then
+			new_z = arena_pos.z + math.random(33, 37)
+			new_y = arena_pos.y + 2.0
+		else
+			new_z = arena_pos.z + math.random(8, 12)
+			new_y = arena_pos.y + 1.5
+		end
 
 		self.object:set_pos({x = new_x, y = new_y, z = new_z})
 
 		-- Determine lateral movement speed based on progression
 		local vx = 0
 		if session then
+			local speed_base = (self._lane == "sniper") and 1.5 or ((self._lane == "mid") and 2.5 or 3.5)
 			if session.hits >= 20 then
-				vx = (math.random() > 0.5 and 1 or -1) * 6
+				vx = (math.random() > 0.5 and 1 or -1) * (speed_base * 2.0)
 			elseif session.hits >= 10 then
-				vx = (math.random() > 0.5 and 1 or -1) * 4
+				vx = (math.random() > 0.5 and 1 or -1) * (speed_base * 1.5)
 			elseif session.hits >= 5 then
-				vx = (math.random() > 0.5 and 1 or -1) * 2
+				vx = (math.random() > 0.5 and 1 or -1) * speed_base
+			else
+				vx = (math.random() > 0.5 and 1 or -1) * (speed_base * 0.7)
 			end
 		end
 		self.object:set_velocity({x = vx, y = 0, z = 0})
@@ -152,10 +171,10 @@ core.register_entity("esports_core:practice_target", {
 		if pos then
 			local vel = self.object:get_velocity()
 			if vel and vel.x ~= 0 then
-				-- Bounce off left/right walls of the range
-				if pos.x < arena_pos.x - 12 and vel.x < 0 then
+				-- Bounce off left/right walls of the range (width is x-9 to x+9)
+				if pos.x < arena_pos.x - 9 and vel.x < 0 then
 					self.object:set_velocity({x = -vel.x, y = vel.y, z = vel.z})
-				elseif pos.x > arena_pos.x + 12 and vel.x > 0 then
+				elseif pos.x > arena_pos.x + 9 and vel.x > 0 then
 					self.object:set_velocity({x = -vel.x, y = vel.y, z = vel.z})
 				end
 			end
@@ -194,19 +213,51 @@ function esports_core.practice.enter(name)
 	build_practice_arena()
 
 	-- 3. Reset previous targets
-	for _, obj in ipairs(core.get_objects_inside_radius(arena_pos, 30)) do
+	for _, obj in ipairs(core.get_objects_inside_radius(arena_pos, 100)) do
 		local ent = obj:get_luaentity()
 		if ent and ent.name == "esports_core:practice_target" then
 			obj:remove()
 		end
 	end
 
-	-- 4. Spawn 3 new practice targets
-	for _ = 1, 3 do
-		local tx = arena_pos.x + math.random(-8, 8)
-		local ty = arena_pos.y + math.random(1, 3)
-		local tz = arena_pos.z + math.random(4, 10)
-		core.add_entity({x = tx, y = ty, z = tz}, "esports_core:practice_target")
+	-- 4. Spawn 3 tiered targets (CQB 20m, Mid 45m, Long-Range Sniper 75m)
+	local t1 = core.add_entity({x = arena_pos.x - 4, y = arena_pos.y + 1.5, z = arena_pos.z + 10}, "esports_core:practice_target")
+	if t1 then
+		local ent = t1:get_luaentity()
+		if ent then
+			ent._lane = "cqb"
+			t1:set_properties({
+				nametag = "[ 20m - CQB ]",
+				nametag_color = "#00FF88",
+			})
+			t1:set_velocity({x = 2.5, y = 0, z = 0})
+		end
+	end
+
+	local t2 = core.add_entity({x = arena_pos.x + 4, y = arena_pos.y + 2.0, z = arena_pos.z + 35}, "esports_core:practice_target")
+	if t2 then
+		local ent = t2:get_luaentity()
+		if ent then
+			ent._lane = "mid"
+			t2:set_properties({
+				nametag = "[ 45m - MID RANGE ]",
+				nametag_color = "#FFD700",
+			})
+			t2:set_velocity({x = -2.0, y = 0, z = 0})
+		end
+	end
+
+	local t3 = core.add_entity({x = arena_pos.x, y = arena_pos.y + 2.5, z = arena_pos.z + 65}, "esports_core:practice_target")
+	if t3 then
+		local ent = t3:get_luaentity()
+		if ent then
+			ent._lane = "sniper"
+			t3:set_properties({
+				nametag = "[ 75m - SNIPER RANGE (Compensate Drop) ]",
+				nametag_color = "#00E5FF",
+			})
+			t3:set_velocity({x = 1.5, y = 0, z = 0})
+		end
 	end
 
 	-- 5. Close Lobby GUI and Blackout

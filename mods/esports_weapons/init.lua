@@ -348,6 +348,16 @@ core.register_entity("esports_weapons:sniper_bullet", {
 			return
 		end
 
+		-- Glowing bullet tracer vapor trail so the flight arc is clearly visible
+		core.add_particle({
+			pos = pos,
+			velocity = {x = 0, y = 0, z = 0},
+			expirationtime = 0.35,
+			size = 1.6,
+			texture = "esports_tracer.png^[colorize:#00E5FF:220",
+			glow = 14,
+		})
+
 		local ray = core.raycast(self._last_pos, pos, true, false)
 		for pt in ray do
 			if pt.type == "object" then
@@ -621,8 +631,8 @@ core.register_tool("esports_weapons:sniper_rifle", {
 						ent._shooter_team = esports_core.match.get_player_match_side(p_name)
 						ent._last_pos = vector.new(spawn_pos)
 					end
-					bullet:set_velocity(vector.multiply(dir, 200))
-					bullet:set_acceleration({x = 0, y = -9.8, z = 0})
+					bullet:set_velocity(vector.multiply(dir, 140))
+					bullet:set_acceleration({x = 0, y = -11.0, z = 0})
 				end
 
 				-- Muzzle Flash
