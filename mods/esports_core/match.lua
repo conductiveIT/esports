@@ -1306,18 +1306,19 @@ function esports_core.reset_player(player, provide_weapons)
 		core.set_player_privs(pname, privs)
 	end
 
-	-- Give Utility Kit
+	-- Give Utility Kit (Slot 1 left empty; Slots 2 & 3 for Building Blueprints)
+	inv:set_stack("main", 1, ItemStack(""))
 	if not esports_core.match.is_spleef then
 		inv:set_stack("main", 2, ItemStack("esports_building:blueprint_wall"))
 		inv:set_stack("main", 3, ItemStack("esports_building:blueprint_ramp"))
 	end
 
-	-- Give Weapons (Debug or Staging)
+	-- Give Weapons starting at Slot 4+
 	if provide_weapons then
-		inv:add_item("main", "esports_weapons:assault_rifle")
-		inv:add_item("main", "esports_weapons:shotgun")
-		inv:add_item("main", "esports_weapons:sniper_rifle")
-		inv:add_item("main", "esports_weapons:smg")
+		inv:set_stack("main", 4, ItemStack("esports_weapons:assault_rifle"))
+		inv:set_stack("main", 5, ItemStack("esports_weapons:shotgun"))
+		inv:set_stack("main", 6, ItemStack("esports_weapons:sniper_rifle"))
+		inv:set_stack("main", 7, ItemStack("esports_weapons:smg"))
 		inv:add_item("ammo", "esports_weapons:rifle_ammo 100")
 		inv:add_item("ammo", "esports_weapons:shotgun_ammo 50")
 		inv:add_item("ammo", "esports_weapons:sniper_ammo 20")

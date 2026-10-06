@@ -106,7 +106,8 @@ function esports_core.reset_to_lobby(player)
 		inv:set_list("main", {})
 		inv:set_list("ammo", {})
 
-		-- Re-add standard lobby blueprints
+		-- Re-add standard lobby blueprints (Slot 1 empty)
+		inv:set_stack("main", 1, ItemStack(""))
 		inv:set_stack("main", 2, ItemStack("esports_building:blueprint_wall"))
 		inv:set_stack("main", 3, ItemStack("esports_building:blueprint_ramp"))
 	end

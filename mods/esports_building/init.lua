@@ -140,6 +140,7 @@ core.register_on_joinplayer(function(player)
 	local inv = player:get_inventory()
 	inv:set_size("main", 8 * 4)
 	inv:set_list("main", {})  -- Clear inventory to remove old items
+	inv:set_stack("main", 1, ItemStack(""))
 	inv:set_stack("main", 2, ItemStack("esports_building:blueprint_wall"))
 	inv:set_stack("main", 3, ItemStack("esports_building:blueprint_ramp"))
 end)

@@ -996,8 +996,20 @@ core.register_on_item_pickup(function(itemstack, picker, pointed_thing)
 			esports_core.hud.update_ammo(picker)
 			return ItemStack("")  -- Successfully scavenged
 		else
-			-- First time pickup: Give weapon AND starting ammo
-			local leftover = inv:add_item("main", itemstack)
+			-- First time pickup: Give weapon starting at slot 4+ (leaving slot 1 empty)
+			local leftover = itemstack
+			local main_list = inv:get_list("main")
+			for i = 4, #main_list do
+				if main_list[i]:is_empty() then
+					inv:set_stack("main", i, itemstack)
+					leftover = ItemStack("")
+					break
+				end
+			end
+			-- Fallback if all slots from 4 onwards are full
+			if not leftover:is_empty() then
+				leftover = inv:add_item("main", itemstack)
+			end
 			if leftover:get_count() < itemstack:get_count() then
 				inv:add_item("ammo", ammo_name .. " " .. count)
 
