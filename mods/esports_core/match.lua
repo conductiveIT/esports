@@ -1086,6 +1086,12 @@ function esports_core.is_coordinate_on_island(x, z)
 end
 
 function esports_core.match.get_spleef_top_floor_y()
+	if esports_core.match.spleef_top_floor_y then
+		return esports_core.match.spleef_top_floor_y
+	end
+	if esports_mapgen and esports_mapgen.spleef_top_floor_y then
+		return esports_mapgen.spleef_top_floor_y
+	end
 	local lvls = tonumber(esports_core.match.spleef_levels)
 		or tonumber(esports_mapgen and esports_mapgen.spleef_levels)
 		or 1
