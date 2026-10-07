@@ -274,6 +274,41 @@ core.register_entity("esports_core:bot", {
 			return
 		end
 
+		-- Anti-stuck for bots: check if bot is inside a solid block
+		self._unstuck_timer = (self._unstuck_timer or 0) - dtime
+		if self._unstuck_timer <= 0 then
+			self._unstuck_timer = 0.5
+			local bx = math.floor(pos.x + 0.5)
+			local by = math.floor(pos.y + 0.5)
+			local bz = math.floor(pos.z + 0.5)
+
+			local nf = core.get_node({x = bx, y = by, z = bz})
+			local df = core.registered_nodes[nf.name]
+			if df and df.walkable and nf.name ~= "air" and nf.name ~= "ignore" then
+				-- Check upward
+				local nu = core.get_node({x = bx, y = by + 1, z = bz})
+				local du = core.registered_nodes[nu.name]
+				if not du or not du.walkable then
+					self.object:set_pos({x = pos.x, y = by + 0.55, z = pos.z})
+				else
+					-- Nudge to side
+					local offsets = {{x = 1, z = 0}, {x = -1, z = 0}, {x = 0, z = 1}, {x = 0, z = -1}}
+					for _, off in ipairs(offsets) do
+						local tx = bx + off.x
+						local tz = bz + off.z
+						local node_side = core.get_node({x = tx, y = by, z = tz})
+						local node_side_up = core.get_node({x = tx, y = by + 1, z = tz})
+						local ds = core.registered_nodes[node_side.name]
+						local dsu = core.registered_nodes[node_side_up.name]
+						if (not ds or not ds.walkable) and (not dsu or not dsu.walkable) then
+							self.object:set_pos({x = tx, y = pos.y, z = tz})
+							break
+						end
+					end
+				end
+			end
+		end
+
 		-- Update dynamic nametag with health for bots/sentries
 		local hp = self.object:get_hp()
 		local tag_text = string.format("Sentry (%d HP)", hp)

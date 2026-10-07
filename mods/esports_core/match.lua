@@ -39,6 +39,7 @@ core.register_on_leaveplayer(function(player)
 end)
 
 local nametag_accumulator = 0
+local unstuck_accumulator = 0
 
 core.register_globalstep(function(dtime)
 	-- Void death check runs on every server tick for instantaneous fall elimination
@@ -50,6 +51,69 @@ core.register_globalstep(function(dtime)
 			if pos and pos.y < -10 then
 				p:set_armor_groups({fleshy = 100})
 				p:set_hp(0)  -- Instant elimination
+			end
+		end
+	end
+
+	-- Anti-Stuck Watchdog: Ensures combatants never get trapped inside solid nodes
+	unstuck_accumulator = unstuck_accumulator + dtime
+	if unstuck_accumulator >= 0.5 then
+		unstuck_accumulator = 0
+		for _, p in ipairs(all_players) do
+			local pname = p:get_player_name()
+			if not esports_core.is_in_lobby(pname) and not esports_core.is_spectator(pname) then
+				local pos = p:get_pos()
+				if pos and pos.y >= -5 then
+					local bx = math.floor(pos.x + 0.5)
+					local by = math.floor(pos.y + 0.5)
+					local bz = math.floor(pos.z + 0.5)
+
+					local n_feet = core.get_node({x = bx, y = by, z = bz})
+					local n_head = core.get_node({x = bx, y = by + 1, z = bz})
+					local d_feet = core.registered_nodes[n_feet.name]
+					local d_head = core.registered_nodes[n_head.name]
+
+					local stuck_feet = d_feet and d_feet.walkable and n_feet.name ~= "air" and n_feet.name ~= "ignore"
+					local stuck_head = d_head and d_head.walkable and n_head.name ~= "air" and n_head.name ~= "ignore"
+
+					if stuck_feet or stuck_head then
+						local freed = false
+						-- 1. Try upward
+						local top_y = stuck_head and (by + 2) or (by + 1)
+						local n_up1 = core.get_node({x = bx, y = top_y, z = bz})
+						local n_up2 = core.get_node({x = bx, y = top_y + 1, z = bz})
+						local d_up1 = core.registered_nodes[n_up1.name]
+						local d_up2 = core.registered_nodes[n_up2.name]
+						if (not d_up1 or not d_up1.walkable) and (not d_up2 or not d_up2.walkable) then
+							p:set_pos({x = pos.x, y = top_y - 0.45, z = pos.z})
+							freed = true
+						else
+							-- 2. Try horizontal directions
+							local offsets = {
+								{x = 1, z = 0}, {x = -1, z = 0},
+								{x = 0, z = 1}, {x = 0, z = -1},
+								{x = 1, z = 1}, {x = -1, z = 1},
+								{x = 1, z = -1}, {x = -1, z = -1},
+							}
+							for _, off in ipairs(offsets) do
+								local tx = bx + off.x
+								local tz = bz + off.z
+								local nf = core.get_node({x = tx, y = by, z = tz})
+								local nh = core.get_node({x = tx, y = by + 1, z = tz})
+								local df = core.registered_nodes[nf.name]
+								local dh = core.registered_nodes[nh.name]
+								if (not df or not df.walkable) and (not dh or not dh.walkable) then
+									p:set_pos({x = tx, y = pos.y, z = tz})
+									freed = true
+									break
+								end
+							end
+						end
+						if freed then
+							core.chat_send_player(pname, "SYSTEM: Anti-stuck repositioned you to safety.")
+						end
+					end
+				end
 			end
 		end
 	end
@@ -1043,7 +1107,8 @@ function esports_core.get_safe_spawn_pos(pname_or_side, ignore_proximity)
 
 	if esports_core.match.is_spleef then
 		local lvls = esports_core.match.spleef_levels or 1
-		local spawn_y = 5.5 + (lvls - 1) * 4
+		local top_floor_y = 5 + (lvls - 1) * 4
+		local spawn_y = top_floor_y + 0.55
 
 		local attempts = 0
 		local final_pos
@@ -1057,23 +1122,37 @@ function esports_core.get_safe_spawn_pos(pname_or_side, ignore_proximity)
 				candidate = {x = math.random(-20, 20), y = spawn_y, z = math.random(-20, 20)}
 			end
 
+			-- Ensure candidate floor is intact and head/feet space is clear air
+			local cx = math.floor(candidate.x + 0.5)
+			local cz = math.floor(candidate.z + 0.5)
+			local floor_node = core.get_node({x = cx, y = top_floor_y, z = cz})
+			local feet_node = core.get_node({x = cx, y = top_floor_y + 1, z = cz})
+			local head_node = core.get_node({x = cx, y = top_floor_y + 2, z = cz})
+			local d_feet = core.registered_nodes[feet_node.name]
+			local d_head = core.registered_nodes[head_node.name]
+
+			local valid_floor = (floor_node.name == "esports_mapgen:spleef_block")
+			local clear_body = (not d_feet or not d_feet.walkable) and (not d_head or not d_head.walkable)
+			local too_close = (not valid_floor or not clear_body)
+
 			-- Collision check: Ensure we do not spawn inside another player or bot
 			-- Relax collision distance if struggling
 			local col_dist = (attempts > 40) and 1.0 or 2.0
-			local too_close = false
-			local nearby = core.get_objects_inside_radius(candidate, col_dist)
-			for _, obj in ipairs(nearby) do
-				if obj:is_player() then
-					local other_name = obj:get_player_name()
-					if other_name ~= my_name and not esports_core.is_spectator(other_name) then
-						too_close = true
-						break
-					end
-				else
-					local ent = obj:get_luaentity()
-					if ent and ent.name == "esports_core:bot" then
-						too_close = true
-						break
+			if not too_close then
+				local nearby = core.get_objects_inside_radius(candidate, col_dist)
+				for _, obj in ipairs(nearby) do
+					if obj:is_player() then
+						local other_name = obj:get_player_name()
+						if other_name ~= my_name and not esports_core.is_spectator(other_name) then
+							too_close = true
+							break
+						end
+					else
+						local ent = obj:get_luaentity()
+						if ent and ent.name == "esports_core:bot" then
+							too_close = true
+							break
+						end
 					end
 				end
 			end
@@ -1195,24 +1274,63 @@ function esports_core.get_safe_spawn_pos(pname_or_side, ignore_proximity)
 				end
 			end
 
+			-- Surface and clearance detection: Find true solid ground and verify feet/head are in air
+			local ix = math.floor(target_x + 0.5)
+			local iz = math.floor(target_z + 0.5)
+			local ground_y = nil
+
+			-- Scan downward from max build height to island base to find solid surface
+			for y = 12, 0, -1 do
+				local n = core.get_node({x = ix, y = y, z = iz})
+				local ndef = core.registered_nodes[n.name]
+				if ndef and ndef.walkable and n.name ~= "air" and n.name ~= "ignore" then
+					ground_y = y
+					break
+				end
+			end
+
+			-- Reject player-built walls, ramps, loot boxes, or flag stands as spawn floor
+			if ground_y then
+				local gn = core.get_node({x = ix, y = ground_y, z = iz})
+				if gn.name:find("player_") or gn.name == "esports_loot:box" or gn.name:find("flag_stand") then
+					ground_y = nil
+				end
+			end
+
+			-- Check that the 2 blocks above ground_y (feet and head) are completely clear air
+			if ground_y then
+				local n_feet = core.get_node({x = ix, y = ground_y + 1, z = iz})
+				local n_head = core.get_node({x = ix, y = ground_y + 2, z = iz})
+				local d_feet = core.registered_nodes[n_feet.name]
+				local d_head = core.registered_nodes[n_head.name]
+				local feet_blocked = d_feet and d_feet.walkable and n_feet.name ~= "air"
+				local head_blocked = d_head and d_head.walkable and n_head.name ~= "air"
+				if feet_blocked or head_blocked then
+					ground_y = nil
+				end
+			end
+
 			-- ALWAYS avoid spawning directly inside any other player/bot/recent spawn (min 2.0 meters)
 			-- But relax to 1.0 meters if we are really struggling (attempts > 40)
 			local col_dist = (attempts > 40) and 1.0 or 2.0
-			local too_close = false
-			local candidate_pos = {x = target_x, y = 1.5, z = target_z}
-			local nearby = core.get_objects_inside_radius(candidate_pos, col_dist)
-			for _, obj in ipairs(nearby) do
-				if obj:is_player() then
-					local other_name = obj:get_player_name()
-					if other_name ~= my_name and not esports_core.is_spectator(other_name) then
-						too_close = true
-						break
-					end
-				else
-					local ent = obj:get_luaentity()
-					if ent and ent.name == "esports_core:bot" then
-						too_close = true
-						break
+			local too_close = not ground_y
+			local candidate_pos = ground_y and {x = target_x, y = ground_y + 0.55, z = target_z} or {x = target_x, y = 0.55, z = target_z}
+
+			if not too_close then
+				local nearby = core.get_objects_inside_radius(candidate_pos, col_dist)
+				for _, obj in ipairs(nearby) do
+					if obj:is_player() then
+						local other_name = obj:get_player_name()
+						if other_name ~= my_name and not esports_core.is_spectator(other_name) then
+							too_close = true
+							break
+						end
+					else
+						local ent = obj:get_luaentity()
+						if ent and ent.name == "esports_core:bot" then
+							too_close = true
+							break
+						end
 					end
 				end
 			end
@@ -1244,7 +1362,20 @@ function esports_core.get_safe_spawn_pos(pname_or_side, ignore_proximity)
 	if is_base_spawn then
 		local base = esports_core.ctf.bases[side]
 		local offset_range = 6 * scale
-		local final_pos = {x=base.x + (math.random() * offset_range - offset_range / 2), y=base.y + 1.5, z=base.z + (math.random() * offset_range - offset_range / 2)}
+		local bx = base.x + (math.random() * offset_range - offset_range / 2)
+		local bz = base.z + (math.random() * offset_range - offset_range / 2)
+		local ground_y = 0
+		local ibx = math.floor(bx + 0.5)
+		local ibz = math.floor(bz + 0.5)
+		for y = 10, 0, -1 do
+			local n = core.get_node({x = ibx, y = y, z = ibz})
+			local ndef = core.registered_nodes[n.name]
+			if ndef and ndef.walkable and n.name ~= "air" and n.name ~= "ignore" then
+				ground_y = y
+				break
+			end
+		end
+		local final_pos = {x = bx, y = ground_y + 0.55, z = bz}
 		table.insert(esports_core.recent_spawns, {pos = final_pos, time = now})
 		return final_pos
 	end
@@ -1254,7 +1385,20 @@ function esports_core.get_safe_spawn_pos(pname_or_side, ignore_proximity)
 		{x = math.floor(storm_center.x - 10), y = -15, z = math.floor(storm_center.z - 10)},
 		{x = math.floor(storm_center.x + 10), y = 5, z = math.floor(storm_center.z + 10)}
 	)
-	local final_pos = {x = storm_center.x + (math.random() * 4 - 2), y = 1.5, z = storm_center.z + (math.random() * 4 - 2)}
+	local fx = storm_center.x + (math.random() * 4 - 2)
+	local fz = storm_center.z + (math.random() * 4 - 2)
+	local ground_y = 0
+	local ifx = math.floor(fx + 0.5)
+	local ifz = math.floor(fz + 0.5)
+	for y = 10, 0, -1 do
+		local n = core.get_node({x = ifx, y = y, z = ifz})
+		local ndef = core.registered_nodes[n.name]
+		if ndef and ndef.walkable and n.name ~= "air" and n.name ~= "ignore" then
+			ground_y = y
+			break
+		end
+	end
+	local final_pos = {x = fx, y = ground_y + 0.55, z = fz}
 	table.insert(esports_core.recent_spawns, {pos = final_pos, time = now})
 	return final_pos
 end
@@ -1785,9 +1929,7 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 	-- Reset Arena and CTF State
 	if not esports_core.match.is_spleef then
 		if esports_mapgen and esports_mapgen.reset_island then
-			if layout ~= esports_mapgen.current_layout or scale ~= esports_mapgen.current_scale then
-				esports_mapgen.reset_island(layout, scale)
-			end
+			esports_mapgen.reset_island(layout, scale)
 		end
 	end
 
