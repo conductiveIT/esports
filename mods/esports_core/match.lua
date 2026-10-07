@@ -1085,6 +1085,31 @@ function esports_core.is_coordinate_on_island(x, z)
 	return false
 end
 
+function esports_core.match.get_spleef_top_floor_y()
+	local lvls = tonumber(esports_core.match.spleef_levels)
+		or tonumber(esports_mapgen and esports_mapgen.spleef_levels)
+		or 1
+	local top_y = 5 + (lvls - 1) * 4
+
+	-- Check world blocks to find the true highest floor if arena is generated
+	local check_pts = {
+		{x = 0, z = 0}, {x = 10, z = 10}, {x = -10, z = -10},
+		{x = 10, z = -10}, {x = -10, z = 10}, {x = 0, z = 15}, {x = 0, z = -15}
+	}
+	for _, pt in ipairs(check_pts) do
+		for test_y = 40, 5, -1 do
+			local n = core.get_node({x = pt.x, y = test_y, z = pt.z})
+			if n.name == "esports_mapgen:spleef_block" then
+				if test_y > top_y then
+					top_y = test_y
+				end
+				break
+			end
+		end
+	end
+	return top_y
+end
+
 -- Helper to find a safe ground position within the storm and on the island
 function esports_core.get_safe_spawn_pos(pname_or_side, ignore_proximity)
 	local side = pname_or_side
@@ -1106,9 +1131,11 @@ function esports_core.get_safe_spawn_pos(pname_or_side, ignore_proximity)
 	end
 
 	if esports_core.match.is_spleef then
-		local lvls = esports_core.match.spleef_levels or 1
-		local top_floor_y = 5 + (lvls - 1) * 4
+		local top_floor_y = esports_core.match.get_spleef_top_floor_y()
 		local spawn_y = top_floor_y + 0.55
+
+		-- Pre-emerge Spleef top floor region to ensure blocks are cached
+		core.emerge_area({x = -26, y = top_floor_y - 2, z = -26}, {x = 26, y = top_floor_y + 4, z = 26})
 
 		local attempts = 0
 		local final_pos
@@ -1586,8 +1613,8 @@ core.register_on_joinplayer(function(player)
 	if match_active then
 		if esports_core.match.is_spleef and esports_core.match.temp_spectators and esports_core.match.temp_spectators[pname] then
 			esports_core.set_spectator(player, true)
-			local lvls = esports_core.match.spleef_levels or 1
-			local spec_y = 5 + lvls * 4
+			local top_y = esports_core.match.get_spleef_top_floor_y()
+			local spec_y = top_y + 4
 			player:set_pos({x=0, y=spec_y, z=0})
 			core.chat_send_player(pname, "LUANTI ESPORTS: You have already been eliminated in this Spleef match.")
 			return
@@ -1650,8 +1677,8 @@ core.register_on_respawnplayer(function(player)
 			end
 			esports_core.match.temp_spectators[pname] = true
 			esports_core.set_spectator(player, true)
-			local lvls = esports_core.match.spleef_levels or 1
-			local spec_y = 5 + lvls * 4
+			local top_y = esports_core.match.get_spleef_top_floor_y()
+			local spec_y = top_y + 4
 			player:set_pos({x=0, y=spec_y, z=0})
 			return true
 		end
@@ -1708,7 +1735,9 @@ end)
 esports_core.match.current_map_scale = 1.0
 
 function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_count, bot_diff, game_mode, map_size, friendly_fire, melee_damage, map_layout, spleef_levels)
-	esports_core.match.spleef_levels = tonumber(spleef_levels) or 1
+	local spleef_lvls = tonumber(spleef_levels) or 1
+	esports_core.match.spleef_levels = spleef_lvls
+	esports_core.match.spleef_top_floor_y = 5 + (spleef_lvls - 1) * 4
 
 	-- Force exit practice mode for any player currently in it before freezing and generating/resetting the map
 	local had_practice_players = false
@@ -1784,7 +1813,7 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 	local is_ffa = (game_mode == "ffa")
 	local is_koth = (game_mode == "koth")
 	local is_payload = (game_mode == "payload")
-	local is_spleef = (game_mode == "spleef")
+	local is_spleef = (game_mode and tostring(game_mode):lower() == "spleef")
 	local is_ctf = (game_mode == "ctf" or game_mode == "tagctf")
 	local is_tagctf = (game_mode == "tagctf")
 	local is_domination = (game_mode == "domination")

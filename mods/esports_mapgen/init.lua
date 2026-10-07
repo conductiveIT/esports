@@ -295,7 +295,9 @@ core.register_node("esports_mapgen:spleef_block", {
 -- Generate the Spleef Arena platform and boundary walls
 function esports_mapgen.setup_spleef_arena(levels)
 	local lvls = tonumber(levels) or 1
-	core.log("action", "[TDM Mapgen] Generating Spleef arena with " .. lvls .. " levels...")
+	esports_mapgen.spleef_levels = lvls
+	esports_mapgen.spleef_top_floor_y = 5 + (lvls - 1) * 4
+	core.log("action", "[TDM Mapgen] Generating Spleef arena with " .. lvls .. " levels (top floor y=" .. esports_mapgen.spleef_top_floor_y .. ")...")
 
 	-- Clear objects first
 	core.clear_objects({mode = "quick"})
