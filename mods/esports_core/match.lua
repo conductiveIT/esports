@@ -49,19 +49,26 @@ core.register_globalstep(function(dtime)
 		if not esports_core.is_spectator(pname) then
 			local pos = p:get_pos()
 			if pos and pos.y < -10 then
-				p:set_armor_groups({fleshy = 100})
-				p:set_hp(0)  -- Instant elimination
+				if esports_core.is_in_lobby(pname) then
+					-- Rescue lobby players directly without killing them
+					p:set_velocity({x = 0, y = 0, z = 0})
+					p:set_pos({x = 0, y = 1.5, z = 0})
+				else
+					p:set_armor_groups({fleshy = 100})
+					p:set_velocity({x = 0, y = 0, z = 0})  -- Stop downward acceleration into deep void!
+					p:set_hp(0)  -- Instant elimination
+				end
 			end
 		end
 	end
 
-	-- Anti-Stuck Watchdog: Ensures combatants never get trapped inside solid nodes
+	-- Anti-Stuck Watchdog: Ensures players never get trapped inside solid nodes
 	unstuck_accumulator = unstuck_accumulator + dtime
 	if unstuck_accumulator >= 0.5 then
 		unstuck_accumulator = 0
 		for _, p in ipairs(all_players) do
 			local pname = p:get_player_name()
-			if not esports_core.is_in_lobby(pname) and not esports_core.is_spectator(pname) then
+			if not esports_core.is_spectator(pname) then
 				local pos = p:get_pos()
 				if pos and pos.y >= -5 then
 					local bx = math.floor(pos.x + 0.5)
@@ -77,40 +84,45 @@ core.register_globalstep(function(dtime)
 					local stuck_head = d_head and d_head.walkable and n_head.name ~= "air" and n_head.name ~= "ignore"
 
 					if stuck_feet or stuck_head then
-						local freed = false
-						-- 1. Try upward
-						local top_y = stuck_head and (by + 2) or (by + 1)
-						local n_up1 = core.get_node({x = bx, y = top_y, z = bz})
-						local n_up2 = core.get_node({x = bx, y = top_y + 1, z = bz})
-						local d_up1 = core.registered_nodes[n_up1.name]
-						local d_up2 = core.registered_nodes[n_up2.name]
-						if (not d_up1 or not d_up1.walkable) and (not d_up2 or not d_up2.walkable) then
-							p:set_pos({x = pos.x, y = top_y - 0.45, z = pos.z})
-							freed = true
+						if esports_core.is_in_lobby(pname) then
+							p:set_pos({x = 0, y = 1.5, z = 0})
+							p:set_velocity({x = 0, y = 0, z = 0})
 						else
-							-- 2. Try horizontal directions
-							local offsets = {
-								{x = 1, z = 0}, {x = -1, z = 0},
-								{x = 0, z = 1}, {x = 0, z = -1},
-								{x = 1, z = 1}, {x = -1, z = 1},
-								{x = 1, z = -1}, {x = -1, z = -1},
-							}
-							for _, off in ipairs(offsets) do
-								local tx = bx + off.x
-								local tz = bz + off.z
-								local nf = core.get_node({x = tx, y = by, z = tz})
-								local nh = core.get_node({x = tx, y = by + 1, z = tz})
-								local df = core.registered_nodes[nf.name]
-								local dh = core.registered_nodes[nh.name]
-								if (not df or not df.walkable) and (not dh or not dh.walkable) then
-									p:set_pos({x = tx, y = pos.y, z = tz})
-									freed = true
-									break
+							local freed = false
+							-- 1. Try upward
+							local top_y = stuck_head and (by + 2) or (by + 1)
+							local n_up1 = core.get_node({x = bx, y = top_y, z = bz})
+							local n_up2 = core.get_node({x = bx, y = top_y + 1, z = bz})
+							local d_up1 = core.registered_nodes[n_up1.name]
+							local d_up2 = core.registered_nodes[n_up2.name]
+							if (not d_up1 or not d_up1.walkable) and (not d_up2 or not d_up2.walkable) then
+								p:set_pos({x = pos.x, y = top_y - 0.45, z = pos.z})
+								freed = true
+							else
+								-- 2. Try horizontal directions
+								local offsets = {
+									{x = 1, z = 0}, {x = -1, z = 0},
+									{x = 0, z = 1}, {x = 0, z = -1},
+									{x = 1, z = 1}, {x = -1, z = 1},
+									{x = 1, z = -1}, {x = -1, z = -1},
+								}
+								for _, off in ipairs(offsets) do
+									local tx = bx + off.x
+									local tz = bz + off.z
+									local nf = core.get_node({x = tx, y = by, z = tz})
+									local nh = core.get_node({x = tx, y = by + 1, z = tz})
+									local df = core.registered_nodes[nf.name]
+									local dh = core.registered_nodes[nh.name]
+									if (not df or not df.walkable) and (not dh or not dh.walkable) then
+										p:set_pos({x = tx, y = pos.y, z = tz})
+										freed = true
+										break
+									end
 								end
 							end
-						end
-						if freed then
-							core.chat_send_player(pname, "SYSTEM: Anti-stuck repositioned you to safety.")
+							if freed then
+								core.chat_send_player(pname, "SYSTEM: Anti-stuck repositioned you to safety.")
+							end
 						end
 					end
 				end
@@ -1467,9 +1479,16 @@ function esports_core.reset_player(player, provide_weapons)
 	player:set_properties({
 		hp_max = class_hp,
 		visual_size = {x=1, y=1, z=1},  -- Restore model size
+		collisionbox = {-0.3, 0.0, -0.3, 0.3, 1.75, 0.3},
+		selectionbox = {-0.3, 0.0, -0.3, 0.3, 1.75, 0.3},
+		pointable = true,
+		makes_footstep_sound = true,
 		eye_height = 1.625,
 		interact_distance = 10,  -- Combat reach
 	})
+	if esports_core.lobby and esports_core.lobby.blackout_hide then
+		esports_core.lobby.blackout_hide(player)
+	end
 	player:set_hp(class_hp)
 	player:set_physics_override({
 		speed = class_spd,  -- Combat Speed
@@ -1609,6 +1628,24 @@ end
 core.register_on_joinplayer(function(player)
 	local pname = player:get_player_name()
 
+	-- 1. Anti-Dead-Lock & Anti-Void Watchdog on Join
+	-- In Luanti/Minetest, if a player disconnected while dead or in the void,
+	-- their HP = 0 and void pos are persisted in players.sqlite.
+	-- Calling player:set_hp() directly on a dead PlayerSAO fails in the engine.
+	-- We invoke player:respawn() if dead to restore engine state, and rescue from void/illegal coordinates.
+	local pos = player:get_pos()
+	if player:get_hp() <= 0 then
+		if player.respawn then
+			player:respawn()
+		end
+		player:set_hp(100)
+	end
+
+	if not pos or pos.y < -5 or pos.y > 200 or (pos.x == 0 and pos.y == 0 and pos.z == 0) then
+		player:set_pos({x = 0, y = 1.5, z = 0})
+		player:set_velocity({x = 0, y = 0, z = 0})
+	end
+
 	-- Initial HUD Setup
 	esports_core.hud.init_hud(player)
 
@@ -1619,6 +1656,10 @@ core.register_on_joinplayer(function(player)
 	-- Detect mid-game join for participants
 	if match_active then
 		if esports_core.match.is_spleef and esports_core.match.temp_spectators and esports_core.match.temp_spectators[pname] then
+			if esports_core.lobby and esports_core.lobby.blackout_hide then
+				esports_core.lobby.blackout_hide(player)
+			end
+			core.close_formspec(pname, "esports_core:lobby")
 			esports_core.set_spectator(player, true)
 			local top_y = esports_core.match.get_spleef_top_floor_y()
 			local spec_y = top_y + 4
@@ -1628,7 +1669,11 @@ core.register_on_joinplayer(function(player)
 		end
 
 		if side and not esports_core.is_spectator(pname) then
-			-- Rejoin fight immediately
+			-- Rejoin fight immediately: clean up any lobby blackout/formspec
+			if esports_core.lobby and esports_core.lobby.blackout_hide then
+				esports_core.lobby.blackout_hide(player)
+			end
+			core.close_formspec(pname, "esports_core:lobby")
 			esports_core.teams.players[pname] = side
 			esports_core.teams.update_nametag(player)
 			esports_core.reset_player(player, false)
@@ -1725,6 +1770,7 @@ core.register_on_respawnplayer(function(player)
 		core.after(0.2, function()
 			if player:is_player() then
 				local side = esports_core.match.get_player_match_side(pname)
+				player:set_properties({visual_size = {x=1, y=1, z=1}})
 				esports_core.skins.apply(player, side)
 			end
 		end)
@@ -2308,5 +2354,46 @@ core.register_chatcommand("resume", {
 		return esports_core.match.resume()
 	end,
 })
+
+core.register_chatcommand("unstuck", {
+	description = "Emergency rescue if you are trapped inside blocks or stuck in the void",
+	func = function(name)
+		local player = core.get_player_by_name(name)
+		if not player then return false, "Player not found." end
+
+		-- Hide any orphaned blackout HUD
+		if esports_core.lobby and esports_core.lobby.blackout_hide then
+			esports_core.lobby.blackout_hide(player)
+		end
+
+		if esports_core.is_in_lobby(name) then
+			player:set_velocity({x = 0, y = 0, z = 0})
+			player:set_pos({x = 0, y = 1.5, z = 0})
+			esports_core.reset_to_lobby(player)
+			esports_core.lobby.show(player)
+			return true, "Repositioned to the lobby center."
+		elseif esports_core.is_spectator(name) then
+			local top_y = esports_core.match.is_spleef and (esports_core.match.get_spleef_top_floor_y() + 4) or 15
+			player:set_pos({x = 0, y = top_y, z = 0})
+			player:set_velocity({x = 0, y = 0, z = 0})
+			return true, "Repositioned spectator to safe observation point."
+		else
+			-- Active combatant
+			local safe_pos = esports_core.get_safe_spawn_pos(name, true)
+			player:set_pos(safe_pos)
+			player:set_velocity({x = 0, y = 0, z = 0})
+			return true, "Repositioned to safe spawn coordinates."
+		end
+	end,
+})
+
+core.register_chatcommand("stuck", {
+	description = "Shortcut for /unstuck",
+	func = function(name)
+		local cmd = core.registered_chatcommands["unstuck"]
+		return cmd.func(name)
+	end,
+})
+
 
 

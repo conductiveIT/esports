@@ -747,6 +747,13 @@ local function build_team_tab(fs, name)
 		-- SQUAD VIEW (Member or Owner)
 		local is_owner = esports_league.is_owner(name, p_team_name)
 		local team_data = esports_league.teams[p_team_name]
+		if not team_data then
+			esports_league.player_to_team[name] = nil
+			esports_league.save()
+			table.insert(fs, "label[0.5,3.8;TEAM ROSTER: None]")
+			table.insert(fs, "label[0.5,4.3;Your team was not found or has been disbanded.]")
+			return
+		end
 
 		table.insert(fs, "label[0.5,3.8;TEAM ROSTER: " .. core.formspec_escape(p_team_name:upper()) .. "]")
 		table.insert(fs, "label[0.5,4.3;Leader: " .. core.formspec_escape(team_data.leader ~= "" and esports_core.get_nick(team_data.leader) or "None") .. "]")
@@ -1133,8 +1140,17 @@ end
 
 function esports_core.lobby.show(player)
 	local name = player:get_player_name()
-	esports_core.lobby.blackout_show(player)
-	core.show_formspec(name, "esports_core:lobby", get_formspec(name))
+	local ok, fs = pcall(get_formspec, name)
+	if not ok or not fs or fs == "" then
+		core.log("error", "[LOBBY] Error rendering formspec for " .. name .. ": " .. tostring(fs))
+		esports_core.lobby.blackout_hide(player)
+		fs = "formspec_version[6]size[10,4]background9[0,0;10,4;esports_hud_bar.png;false;10]" ..
+		     "label[1,1.5;Error generating lobby menu. Press RETRY.]" ..
+		     "button[3.5,2.5;3,0.8;tab_main;RETRY]"
+	else
+		esports_core.lobby.blackout_show(player)
+	end
+	core.show_formspec(name, "esports_core:lobby", fs)
 end
 
 core.register_on_player_receive_fields(function(player, formname, fields)
@@ -1492,9 +1508,9 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	-- Kick Player (Owner)
 	if fields.kick_player then
 		local idx = player_settings[name].sel_roster_idx
-		if p_team_nav and idx then
+		if p_team_nav and idx and esports_league.teams[p_team_nav] then
 			local team_data = esports_league.teams[p_team_nav]
-			local target = team_data.members[idx]
+			local target = team_data.members and team_data.members[idx]
 			if target then
 				local ok, msg = esports_league.kick_member(name, target)
 				core.chat_send_player(name, "LOBBY: " .. msg)
@@ -1553,9 +1569,9 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	if fields.set_owner and is_admin then
 		local selected_team = player_settings[name].selected_team
 		local idx = player_settings[name].sel_admin_roster_idx
-		if selected_team and idx then
+		if selected_team and idx and esports_league.teams[selected_team] then
 			local team_data = esports_league.teams[selected_team]
-			local target = team_data.members[idx]
+			local target = team_data.members and team_data.members[idx]
 			if target then
 				local ok, msg = esports_league.set_owner(name, selected_team, target)
 				core.chat_send_player(name, "LOBBY: " .. msg)

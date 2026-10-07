@@ -12,6 +12,9 @@ core.settings:set("active_block_range", "2")
 -- Increase packet quota per iteration to prevent client send quota warnings on join
 core.settings:set("max_packets_per_iteration", "8192")
 
+-- Force engine default spawnpoint to safe coordinates above ground in singlenode
+core.settings:set("static_spawnpoint", "0, 1.5, 0")
+
 core.register_node("esports_mapgen:grass", {
 	description = "Grass",
 	tiles = {"esports_mapgen_grass.png"},

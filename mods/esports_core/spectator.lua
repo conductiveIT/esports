@@ -28,6 +28,11 @@ function esports_core.set_spectator(player, enable)
 		-- Hide HUD for cinematic view
 		player:hud_set_flags({hotbar = false, healthbar = false, breathbar = false, chat = false, minimap = false, minimap_radar = false})
 
+		-- Clean up any lingering blackout HUD
+		if esports_core.lobby and esports_core.lobby.blackout_hide then
+			esports_core.lobby.blackout_hide(player)
+		end
+
 		-- Grant privs
 		local privs = core.get_player_privs(target_name)
 		privs.fly = true
