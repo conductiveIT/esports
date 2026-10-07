@@ -1,5 +1,6 @@
 esports_core.lobby = {}
 esports_core.lobby.blackouts = {}
+esports_core.lobby.admin_free = {}
 
 function esports_core.lobby.blackout_show(player)
 	local name = player:get_player_name()
@@ -1144,14 +1145,31 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		return
 	end
 
+	-- Admin Free Roam Exit
+	if fields.exit_lobby and is_admin then
+		esports_core.lobby.admin_free[name] = true
+		esports_core.lobby.blackout_hide(player)
+		core.close_formspec(name, "esports_core:lobby")
+		player:set_properties({
+			visual_size = {x = 1, y = 1},
+			collisionbox = {-0.3, 0.0, -0.3, 0.3, 1.75, 0.3},
+			pointable = true,
+		})
+		player:set_armor_groups({immortal = 0, fleshy = 100})
+		player:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1.0, sneak = true})
+		core.chat_send_player(name, "LOBBY: Admin free roam enabled. Type /lobby to return to the lobby menu.")
+		return
+	end
+
 	-- Lobby Lock for non-participants (Mandatory Main Menu)
 	if fields.quit then
 		local side = esports_core.match.get_player_match_side(name)
 		local in_practice = esports_core.practice and esports_core.practice.players and esports_core.practice.players[name]
 		local huds = esports_core.hud and esports_core.hud.player_huds and esports_core.hud.player_huds[name]
 		local is_viewing_outro = huds and huds.outro_bg ~= nil
+		local admin_free = esports_core.lobby.admin_free[name]
 
-		if not side and not esports_core.is_spectator(name) and (not is_admin or not fields.exit_lobby) and not in_practice and not is_viewing_outro then
+		if not side and not esports_core.is_spectator(name) and not in_practice and not is_viewing_outro and not admin_free then
 			core.after(0, function()
 				if core.get_player_by_name(name) then
 					esports_core.lobby.show(player)
@@ -1781,6 +1799,15 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		esports_core.match.state = "waiting"
 		esports_core.match.timer = 0
 		esports_core.match.paused = false
+		-- Clear all match mode flags
+		esports_core.match.is_pve = false
+		esports_core.match.is_ffa = false
+		esports_core.match.is_spleef = false
+		esports_core.match.is_ctf = false
+		esports_core.match.is_koth = false
+		esports_core.match.is_payload = false
+		esports_core.match.is_domination = false
+
 		-- Clear state immediately to prevent stale data on instant restarts
 		esports_core.match.player_sides = {}
 		esports_core.teams.players = {}
@@ -1983,14 +2010,22 @@ core.register_globalstep(function(dtime)
 		end
 
 		local in_practice = esports_core.practice and esports_core.practice.players and esports_core.practice.players[name]
+		local in_lobby = esports_core.is_in_lobby(name)
 
-		-- If NOT in a match side, NOT an admin, NOT already a spectator, and NOT in practice
-		if not side and not is_admin and not esports_core.is_spectator(name) and not in_practice then
+		if in_lobby then
 			local huds = esports_core.hud and esports_core.hud.player_huds and esports_core.hud.player_huds[name]
 			local is_viewing_outro = huds and huds.outro_bg ~= nil
 			if not is_viewing_outro then
 				-- Force physics freeze with gravity
-				player:set_physics_override({speed = 0, jump = 0, gravity = 1})
+				player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 1})
+
+				-- Position watchdog: enforce lobby boundary clamp
+				local pos = player:get_pos()
+				if pos and (math.abs(pos.x) > 6 or math.abs(pos.z) > 6 or pos.y < 0 or pos.y > 6) then
+					player:set_pos({x = 0, y = 1.5, z = 0})
+					player:set_velocity({x = 0, y = 0, z = 0})
+				end
+
 				-- Force lobby re-open
 				esports_core.lobby.show(player)
 			end
@@ -1999,7 +2034,7 @@ core.register_globalstep(function(dtime)
 			player:override_day_night_ratio(nil)
 			local settings = player_settings[name]
 			local is_spectator_view = settings and settings.spectator_view
-			if match_active and is_admin and not side and not is_spectator_view and not in_practice then
+			if match_active and is_admin and not side and not is_spectator_view and not in_practice and not (esports_core.lobby.admin_free and esports_core.lobby.admin_free[name]) then
 				-- Force live scoreboard refresh/stay open for spectating admins who are not in 3D spectate view
 				esports_core.lobby.show(player)
 			elseif match_active and (side or esports_core.is_spectator(name) or in_practice) and not is_admin then
@@ -2012,7 +2047,6 @@ core.register_globalstep(function(dtime)
 		-- DYNAMIC PRIVILEGE REFRESH: Ensure all active players can interact, and lobby players cannot
 		if not esports_core.is_spectator(name) then
 			local privs = core.get_player_privs(name)
-			local in_lobby = esports_core.is_in_lobby(name)
 
 			if in_lobby then
 				-- Revoke interact privilege in lobby mode
@@ -2078,6 +2112,9 @@ core.register_chatcommand("lobby", {
 	func = function(name)
 		local player = core.get_player_by_name(name)
 		if player then
+			if esports_core.lobby and esports_core.lobby.admin_free then
+				esports_core.lobby.admin_free[name] = nil
+			end
 			if player_settings[name] then
 				player_settings[name].spectator_view = nil
 			else
@@ -2127,7 +2164,7 @@ function esports_core.lobby.refresh_admins()
 			if core.check_player_privs(pname, {server = true}) then
 				-- Only refresh if the admin is NOT actively playing the match (not on a side)
 				local side = esports_core.match.get_player_match_side(pname)
-				if not side then
+				if not side and not (esports_core.lobby.admin_free and esports_core.lobby.admin_free[pname]) then
 					esports_core.lobby.show(player)
 				end
 			end
@@ -2141,7 +2178,11 @@ core.register_on_joinplayer(function(player)
 end)
 
 core.register_on_leaveplayer(function(player)
-	esports_core.lobby.blackouts[player:get_player_name()] = nil
+	local pname = player:get_player_name()
+	esports_core.lobby.blackouts[pname] = nil
+	if esports_core.lobby.admin_free then
+		esports_core.lobby.admin_free[pname] = nil
+	end
 	-- Delay to ensure core.get_connected_players() reflects the departure
 	core.after(0.5, esports_core.lobby.refresh_admins)
 end)

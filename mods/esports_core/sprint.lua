@@ -63,10 +63,12 @@ function esports_core.sprint.reset_player(player)
 	pdata.last_jump = false
 
 	local base = esports_core.sprint.get_base_speed(player, pname)
+	local jump = (base <= 0) and 0 or NORMAL_JUMP
+	local sneak = (base > 0)
 	pdata.last_speed = base
-	pdata.last_jump_phys = NORMAL_JUMP
-	pdata.last_sneak = true
-	player:set_physics_override({speed = base, sneak = true, jump = NORMAL_JUMP, gravity = 1.0})
+	pdata.last_jump_phys = jump
+	pdata.last_sneak = sneak
+	player:set_physics_override({speed = base, sneak = sneak, jump = jump, gravity = 1.0})
 
 	esports_core.sprint.update_hud(player, pdata, true)
 end
@@ -82,9 +84,7 @@ function esports_core.sprint.get_base_speed(player, pname)
 
 	-- Check lobby or countdown / pause freeze
 	if esports_core.is_in_lobby(player) then
-		if not core.check_player_privs(pname, {server = true}) then
-			return 0
-		end
+		return 0
 	end
 
 	if esports_core.match and (esports_core.match.state == "countdown" or esports_core.match.state == "paused") then
@@ -131,6 +131,12 @@ function esports_core.sprint.update_physics(player, pname)
 	local base = esports_core.sprint.get_base_speed(player, pname)
 	if base <= 0 then
 		pdata.is_sprinting = false
+		if (pdata.last_speed or 0) ~= 0 or (pdata.last_jump_phys or 0) ~= 0 then
+			player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 1.0})
+			pdata.last_speed = 0
+			pdata.last_jump_phys = 0
+			pdata.last_sneak = false
+		end
 		return
 	end
 
@@ -266,9 +272,14 @@ core.register_globalstep(function(dtime)
 		else
 			local base_speed = esports_core.sprint.get_base_speed(player, pname)
 			if base_speed <= 0 then
-				-- Player is frozen
+				-- Player is frozen (lobby or countdown/paused)
 				pdata.is_sprinting = false
-				pdata.last_speed = 0
+				if (pdata.last_speed or 0) ~= 0 or (pdata.last_jump_phys or 0) ~= 0 then
+					pdata.last_speed = 0
+					pdata.last_jump_phys = 0
+					pdata.last_sneak = false
+					player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 1.0})
+				end
 			else
 				local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(player)
 				local max_stm = cdef and cdef.max_stamina or MAX_STAMINA
@@ -342,9 +353,9 @@ core.register_globalstep(function(dtime)
 					end
 				end
 
-				-- If sprint or exhaustion state changed, apply physics override immediately
+				-- If sprint or exhaustion state changed, or unfreezing from 0 speed, apply physics override immediately
 				local exhaustion_changed = (pdata.exhausted ~= was_exhausted)
-				if state_changed or exhaustion_changed then
+				if state_changed or exhaustion_changed or pdata.last_speed == 0 then
 					esports_core.sprint.update_physics(player, pname)
 				end
 

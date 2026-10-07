@@ -666,6 +666,13 @@ core.register_globalstep(function(dtime)
 			if esports_core.match.is_pve then
 				esports_core.bots.clear_all()
 			end
+			esports_core.match.is_pve = false
+			esports_core.match.is_ffa = false
+			esports_core.match.is_spleef = false
+			esports_core.match.is_ctf = false
+			esports_core.match.is_koth = false
+			esports_core.match.is_payload = false
+			esports_core.match.is_domination = false
 
 			-- Reset Arena to default lobby layout at the end of the match
 			if esports_mapgen and esports_mapgen.reset_island then
@@ -1351,14 +1358,14 @@ function esports_core.match.get_player_match_side(name)
 		return nil
 	end
 
-	-- In PVE, all active human combatants fight on Team Blue against the bots
-	if esports_core.match and esports_core.match.is_pve then
-		return "blue"
-	end
-
-	-- Check for temporary PVE/Join overrides first
+	-- Check for player sides tracker first (tracks participants in PvE, FFA, and dynamic joins)
 	if esports_core.match.player_sides and esports_core.match.player_sides[name] then
 		return esports_core.match.player_sides[name]
+	end
+
+	-- In PVE, only registered human combatants fight on Team Blue against the bots
+	if esports_core.match and esports_core.match.is_pve and esports_core.teams.players[name] == "blue" then
+		return "blue"
 	end
 
 	if not esports_core.match.active_teams then
@@ -1462,10 +1469,10 @@ core.register_on_joinplayer(function(player)
 		inv:set_list("main", {})
 		inv:set_list("ammo", {})
 	else
-		esports_core.reset_player(player, false)
+		esports_core.reset_to_lobby(player)
 	end
 
-	player:set_pos(esports_core.get_safe_spawn_pos(pname))
+	player:set_pos({x = 0, y = 1.5, z = 0})
 
 	-- Lobby Ghost Mode: Invisible, Invulnerable, and Frozen
 	if not side or not match_active then
@@ -1478,14 +1485,7 @@ core.register_on_joinplayer(function(player)
 		})
 		player:set_hp(100)
 		player:set_armor_groups({immortal = 1})
-
-		-- Admins can still move, but are hidden/protected
-		if not core.check_player_privs(pname, {server=true}) then
-			player:set_physics_override({speed = 0, jump = 0, gravity = 1})
-		else
-			-- Admin Movement Baseline
-			player:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1})
-		end
+		player:set_physics_override({speed = 0, jump = 0, gravity = 1})
 	end
 
 	-- Show Lobby (Immediate)

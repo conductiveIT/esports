@@ -47,14 +47,13 @@ end
 function esports_core.is_in_lobby(player)
 	local name = type(player) == "string" and player or player:get_player_name()
 
-	-- Admins are exempt from lobby lock to permit administrative building, testing, and debugging
-	local is_admin = core.check_player_privs(name, {server = true})
-	if is_admin then
+	-- If they are in the practice range, they are not in lobby mode (they need to shoot/interact)
+	if esports_core.practice and esports_core.practice.players and esports_core.practice.players[name] then
 		return false
 	end
 
-	-- If they are in the practice range, they are not in lobby mode (they need to shoot/interact)
-	if esports_core.practice and esports_core.practice.players and esports_core.practice.players[name] then
+	-- Spectators are not in lobby mode
+	if esports_core.is_spectator and esports_core.is_spectator(name) then
 		return false
 	end
 
@@ -64,13 +63,14 @@ function esports_core.is_in_lobby(player)
 		if match_active then
 			local side = esports_core.match.get_player_match_side and esports_core.match.get_player_match_side(name)
 			if side and not esports_core.is_spectator(name) then
-				return false -- Active player, not in lobby mode
-			end
-			-- In PVE mode, all non-spectator players are active participants
-			if esports_core.match.is_pve and not esports_core.is_spectator(name) then
-				return false
+				return false -- Active participant in the match
 			end
 		end
+	end
+
+	-- Admins who explicitly unlocked themselves via EXIT button
+	if esports_core.lobby and esports_core.lobby.admin_free and esports_core.lobby.admin_free[name] then
+		return false
 	end
 
 	-- Otherwise, they are in lobby mode!
@@ -81,11 +81,9 @@ function esports_core.reset_to_lobby(player)
 	local pname = player:get_player_name()
 	local inv = player:get_inventory()
 
-	-- Teleport back to lobby center spawn if outside lobby bounds
-	local pos = player:get_pos()
-	if not pos or math.abs(pos.x) > 6 or math.abs(pos.z) > 6 or pos.y < 0 or pos.y > 6 then
-		player:set_pos({x=0, y=1.5, z=0})
-	end
+	-- Teleport back to lobby center spawn
+	player:set_pos({x = 0, y = 1.5, z = 0})
+	player:set_velocity({x = 0, y = 0, z = 0})
 
 	-- Disable spectator mode if active
 	if esports_core.is_spectator and esports_core.is_spectator(pname) then
@@ -128,12 +126,8 @@ function esports_core.reset_to_lobby(player)
 	player:set_hp(100)
 	player:set_armor_groups({immortal = 1})
 
-	-- Physics freeze (unless admin)
-	if not core.check_player_privs(pname, {server=true}) then
-		player:set_physics_override({speed = 0, jump = 0, gravity = 1})
-	else
-		player:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1})
-	end
+	-- Physics freeze
+	player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 1})
 end
 
 dofile(modpath .. "/skins.lua")
