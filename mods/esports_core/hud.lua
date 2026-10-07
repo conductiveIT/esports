@@ -1075,12 +1075,9 @@ core.register_globalstep(function(dtime)
 	if input_timer < 0.2 then return end
 	input_timer = 0
 	for _, player in ipairs(core.get_connected_players()) do
-		local name = player:get_player_name()
-		if not esports_core.is_spectator(name) then
-			local controls = player:get_player_control()
-			local show_score = controls.zoom or (controls.aux1 and not controls.up)
-			esports_core.hud.toggle_scoreboard(player, show_score)
-		end
+		local controls = player:get_player_control()
+		local show_score = controls.zoom or (controls.aux1 and not controls.up)
+		esports_core.hud.toggle_scoreboard(player, show_score)
 	end
 end)
 
@@ -1160,6 +1157,17 @@ core.register_chatcommand("lastmatch", {
 		elseif player then
 			core.chat_send_player(name, "LOBBY: No previous match statistics available.")
 			return false
+		end
+	end
+})
+
+core.register_chatcommand("scoreboard", {
+	description = "View the live match scoreboard and player statistics",
+	func = function(name)
+		local player = core.get_player_by_name(name)
+		if player and esports_core.lobby and esports_core.lobby.get_live_scoreboard_formspec then
+			core.show_formspec(name, "esports_core:lobby", esports_core.lobby.get_live_scoreboard_formspec(name))
+			return true
 		end
 	end
 })

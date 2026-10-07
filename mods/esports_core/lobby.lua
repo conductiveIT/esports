@@ -180,8 +180,13 @@ function esports_core.lobby.get_live_scoreboard_formspec(name)
 	table.insert(fs, "style[stop_match;bgcolor=#770000;textcolor=white]")
 	table.insert(fs, "button[0.5,12.5;5.2,0.9;stop_match;STOP MATCH]")
 
+	local is_spec = esports_core.is_spectator and esports_core.is_spectator(name)
 	table.insert(fs, "style[go_spectate;bgcolor=#335533;textcolor=white]")
-	table.insert(fs, "button[6.1,12.5;5.2,0.9;go_spectate;SPECTATE 3D]")
+	if is_spec then
+		table.insert(fs, "button[6.1,12.5;5.2,0.9;go_spectate;RESUME 3D SPECTATE]")
+	else
+		table.insert(fs, "button[6.1,12.5;5.2,0.9;go_spectate;SPECTATE 3D]")
+	end
 
 	table.insert(fs, "style[show_lobby;bgcolor=#0055aa;textcolor=white]")
 	table.insert(fs, "button[11.7,12.5;5.3,0.9;show_lobby;LOBBY MENU]")
@@ -2034,11 +2039,12 @@ core.register_globalstep(function(dtime)
 			player:override_day_night_ratio(nil)
 			local settings = player_settings[name]
 			local is_spectator_view = settings and settings.spectator_view
-			if match_active and is_admin and not side and not is_spectator_view and not in_practice and not (esports_core.lobby.admin_free and esports_core.lobby.admin_free[name]) then
-				-- Force live scoreboard refresh/stay open for spectating admins who are not in 3D spectate view
+			local is_spec = esports_core.is_spectator and esports_core.is_spectator(name)
+			if match_active and is_admin and not side and not is_spectator_view and not in_practice and not (esports_core.lobby.admin_free and esports_core.lobby.admin_free[name]) and not is_spec then
+				-- Force live scoreboard refresh/stay open for non-participating admins who are not in 3D spectate view
 				esports_core.lobby.show(player)
-			elseif match_active and (side or esports_core.is_spectator(name) or in_practice) and not is_admin then
-				-- Close lobby formspec and hide blackout for participants/spectators/practice (except admins!)
+			elseif match_active and (side or is_spec or in_practice) and (not is_admin or is_spectator_view or is_spec) then
+				-- Close lobby formspec and hide blackout for participants/spectators/practice
 				esports_core.lobby.blackout_hide(player)
 				core.close_formspec(name, "esports_core:lobby")
 			end
@@ -2115,11 +2121,6 @@ core.register_chatcommand("lobby", {
 			if esports_core.lobby and esports_core.lobby.admin_free then
 				esports_core.lobby.admin_free[name] = nil
 			end
-			if player_settings[name] then
-				player_settings[name].spectator_view = nil
-			else
-				player_settings[name] = { spectator_view = nil }
-			end
 
 			-- Reset player from practice range if they are inside
 			if esports_core.practice and esports_core.practice.players[name] then
@@ -2127,11 +2128,30 @@ core.register_chatcommand("lobby", {
 				return
 			end
 
-			-- Cleanly hide outro, reset spectator and ensure lobby reset
+			-- Cleanly hide outro
 			if esports_core.hud and esports_core.hud.hide_outro then
 				esports_core.hud.hide_outro(player)
 			end
-			if esports_core.is_spectator and esports_core.is_spectator(name) then
+
+			local match_active = esports_core.match and (esports_core.match.state == "active" or esports_core.match.state == "countdown")
+			local is_spec = esports_core.is_spectator and esports_core.is_spectator(name)
+
+			-- If an admin is spectating an ongoing match, let them open the scoreboard/lobby menu without removing spectator mode or teleporting them
+			if match_active and is_spec then
+				if player_settings[name] then
+					player_settings[name].spectator_view = true
+				end
+				esports_core.lobby.show(player)
+				return
+			end
+
+			if player_settings[name] then
+				player_settings[name].spectator_view = nil
+			else
+				player_settings[name] = { spectator_view = nil }
+			end
+
+			if is_spec then
 				esports_core.set_spectator(player, false)
 			end
 			esports_core.reset_to_lobby(player)

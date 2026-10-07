@@ -77,7 +77,7 @@ function esports_core.is_in_lobby(player)
 	return true
 end
 
-function esports_core.reset_to_lobby(player)
+function esports_core.reset_to_lobby(player, preserve_spectator)
 	local pname = player:get_player_name()
 	local inv = player:get_inventory()
 
@@ -85,8 +85,8 @@ function esports_core.reset_to_lobby(player)
 	player:set_pos({x = 0, y = 1.5, z = 0})
 	player:set_velocity({x = 0, y = 0, z = 0})
 
-	-- Disable spectator mode if active
-	if esports_core.is_spectator and esports_core.is_spectator(pname) then
+	-- Disable spectator mode if active and not intentionally preserving it
+	if not preserve_spectator and esports_core.is_spectator and esports_core.is_spectator(pname) then
 		esports_core.set_spectator(player, false)
 	end
 
@@ -118,10 +118,18 @@ function esports_core.reset_to_lobby(player)
 	-- Apply Lobby Ghost Mode: Invisible, Invulnerable, and Frozen
 	player:set_properties({
 		hp_max = 100,
-		visual_size = {x=1, y=1, z=1},  -- Full size for light calculation
+		visual_size = {x=0, y=0, z=0},  -- Zero visual size so nobody in arena sees ghost players
 		textures = {"character.png^[alpha:0"},  -- 100% transparent
+		collisionbox = {0, 0, 0, 0, 0, 0},
+		selectionbox = {0, 0, 0, 0, 0, 0},
+		pointable = false,
+		makes_footstep_sound = false,
 		eye_height = 1.625,
 		interact_distance = 0,  -- Cannot hit anything in lobby
+	})
+	player:set_nametag_attributes({
+		text = "",
+		color = {a = 0, r = 0, g = 0, b = 0}
 	})
 	player:set_hp(100)
 	player:set_armor_groups({immortal = 1})

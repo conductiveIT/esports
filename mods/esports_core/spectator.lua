@@ -11,10 +11,19 @@ function esports_core.set_spectator(player, enable)
 		esports_core.spectators[target_name] = {target = nil}
 		player:set_properties({
 			visual_size = {x=0, y=0, z=0},
+			collisionbox = {0, 0, 0, 0, 0, 0},
+			selectionbox = {0, 0, 0, 0, 0, 0},
+			pointable = false,
+			makes_footstep_sound = false,
+			textures = {"character.png^[alpha:0"},
 			interact_distance = 0,
 		})
-		esports_core.teams.update_nametag(player)
-		player:set_physics_override({gravity = 1.0, speed = 2.0})
+		player:set_nametag_attributes({
+			text = "",
+			color = {a = 0, r = 0, g = 0, b = 0}
+		})
+		player:set_armor_groups({immortal = 1})
+		player:set_physics_override({gravity = 0, speed = 2.0})
 
 		-- Hide HUD for cinematic view
 		player:hud_set_flags({hotbar = false, healthbar = false, breathbar = false, chat = false, minimap = false, minimap_radar = false})
@@ -43,9 +52,14 @@ function esports_core.set_spectator(player, enable)
 		esports_core.spectators[target_name] = nil
 		player:set_properties({
 			visual_size = {x=1, y=1, z=1},
+			collisionbox = {-0.3, 0.0, -0.3, 0.3, 1.7, 0.3},
+			selectionbox = {-0.3, 0.0, -0.3, 0.3, 1.7, 0.3},
+			pointable = true,
+			makes_footstep_sound = true,
 			interact_distance = 10,
 		})
 		player:set_nametag_attributes({color = {a=255, r=255, g=255, b=255}})
+		player:set_armor_groups({fleshy = 100})
 
 		-- Restore HUD
 		player:hud_set_flags({hotbar = true, healthbar = true, breathbar = true, chat = true, minimap = true, minimap_radar = true})
@@ -61,6 +75,9 @@ function esports_core.set_spectator(player, enable)
 		esports_core.hud.init_hud(player)
 		if esports_core.broadcaster then
 			esports_core.broadcaster.clear_hud(player)
+		end
+		if esports_core.skins and esports_core.skins.apply then
+			esports_core.skins.apply(player, nil)
 		end
 	end
 end

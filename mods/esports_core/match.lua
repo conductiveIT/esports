@@ -129,11 +129,12 @@ core.register_globalstep(function(dtime)
 		for i, p in ipairs(all_players) do
 			local pname = p:get_player_name()
 			local is_spec = esports_core.is_spectator(pname)
+			local in_lobby = esports_core.is_in_lobby and esports_core.is_in_lobby(pname)
 			player_data[i] = {
 				player = p,
 				name = pname,
-				is_spec = is_spec,
-				pos = (match_active and not is_spec) and p:get_pos() or nil,
+				is_spec = is_spec or in_lobby,
+				pos = (match_active and not is_spec and not in_lobby) and p:get_pos() or nil,
 			}
 		end
 
@@ -146,7 +147,7 @@ core.register_globalstep(function(dtime)
 			if p_entry.is_spec then
 				local last = last_nametags[pname]
 				if not last or last.a ~= 0 then
-					p:set_nametag_attributes({color = {a=0, r=0, g=0, b=0}})
+					p:set_nametag_attributes({text = "", color = {a=0, r=0, g=0, b=0}})
 					last_nametags[pname] = {text = "", a = 0, r = 0, g = 0, b = 0}
 				end
 			else
@@ -1676,6 +1677,11 @@ end)
 core.register_on_respawnplayer(function(player)
 	if esports_core.match.state == "active" then
 		local pname = player:get_player_name()
+
+		if esports_core.is_spectator(pname) then
+			esports_core.set_spectator(player, true)
+			return true
+		end
 
 		if esports_core.match.is_spleef then
 			if not esports_core.match.temp_spectators then

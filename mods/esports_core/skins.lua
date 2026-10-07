@@ -135,6 +135,8 @@ end)
 
 function esports_core.skins.apply(player, color_hex)
 	if not player or not player:is_player() then return end
+	local pname = player:get_player_name()
+	if esports_core.is_spectator and esports_core.is_spectator(pname) then return end
 
 	local meta = player:get_meta()
 	local base_skin = meta:get_string("esports_selected_skin")
