@@ -535,7 +535,7 @@ core.register_entity("esports_weapons:sniper_bullet", {
 esports_weapons.auto_weapons = {
 	["esports_weapons:smg"] = {
 		ammo = "esports_weapons:smg_ammo",
-		damage = 12,
+		damage = 9,
 		range = 35,
 		base_spread = 0.02,
 		max_spread = 0.12,
@@ -550,7 +550,7 @@ esports_weapons.auto_weapons = {
 	},
 	["esports_weapons:assault_rifle"] = {
 		ammo = "esports_weapons:rifle_ammo",
-		damage = 10,
+		damage = 18,
 		range = 50,
 		base_spread = 0.015,
 		max_spread = 0.09,
@@ -743,11 +743,11 @@ core.register_tool("esports_weapons:shotgun", {
 					end
 				end
 				for _ = 1, 8 do
-					-- Shotgun deals 4.2 per pellet (33.6 total per blast)
-					-- 3 hits = 100.8 damage (Lethal for 100 HP players)
-					esports_weapons.shoot_raycast(user, 4.2, 30, 0.2)
+					-- Shotgun deals 8.5 per pellet (68.0 total per blast)
+					-- 2 center-mass hits = 136.0 damage (Lethal for 100 HP and 120 HP Tank players)
+					esports_weapons.shoot_raycast(user, 8.5, 30, 0.2)
 				end
-				esports_weapons.cooldowns[p_name] = current_time + 1.0
+				esports_weapons.cooldowns[p_name] = current_time + 0.9
 
 				-- Play sound
 				core.sound_play("esports_shoot_shotgun", {pos = user:get_pos(), max_hear_distance = 32})

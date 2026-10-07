@@ -3,7 +3,7 @@
 A fast-paced hitscan team combat base game and esports platform for [Luanti](https://www.luanti.org/) (formerly Minetest) featuring instant building, storm mechanics, procedural arena layouts, sprint stamina, full league tournament management, and spectator broadcasting.
 
 > [!IMPORTANT]
-> This game is currently in **active development** (v0.9.1). Features, APIs, and mechanics are actively maintained and subject to refinement.
+> This game is currently in **active development** (v0.9.2). Features, APIs, and mechanics are actively maintained and subject to refinement.
 > Note: Built using Antigravity with Gemini Pro.
 
 ---
@@ -89,10 +89,10 @@ Solo or cooperative match mode against difficulty-scaled AI sentries that replac
 - **Visuals**: Dynamic ground dust particles and dedicated sprint animations (`sprint`, `sprint_mine`).
 
 ### Weapons & Combat Arsenal
-- **Assault Rifle**: Versatile automatic rifle with raycast projectile traces, progressive recoil spread, and balanced mid-range combat capabilities.
-- **Pump Shotgun**: High-damage close-quarters weapon firing a 6-pellet tactical spread pattern for devastating point-blank stopping power.
-- **Ballistic Sniper Rifle**: Heavy bolt-action precision rifle firing high-velocity ballistic rounds (200 m/s with realistic gravity drop). Features right-click ADS optical zoom with a custom 20° FOV mil-dot tactical reticle overlay, lethal headshots (110 damage), and punchy building penetration.
-- **Tactical SMG**: Rapid-fire close-quarters submachine gun (0.11s fire rate, 12 damage per bullet) with tight close-range spray, perfect for flanking and aggressive run-and-gun combat.
+- **Assault Rifle**: Versatile automatic rifle (18 damage per bullet, 0.20s fire rate, 90 DPS) with raycast projectile traces, progressive recoil spread, and balanced mid-range combat capabilities.
+- **Pump Shotgun**: High-damage close-quarters weapon firing an 8-pellet tactical spread pattern (8.5 damage per pellet, 68 total blast, 0.9s cooldown) for devastating point-blank stopping power.
+- **Ballistic Sniper Rifle**: Heavy bolt-action precision rifle firing high-velocity ballistic rounds (140 m/s with realistic gravity drop). Features right-click ADS optical zoom with a custom 20° FOV mil-dot tactical reticle overlay, lethal headshots (110 damage), and punchy building penetration.
+- **Tactical SMG**: Rapid-fire close-quarters submachine gun (0.11s fire rate, 9 damage per bullet, ~82 DPS) with tight close-range spray, perfect for flanking and aggressive run-and-gun combat.
 - **Harvesting Pickaxe**: High block-damage tool specialized for rapid structural demolition and Spleef arenas.
 - **Ammo Stash**: Dedicated hidden `ammo` inventory compartment that automatically stashes picked-up ammunition (`rifle_ammo`, `shotgun_ammo`, `sniper_ammo`, `smg_ammo`) without cluttering hotbar slots. Duplicate weapon pickups are automatically converted into bonus ammunition.
 - **Structure Demolition**: All weapons and pickaxes damage blocks in the `player_built` group and supply crates (`esports_loot:box`).
