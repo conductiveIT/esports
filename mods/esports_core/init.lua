@@ -1,6 +1,6 @@
 esports_core = {}
 esports_core.version = "0.9.2"
-esports_core.build = 1
+esports_core.build = 13
 core.log("action", "====================================================")
 core.log("action", "[TDM Core] Starting Luanti Deathmatch Core v" .. esports_core.version .. " (build " .. esports_core.build .. ")")
 core.log("action", "====================================================")
@@ -119,8 +119,8 @@ function esports_core.reset_to_lobby(player, preserve_spectator)
 	player:set_properties({
 		hp_max = 100,
 		visual_size = {x=0, y=0, z=0},  -- Zero visual size so nobody in arena sees ghost players
-		textures = {"character.png^[alpha:0"},  -- 100% transparent
-		collisionbox = {0, 0, 0, 0, 0, 0},
+		textures = {"blank.png"},  -- 100% transparent
+		collisionbox = {-0.3, 0.0, -0.3, 0.3, 1.75, 0.3},
 		selectionbox = {0, 0, 0, 0, 0, 0},
 		pointable = false,
 		makes_footstep_sound = false,
@@ -134,9 +134,26 @@ function esports_core.reset_to_lobby(player, preserve_spectator)
 	player:set_hp(100)
 	player:set_armor_groups({immortal = 1})
 
-	-- Physics freeze
-	player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 1})
+	-- Physics freeze: Zero gravity ensures lobby players never fall into the void
+	player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 0})
 end
+
+-- Absolute damage protection for Lobby, Spectators, and Countdown phase
+core.register_on_player_hpchange(function(player, hp_change, reason)
+	if hp_change < 0 then
+		local pname = player:get_player_name()
+		if esports_core.is_in_lobby(pname) then
+			return 0
+		end
+		if esports_core.is_spectator and esports_core.is_spectator(pname) then
+			return 0
+		end
+		if esports_core.match and (esports_core.match.state == "countdown" or esports_core.match.paused) then
+			return 0
+		end
+	end
+	return hp_change
+end, true)
 
 dofile(modpath .. "/skins.lua")
 dofile(modpath .. "/teams.lua")

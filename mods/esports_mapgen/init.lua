@@ -102,7 +102,7 @@ core.register_on_generated(function(minp, maxp, seed)
 						data[vi] = c_grass
 					elseif y > -5 and y < 0 then
 						data[vi] = c_dirt
-					elseif y <= -5 and y > -20 then
+					elseif y == -5 then
 						data[vi] = c_stone
 					else
 						data[vi] = c_air
@@ -158,10 +158,10 @@ function esports_mapgen.reset_island(layout_name, scale_val)
 
 	local curr_ext = get_layout_extent(layout)
 	local prev_ext = get_layout_extent(prev_layout)
-	local max_extent = math.ceil(math.max(curr_ext, prev_ext) * max_s)
+	local max_extent = math.max(80, math.ceil(math.max(curr_ext, prev_ext) * max_s) + 20)
 
-	-- Height is optimized from -20..40 to -6..40 since players cannot dig or place below -5
-	local minp = {x=-max_extent, y=-6, z=-max_extent}
+	-- True Void Bounds: Clear down to y=-18 (below y=-10 elimination threshold) up to sky (y=40)
+	local minp = {x=-max_extent, y=-18, z=-max_extent}
 	local maxp = {x=max_extent, y=40, z=max_extent}
 
 	local vm = VoxelManip()
@@ -247,7 +247,7 @@ function esports_mapgen.reset_island(layout_name, scale_val)
 						table.insert(esports_mapgen.valid_crate_spots, {x=x, y=1, z=z})
 					elseif y > -5 and y < 0 then
 						data[vi] = c_dirt
-					elseif y <= -5 then
+					elseif y == -5 then
 						data[vi] = c_stone
 					else
 						data[vi] = c_air

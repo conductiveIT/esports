@@ -165,11 +165,11 @@ function esports_core.lobby.get_live_scoreboard_formspec(name)
 		table.insert(fs, "box[0.5,2.0;16.5,1.5;#333333aa]")
 		table.insert(fs, "label[1.0,2.75;FREE FOR ALL MATCH IN PROGRESS]")
 	else
-		table.insert(fs, "box[0.5,2.0;8.0;1.8;#551111aa]")
+		table.insert(fs, "box[0.5,2.0;8.0,1.8;#551111aa]")
 		table.insert(fs, "label[1.0,2.6;RED: " .. red_team:upper() .. "]")
 		table.insert(fs, "label[1.0,3.2;Score: " .. red_score .. "]")
 
-		table.insert(fs, "box[9.0,2.0;8.0;1.8;#111155aa]")
+		table.insert(fs, "box[9.0,2.0;8.0,1.8;#111155aa]")
 		table.insert(fs, "label[9.5,2.6;BLUE: " .. blue_team:upper() .. "]")
 		table.insert(fs, "label[9.5,3.2;Score: " .. blue_score .. "]")
 	end
@@ -1716,10 +1716,17 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local tod = (player_settings[name].match_tod or "Day"):lower()
 			local mode = (player_settings[name].match_mode or "TDM"):lower()
 
-			-- Auto-spectate if admin is not in the team
+			-- Auto-spectate only if admin is not in the team and other team members are online
 			if esports_league.get_team(name) ~= p_team then
-				local cmd = core.registered_chatcommands["spectate"]
-				if cmd and not esports_core.is_spectator(name) then cmd.func(name, "") end
+				if get_team_online_count(p_team) > 0 then
+					local cmd = core.registered_chatcommands["spectate"]
+					if cmd and not esports_core.is_spectator(name) then cmd.func(name, "") end
+				elseif esports_league.teams[p_team] then
+					table.insert(esports_league.teams[p_team].members, name)
+					esports_league.player_to_team[name] = p_team
+					esports_league.update_player_nametag(name)
+					esports_league.save()
+				end
 			end
 
 			local map_size = player_settings[name].map_size or "Small"
@@ -2037,8 +2044,8 @@ core.register_globalstep(function(dtime)
 			local huds = esports_core.hud and esports_core.hud.player_huds and esports_core.hud.player_huds[name]
 			local is_viewing_outro = huds and huds.outro_bg ~= nil
 			if not is_viewing_outro then
-				-- Force physics freeze with gravity
-				player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 1})
+				-- Force physics freeze with zero gravity
+				player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 0})
 
 				-- Position watchdog: enforce lobby boundary clamp
 				local pos = player:get_pos()
@@ -2056,13 +2063,16 @@ core.register_globalstep(function(dtime)
 			local settings = player_settings[name]
 			local is_spectator_view = settings and settings.spectator_view
 			local is_spec = esports_core.is_spectator and esports_core.is_spectator(name)
-			if match_active and is_admin and not side and not is_spectator_view and not in_practice and not (esports_core.lobby.admin_free and esports_core.lobby.admin_free[name]) and not is_spec then
-				-- Force live scoreboard refresh/stay open for non-participating admins who are not in 3D spectate view
-				esports_core.lobby.show(player)
-			elseif match_active and (side or is_spec or in_practice) and (not is_admin or is_spectator_view or is_spec) then
-				-- Close lobby formspec and hide blackout for participants/spectators/practice
+			if match_active and side then
+				-- Close lobby formspec and hide blackout for active match participants
 				esports_core.lobby.blackout_hide(player)
 				core.close_formspec(name, "esports_core:lobby")
+			elseif match_active and (is_spec or in_practice) then
+				esports_core.lobby.blackout_hide(player)
+				core.close_formspec(name, "esports_core:lobby")
+			elseif match_active and is_admin and not side and not is_spectator_view and not in_practice and not (esports_core.lobby.admin_free and esports_core.lobby.admin_free[name]) and not is_spec then
+				-- Force live scoreboard refresh/stay open for non-participating admins who are not in 3D spectate view
+				esports_core.lobby.show(player)
 			end
 		end
 

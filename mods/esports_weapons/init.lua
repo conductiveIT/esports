@@ -13,6 +13,19 @@ end)
 -- Cooldowns are checked and set using absolute timestamps (core.get_us_time)
 -- to avoid running a high-frequency globalstep loop on every server tick.
 
+-- Competitive FPS Physics: Disable physics knockback impulses on gunshots.
+-- Prevents multi-pellet shotgun blasts and automatic fire from launching players across the arena.
+local orig_calculate_knockback = core.calculate_knockback
+function core.calculate_knockback(player, hitter, time_from_last_punch, tool_capabilities, dir, distance, damage)
+	if tool_capabilities and tool_capabilities.damage_groups and tool_capabilities.damage_groups.is_gun then
+		return 0.0
+	end
+	if orig_calculate_knockback then
+		return orig_calculate_knockback(player, hitter, time_from_last_punch, tool_capabilities, dir, distance, damage)
+	end
+	return 0.0
+end
+
 esports_weapons.damage_node = function(pos, node, damage, player)
 	if core.get_item_group(node.name, "player_built") > 0 then
 		local meta = core.get_meta(pos)
@@ -93,7 +106,7 @@ esports_weapons.shoot_raycast = function(player, damage, range, spread)
 			if obj ~= player then
 				local ent = obj:get_luaentity()
 				local is_item = ent and ent.name == "__builtin:item"
-				local is_spec = obj:is_player() and esports_core.is_spectator(obj:get_player_name())
+				local is_spec = obj:is_player() and (esports_core.is_spectator(obj:get_player_name()) or (esports_core.is_in_lobby and esports_core.is_in_lobby(obj:get_player_name())))
 
 				if not is_item and not is_spec then
 					-- Friendly Fire Check
@@ -536,10 +549,10 @@ esports_weapons.auto_weapons = {
 	["esports_weapons:smg"] = {
 		ammo = "esports_weapons:smg_ammo",
 		damage = 9,
-		range = 35,
-		base_spread = 0.02,
-		max_spread = 0.12,
-		spread_growth = 0.010,
+		range = 24,
+		base_spread = 0.025,
+		max_spread = 0.22,
+		spread_growth = 0.028,
 		recovery_time = 0.30,
 		fire_rate = 0.11,
 		sound = "esports_shoot_assault_rifle",

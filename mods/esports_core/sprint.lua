@@ -44,35 +44,6 @@ function esports_core.sprint.init_player(player)
 	}
 end
 
-function esports_core.sprint.reset_player(player)
-	if not player or not player:is_player() then return end
-	local pname = player:get_player_name()
-	local pdata = esports_core.sprint.players[pname]
-	if not pdata then
-		esports_core.sprint.init_player(player)
-		pdata = esports_core.sprint.players[pname]
-	end
-
-	local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(player)
-	local max_stm = cdef and cdef.max_stamina or MAX_STAMINA
-	pdata.max_stamina = max_stm
-	pdata.stamina = max_stm
-	pdata.is_sprinting = false
-	pdata.exhausted = false
-	pdata.rest_timer = 0
-	pdata.last_jump = false
-
-	local base = esports_core.sprint.get_base_speed(player, pname)
-	local jump = (base <= 0) and 0 or NORMAL_JUMP
-	local sneak = (base > 0)
-	pdata.last_speed = base
-	pdata.last_jump_phys = jump
-	pdata.last_sneak = sneak
-	player:set_physics_override({speed = base, sneak = sneak, jump = jump, gravity = 1.0})
-
-	esports_core.sprint.update_hud(player, pdata, true)
-end
-
 function esports_core.sprint.get_base_speed(player, pname)
 	if not player or not player:is_player() then return 0 end
 	pname = pname or player:get_player_name()
@@ -112,6 +83,38 @@ function esports_core.sprint.get_base_speed(player, pname)
 	return class_base
 end
 
+function esports_core.sprint.reset_player(player)
+	if not player or not player:is_player() then return end
+	local pname = player:get_player_name()
+	local pdata = esports_core.sprint.players[pname]
+	if not pdata then
+		esports_core.sprint.init_player(player)
+		pdata = esports_core.sprint.players[pname]
+	end
+
+	local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(player)
+	local max_stm = cdef and cdef.max_stamina or MAX_STAMINA
+	pdata.max_stamina = max_stm
+	pdata.stamina = max_stm
+	pdata.is_sprinting = false
+	pdata.exhausted = false
+	pdata.rest_timer = 0
+	pdata.last_jump = false
+
+	local base = esports_core.sprint.get_base_speed(player, pname)
+	local in_freeze = (base <= 0)
+	local grav = in_freeze and 0 or 1.0
+	local jump = in_freeze and 0 or NORMAL_JUMP
+	local sneak = not in_freeze
+	pdata.last_speed = base
+	pdata.last_jump_phys = jump
+	pdata.last_sneak = sneak
+	pdata.last_gravity = grav
+	player:set_physics_override({speed = base, sneak = sneak, jump = jump, gravity = grav})
+
+	esports_core.sprint.update_hud(player, pdata, true)
+end
+
 function esports_core.sprint.is_sprinting(pname)
 	local pdata = esports_core.sprint.players[pname]
 	return pdata and pdata.is_sprinting or false
@@ -131,13 +134,19 @@ function esports_core.sprint.update_physics(player, pname)
 	local base = esports_core.sprint.get_base_speed(player, pname)
 	if base <= 0 then
 		pdata.is_sprinting = false
-		if (pdata.last_speed or 0) ~= 0 or (pdata.last_jump_phys or 0) ~= 0 then
-			player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 1.0})
+		if (pdata.last_speed or 0) ~= 0 or (pdata.last_jump_phys or 0) ~= 0 or (pdata.last_gravity or 0) ~= 0 then
+			player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 0})
 			pdata.last_speed = 0
 			pdata.last_jump_phys = 0
 			pdata.last_sneak = false
+			pdata.last_gravity = 0
 		end
 		return
+	end
+
+	if (pdata.last_gravity or 0) == 0 then
+		pdata.last_gravity = 1.0
+		player:set_physics_override({gravity = 1.0})
 	end
 
 	local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(player)
@@ -274,13 +283,18 @@ core.register_globalstep(function(dtime)
 			if base_speed <= 0 then
 				-- Player is frozen (lobby or countdown/paused)
 				pdata.is_sprinting = false
-				if (pdata.last_speed or 0) ~= 0 or (pdata.last_jump_phys or 0) ~= 0 then
+				if (pdata.last_speed or 0) ~= 0 or (pdata.last_jump_phys or 0) ~= 0 or (pdata.last_gravity or 0) ~= 0 then
 					pdata.last_speed = 0
 					pdata.last_jump_phys = 0
 					pdata.last_sneak = false
-					player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 1.0})
+					pdata.last_gravity = 0
+					player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 0})
 				end
 			else
+				if (pdata.last_gravity or 0) == 0 then
+					pdata.last_gravity = 1.0
+					player:set_physics_override({gravity = 1.0})
+				end
 				local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(player)
 				local max_stm = cdef and cdef.max_stamina or MAX_STAMINA
 				local jump_cost = cdef and cdef.jump_cost or JUMP_COST

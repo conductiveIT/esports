@@ -35,32 +35,48 @@ core.register_node("esports_loot:box", {
 
 		-- Random loot table (Bypassing spectator check for mobile/PC parity)
 
-		-- Random loot table
-		local loot_options
-		local meta = puncher:get_meta()
-		if meta:get_int("needs_weapon_from_crate") == 1 then
-			loot_options = {
-				"esports_weapons:assault_rifle",
-				"esports_weapons:shotgun",
-				"esports_weapons:sniper_rifle",
-				"esports_weapons:smg",
-			}
-			meta:set_int("needs_weapon_from_crate", 0)
-		else
-			loot_options = {
-				"esports_weapons:assault_rifle",
-				"esports_weapons:shotgun",
-				"esports_weapons:sniper_rifle",
-				"esports_weapons:smg",
-				"esports_weapons:rifle_ammo 20",
-				"esports_weapons:shotgun_ammo 10",
-				"esports_weapons:sniper_ammo 5",
-				"esports_weapons:smg_ammo 30",
-				"esports_weapons:health_pack",
-			}
+		local inv = puncher:get_inventory()
+		local all_weapons = {
+			"esports_weapons:assault_rifle",
+			"esports_weapons:shotgun",
+			"esports_weapons:smg",
+			"esports_weapons:sniper_rifle",
+		}
+
+		-- 1. Identify which weapons the player is currently missing from their loadout
+		local missing_weapons = {}
+		if inv then
+			for _, w in ipairs(all_weapons) do
+				if not inv:contains_item("main", w) then
+					table.insert(missing_weapons, w)
+				end
+			end
 		end
 
-		local chosen_loot = loot_options[math.random(#loot_options)]
+		local chosen_loot
+		local meta = puncher:get_meta()
+		local needs_weapon = meta:get_int("needs_weapon_from_crate") == 1
+		meta:set_int("needs_weapon_from_crate", 0)
+
+		-- Bad-luck protection: Heavily prioritize weapons the player doesn't yet have (100% on first crate, 80% subsequently)
+		if #missing_weapons > 0 and (needs_weapon or math.random() <= 0.80) then
+			chosen_loot = missing_weapons[math.random(#missing_weapons)]
+		else
+			-- Full loadout fallback pool (ammo refills, health packs, and weapons that convert to reserve ammo)
+			local general_loot = {
+				"esports_weapons:assault_rifle",
+				"esports_weapons:shotgun",
+				"esports_weapons:smg",
+				"esports_weapons:sniper_rifle",
+				"esports_weapons:rifle_ammo 30",
+				"esports_weapons:shotgun_ammo 12",
+				"esports_weapons:smg_ammo 45",
+				"esports_weapons:sniper_ammo 8",
+				"esports_weapons:health_pack",
+			}
+			chosen_loot = general_loot[math.random(#general_loot)]
+		end
+
 		core.add_item(pos, chosen_loot)
 		core.sound_play("esports_break_crate", {pos = pos, max_hear_distance = 16})
 		core.remove_node(pos)

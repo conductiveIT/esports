@@ -15,7 +15,7 @@ function esports_core.set_spectator(player, enable)
 			selectionbox = {0, 0, 0, 0, 0, 0},
 			pointable = false,
 			makes_footstep_sound = false,
-			textures = {"character.png^[alpha:0"},
+			textures = {"blank.png"},
 			interact_distance = 0,
 		})
 		player:set_nametag_attributes({

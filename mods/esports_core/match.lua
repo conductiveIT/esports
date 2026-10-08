@@ -49,14 +49,22 @@ core.register_globalstep(function(dtime)
 		if not esports_core.is_spectator(pname) then
 			local pos = p:get_pos()
 			if pos and pos.y < -10 then
-				if esports_core.is_in_lobby(pname) then
-					-- Rescue lobby players directly without killing them
+				if esports_core.is_in_lobby(pname) or esports_core.match.state ~= "active" then
+					-- Rescue lobby/pre-match players directly without killing them
 					p:set_velocity({x = 0, y = 0, z = 0})
 					p:set_pos({x = 0, y = 1.5, z = 0})
+					p:set_hp(100)
 				else
-					p:set_armor_groups({fleshy = 100})
-					p:set_velocity({x = 0, y = 0, z = 0})  -- Stop downward acceleration into deep void!
-					p:set_hp(0)  -- Instant elimination
+					local side = esports_core.match.get_player_match_side(pname)
+					if side then
+						p:set_armor_groups({fleshy = 100})
+						p:set_velocity({x = 0, y = 0, z = 0})  -- Stop downward acceleration into deep void!
+						p:set_hp(0)  -- Instant elimination
+					else
+						p:set_velocity({x = 0, y = 0, z = 0})
+						p:set_pos({x = 0, y = 1.5, z = 0})
+						p:set_hp(100)
+					end
 				end
 			end
 		end
@@ -256,7 +264,44 @@ core.register_globalstep(function(dtime)
 				local pname = p:get_player_name()
 				local is_participant = esports_core.match.get_player_match_side(pname)
 
-				if is_participant or core.check_player_privs(pname, {server = true}) then
+				if is_participant then
+					local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(p)
+					local class_hp = cdef and cdef.hp or 100
+					local class_spd = cdef and cdef.base_speed or 1.2
+					p:set_hp(class_hp)
+
+					-- Verify player position: if still near lobby spawn or in void, deploy them to safe spawn!
+					local pos = p:get_pos()
+					if not pos or (math.abs(pos.x) < 2 and math.abs(pos.z) < 2) or pos.y < 0 then
+						local safe_pos = esports_core.get_safe_spawn_pos(is_participant, true)
+						p:set_pos(safe_pos)
+					end
+
+					-- Ensure visible model & combat collisionboxes
+					p:set_properties({
+						hp_max = class_hp,
+						visual_size = {x = 1, y = 1, z = 1},
+						collisionbox = {-0.3, 0.0, -0.3, 0.3, 1.75, 0.3},
+						selectionbox = {-0.3, 0.0, -0.3, 0.3, 1.75, 0.3},
+						pointable = true,
+						makes_footstep_sound = true,
+						interact_distance = 10,
+					})
+					esports_core.skins.apply(p, is_participant)
+
+					-- Close lobby formspec & blackout
+					if esports_core.lobby and esports_core.lobby.blackout_hide then
+						esports_core.lobby.blackout_hide(p)
+					end
+					core.close_formspec(pname, "esports_core:lobby")
+
+					-- Restore combat physics
+					if esports_core.sprint then
+						esports_core.sprint.reset_player(p)
+					else
+						p:set_physics_override({speed = class_spd, jump = 1.1, gravity = 1.0, sneak = true})
+					end
+				elseif core.check_player_privs(pname, {server = true}) and not esports_core.is_spectator(pname) then
 					if esports_core.sprint then
 						esports_core.sprint.reset_player(p)
 					else
@@ -281,10 +326,10 @@ core.register_globalstep(function(dtime)
 			-- Void fall check for Spleef & Survival Points
 			for _, p in ipairs(core.get_connected_players()) do
 				local pname = p:get_player_name()
-				if not esports_core.is_spectator(pname) then
+				if not esports_core.is_spectator(pname) and not esports_core.is_in_lobby(pname) then
+					local side = esports_core.match.get_player_match_side(pname)
 					local pos = p:get_pos()
-					local is_at_lobby_spawn = (math.abs(pos.x) < 0.1 and math.abs(pos.y - 1.5) < 0.1 and math.abs(pos.z) < 0.1)
-					if pos.y <= 2 and pos.y > -100 and not is_at_lobby_spawn then
+					if side and pos and pos.y <= 2 and pos.y > -100 then
 						if not esports_core.match.temp_spectators then
 							esports_core.match.temp_spectators = {}
 						end
@@ -1335,6 +1380,15 @@ function esports_core.get_safe_spawn_pos(pname_or_side, ignore_proximity)
 				end
 			end
 
+			-- Fallback: on freshly generated islands, if chunks are emerging and report "ignore",
+			-- we know the island layout establishes ground at y = 0
+			if not ground_y then
+				local n_center = core.get_node({x = ix, y = 0, z = iz})
+				if n_center.name == "ignore" or n_center.name == "air" then
+					ground_y = 0
+				end
+			end
+
 			-- Reject player-built walls, ramps, loot boxes, or flag stands as spawn floor
 			if ground_y then
 				local gn = core.get_node({x = ix, y = ground_y, z = iz})
@@ -1702,13 +1756,13 @@ core.register_on_joinplayer(function(player)
 		player:set_properties({
 			hp_max = 100,
 			visual_size = {x=1, y=1, z=1},  -- Full size for light calculation
-			textures = {"character.png^[alpha:0"},  -- 100% transparent
+			textures = {"blank.png"},  -- 100% transparent
 			eye_height = 1.625,
 			interact_distance = 0,  -- Cannot hit anything in lobby
 		})
 		player:set_hp(100)
 		player:set_armor_groups({immortal = 1})
-		player:set_physics_override({speed = 0, jump = 0, gravity = 1})
+		player:set_physics_override({speed = 0, jump = 0, sneak = false, gravity = 0})
 	end
 
 	-- Show Lobby (Immediate)
@@ -1720,14 +1774,11 @@ core.register_on_joinplayer(function(player)
 end)
 
 core.register_on_respawnplayer(function(player)
-	if esports_core.match.state == "active" then
-		local pname = player:get_player_name()
+	local pname = player:get_player_name()
+	local match_active = (esports_core.match.state == "active" or esports_core.match.state == "countdown")
+	local side = esports_core.match.get_player_match_side(pname)
 
-		if esports_core.is_spectator(pname) then
-			esports_core.set_spectator(player, true)
-			return true
-		end
-
+	if match_active and side and not esports_core.is_spectator(pname) then
 		if esports_core.match.is_spleef then
 			if not esports_core.match.temp_spectators then
 				esports_core.match.temp_spectators = {}
@@ -1742,7 +1793,7 @@ core.register_on_respawnplayer(function(player)
 
 		-- Ensure invisible during repositioning
 		player:set_properties({visual_size = {x=0, y=0, z=0}})
-		player:set_pos(esports_core.get_safe_spawn_pos(pname))
+		player:set_pos(esports_core.get_safe_spawn_pos(side, true))
 
 		-- Respawn Invulnerability (3 seconds)
 		player:set_armor_groups({immortal = 1})
@@ -1756,24 +1807,28 @@ core.register_on_respawnplayer(function(player)
 		-- Clean Slate Reset
 		esports_core.reset_player(player, esports_core.match.is_debug)
 
-		-- Temporary physics freeze to prevent falling through unloaded chunks
-		player:set_physics_override({speed = 0, jump = 0, gravity = 0})
-		core.after(0.8, function()
-			if player:is_player() then
-				local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(player)
-				local class_spd = cdef and cdef.base_speed or 1.2
-				player:set_physics_override({speed = class_spd, jump = 1.1, gravity = 1.0})
-			end
-		end)
+		if esports_core.match.state == "countdown" then
+			player:set_physics_override({speed = 0, jump = 0, gravity = 0})
+		else
+			-- Temporary physics freeze to prevent falling through unloaded chunks
+			player:set_physics_override({speed = 0, jump = 0, gravity = 0})
+			core.after(0.8, function()
+				if player:is_player() then
+					local cdef = esports_core.skins and esports_core.skins.get_player_class and esports_core.skins.get_player_class(player)
+					local class_spd = cdef and cdef.base_speed or 1.2
+					player:set_physics_override({speed = class_spd, jump = 1.1, gravity = 1.0})
+				end
+			end)
+		end
 
 		-- Reveal player after brief delay to prevent "teleport glitching"
 		core.after(0.2, function()
 			if player:is_player() then
-				local side = esports_core.match.get_player_match_side(pname)
 				player:set_properties({visual_size = {x=1, y=1, z=1}})
 				esports_core.skins.apply(player, side)
 			end
 		end)
+		return true
 	else
 		-- Respawn player in lobby center to prevent void death loop
 		player:set_pos({x=0, y=1.5, z=0})
@@ -1786,8 +1841,8 @@ core.register_on_respawnplayer(function(player)
 				esports_core.lobby.show(player)
 			end
 		end)
+		return true
 	end
-	return true
 end)
 
 esports_core.match.current_map_scale = 1.0
@@ -2110,6 +2165,9 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 				p:set_physics_override({speed = 0, jump = 0, gravity = 0})
 
 				esports_core.hud.init_hud(p)
+				if esports_core.sprint then
+					esports_core.sprint.reset_player(p)
+				end
 
 				-- Close lobby and hide blackout after a short delay to allow chunk loading
 				core.after(0.5, function()
@@ -2134,6 +2192,9 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 				p:set_physics_override({speed = 0, jump = 0, gravity = 0})
 
 				esports_core.hud.init_hud(p)
+				if esports_core.sprint then
+					esports_core.sprint.reset_player(p)
+				end
 
 				-- Close lobby and hide blackout after a short delay to allow chunk loading
 				core.after(0.5, function()

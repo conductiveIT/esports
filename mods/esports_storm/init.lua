@@ -209,7 +209,7 @@ core.register_globalstep(function(dtime)
 
 			if dist_sq > current_radius_sq then
 				-- Player is outside the storm
-				if not esports_core.is_spectator(pname) and player:get_hp() > 0 then
+				if not esports_core.is_spectator(pname) and not esports_core.is_in_lobby(pname) and player:get_hp() > 0 then
 					player:set_hp(player:get_hp() - 4)
 
 					-- Play cough sound with 2s cooldown

@@ -388,7 +388,7 @@ core.register_entity("esports_core:bot", {
 
 			for _, player in ipairs(core.get_connected_players()) do
 				local pname = player:get_player_name()
-				if not esports_core.is_spectator(pname) and player:get_hp() > 0 then
+				if not esports_core.is_spectator(pname) and not esports_core.is_in_lobby(pname) and player:get_hp() > 0 then
 					local ppos = player:get_pos()
 					local d = vector_distance(pos, ppos)
 					if d < min_dist then
@@ -576,7 +576,8 @@ function esports_core.bots.shoot(bot_obj, target_player, damage, spread)
 		if pointed_thing.type == "object" then
 			local obj = pointed_thing.ref
 			if obj ~= bot_obj then
-				if obj:is_player() and not esports_core.is_spectator(obj:get_player_name()) then
+				local pname = obj:is_player() and obj:get_player_name()
+				if pname and not esports_core.is_spectator(pname) and not esports_core.is_in_lobby(pname) then
 					obj:punch(bot_obj, 1.0, {
 						full_punch_interval = 1.0,
 						damage_groups = {fleshy = damage, is_gun = 1}
