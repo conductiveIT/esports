@@ -267,18 +267,61 @@ function esports_weapons.handle_interaction(user, pointed_thing)
 	return false
 end
 
--- Scope & ADS Manager for Sniper Rifles
-esports_weapons.scoped_players = {} -- [pname] = hud_id
+-- Scope & ADS Manager for Weapons
+esports_weapons.scoped_players = {} -- [pname] = {hud_id = hid, weapon = weapon_name, speed = x, spread_mult = y}
+
+esports_weapons.ads_configs = {
+	["esports_weapons:sniper_rifle"] = {
+		fov = 20,
+		speed = 0.65,
+		overlay = "esports_scope_overlay.png",
+		spread_mult = 0.0,
+		hide_hud = true,
+		sound = "player_damage",
+		sound_pitch = 2.0,
+	},
+	["esports_weapons:assault_rifle"] = {
+		fov = 55,
+		speed = 0.85,
+		overlay = nil,
+		spread_mult = 0.55,
+		hide_hud = false,
+		sound = "player_damage",
+		sound_pitch = 2.4,
+	},
+	["esports_weapons:smg"] = {
+		fov = 62,
+		speed = 0.90,
+		overlay = nil,
+		spread_mult = 0.70,
+		hide_hud = false,
+		sound = "player_damage",
+		sound_pitch = 2.6,
+	},
+	["esports_weapons:shotgun"] = {
+		fov = 65,
+		speed = 0.85,
+		overlay = nil,
+		spread_mult = 0.60,
+		hide_hud = false,
+		sound = "player_damage",
+		sound_pitch = 2.2,
+	},
+}
 
 function esports_weapons.unscope(player)
 	if not player or not player:is_player() then return end
 	local pname = player:get_player_name()
-	if esports_weapons.scoped_players[pname] then
-		player:hud_remove(esports_weapons.scoped_players[pname])
+	local sdata = esports_weapons.scoped_players[pname]
+	if sdata then
+		local hid = type(sdata) == "table" and sdata.hud_id or sdata
+		if type(hid) == "number" then
+			player:hud_remove(hid)
+		end
 		esports_weapons.scoped_players[pname] = nil
 		player:set_fov(0)
 
-		-- Restore all HUD elements (health, stamina, hotbar, ammo, stats, crosshair, etc.)
+		-- Restore HUD elements if they were hidden (sniper optical mode)
 		if esports_core.hud and esports_core.hud.set_scope_mode then
 			esports_core.hud.set_scope_mode(player, false)
 		else
@@ -296,39 +339,60 @@ function esports_weapons.unscope(player)
 	end
 end
 
-function esports_weapons.toggle_scope(player)
+function esports_weapons.toggle_ads(player, weapon_name)
 	if not player or not player:is_player() then return end
 	local pname = player:get_player_name()
 	if esports_weapons.scoped_players[pname] then
 		esports_weapons.unscope(player)
 	else
-		-- Scope in: 20 deg optical zoom + fullscreen tactical reticle
-		player:set_fov(20, false, 0.15)
-		local hid = player:hud_add({
-			hud_elem_type = "image",
-			position = {x = 0.5, y = 0.5},
-			alignment = {x = 0, y = 0},
-			offset = {x = 0, y = 0},
-			scale = {x = -100, y = -100},
-			text = "esports_scope_overlay.png",
-			z_index = 100,
-		})
-		esports_weapons.scoped_players[pname] = hid
+		weapon_name = weapon_name or player:get_wielded_item():get_name()
+		local cfg = esports_weapons.ads_configs[weapon_name] or esports_weapons.ads_configs["esports_weapons:assault_rifle"]
+		player:set_fov(cfg.fov, false, 0.15)
 
-		-- Remove other HUD elements (health, stamina, hotbar, ammo, stats, crosshair) in zoom mode
-		if esports_core.hud and esports_core.hud.set_scope_mode then
-			esports_core.hud.set_scope_mode(player, true)
-		else
-			local flags = player:hud_get_flags()
-			flags.wielditem = false
-			flags.crosshair = false
-			player:hud_set_flags(flags)
+		local hid = nil
+		if cfg.overlay then
+			hid = player:hud_add({
+				hud_elem_type = "image",
+				position = {x = 0.5, y = 0.5},
+				alignment = {x = 0, y = 0},
+				offset = {x = 0, y = 0},
+				scale = {x = -100, y = -100},
+				text = cfg.overlay,
+				z_index = 100,
+			})
 		end
 
-		-- Movement slow for steady breathing/stabilization
-		player:set_physics_override({speed = 0.65})
-		core.sound_play("player_damage", {to_player = pname, gain = 0.2, pitch = 2.0})
+		esports_weapons.scoped_players[pname] = {
+			hud_id = hid,
+			weapon = weapon_name,
+			speed = cfg.speed or 0.85,
+			spread_mult = cfg.spread_mult or 0.6,
+		}
+
+		if cfg.hide_hud then
+			if esports_core.hud and esports_core.hud.set_scope_mode then
+				esports_core.hud.set_scope_mode(player, true)
+			else
+				local flags = player:hud_get_flags()
+				flags.wielditem = false
+				flags.crosshair = false
+				player:hud_set_flags(flags)
+			end
+		end
+
+		if esports_core.sprint then
+			esports_core.sprint.update_physics(player)
+		else
+			player:set_physics_override({speed = cfg.speed or 0.85})
+		end
+
+		core.sound_play(cfg.sound or "player_damage", {to_player = pname, gain = 0.15, pitch = cfg.sound_pitch or 2.0})
 	end
+end
+
+-- Backward compatibility alias
+function esports_weapons.toggle_scope(player)
+	esports_weapons.toggle_ads(player, "esports_weapons:sniper_rifle")
 end
 
 -- Automatic unscope monitor (on death, weapon switch, or lobby transition)
@@ -337,13 +401,14 @@ core.register_globalstep(function(dtime)
 	scope_monitor_timer = scope_monitor_timer + dtime
 	if scope_monitor_timer < 0.15 then return end
 	scope_monitor_timer = 0
-	for pname, _ in pairs(esports_weapons.scoped_players) do
+	for pname, sdata in pairs(esports_weapons.scoped_players) do
 		local player = core.get_player_by_name(pname)
 		if not player or not player:is_player() then
 			esports_weapons.scoped_players[pname] = nil
 		else
 			local item = player:get_wielded_item():get_name()
-			if item ~= "esports_weapons:sniper_rifle" or player:get_hp() <= 0 or (esports_core.is_in_lobby and esports_core.is_in_lobby(player)) then
+			local active_wep = (type(sdata) == "table" and sdata.weapon) or "esports_weapons:sniper_rifle"
+			if item ~= active_wep or player:get_hp() <= 0 or (esports_core.is_in_lobby and esports_core.is_in_lobby(player)) then
 				esports_weapons.unscope(player)
 			end
 		end
@@ -644,6 +709,11 @@ function esports_weapons.try_fire_auto(user, item_name)
 
 		-- Spread for the current round
 		local dynamic_spread = math.min(wep.max_spread, wep.base_spread + (spray.count * wep.spread_growth))
+		local scoped_info = esports_weapons.scoped_players[p_name]
+		if scoped_info then
+			local spread_mult = (type(scoped_info) == "table" and scoped_info.spread_mult) or 0.55
+			dynamic_spread = dynamic_spread * spread_mult
+		end
 
 		-- Advance spray counter for next continuous round
 		spray.count = spray.count + 1
@@ -701,6 +771,17 @@ core.register_tool("esports_weapons:assault_rifle", {
 	inventory_image = "esports_weapons_assault_rifle.png",
 	wield_image = "esports_weapons_assault_rifle_wield.png",
 	wield_scale = {x=1.5, y=1.5, z=1.5},
+	on_secondary_use = function(itemstack, user)
+		esports_weapons.toggle_ads(user, "esports_weapons:assault_rifle")
+		return itemstack
+	end,
+	on_place = function(itemstack, user, pointed_thing)
+		if esports_weapons.handle_interaction(user, pointed_thing) then
+			return itemstack
+		end
+		esports_weapons.toggle_ads(user, "esports_weapons:assault_rifle")
+		return itemstack
+	end,
 	on_use = function(itemstack, user, pointed_thing)
 		if esports_weapons.handle_interaction(user, pointed_thing) then
 			return itemstack
@@ -721,6 +802,17 @@ core.register_tool("esports_weapons:shotgun", {
 	inventory_image = "esports_weapons_shotgun.png",
 	wield_image = "esports_weapons_shotgun_wield.png",
 	wield_scale = {x=1.5, y=1.5, z=1.5},
+	on_secondary_use = function(itemstack, user)
+		esports_weapons.toggle_ads(user, "esports_weapons:shotgun")
+		return itemstack
+	end,
+	on_place = function(itemstack, user, pointed_thing)
+		if esports_weapons.handle_interaction(user, pointed_thing) then
+			return itemstack
+		end
+		esports_weapons.toggle_ads(user, "esports_weapons:shotgun")
+		return itemstack
+	end,
 	on_use = function(itemstack, user, pointed_thing)
 		if esports_weapons.handle_interaction(user, pointed_thing) then
 			return itemstack
@@ -755,10 +847,12 @@ core.register_tool("esports_weapons:shotgun", {
 						session.shots = session.shots + 1
 					end
 				end
+				local is_scoped = (esports_weapons.scoped_players[p_name] ~= nil)
+				local pellet_spread = is_scoped and 0.12 or 0.20
 				for _ = 1, 8 do
 					-- Shotgun deals 8.5 per pellet (68.0 total per blast)
 					-- 2 center-mass hits = 136.0 damage (Lethal for 100 HP and 120 HP Tank players)
-					esports_weapons.shoot_raycast(user, 8.5, 30, 0.2)
+					esports_weapons.shoot_raycast(user, 8.5, 30, pellet_spread)
 				end
 				esports_weapons.cooldowns[p_name] = current_time + 0.9
 
@@ -787,11 +881,11 @@ core.register_tool("esports_weapons:sniper_rifle", {
 	wield_image = "esports_weapons_sniper_rifle_wield.png",
 	wield_scale = {x=1.6, y=1.6, z=1.6},
 	on_secondary_use = function(itemstack, user)
-		esports_weapons.toggle_scope(user)
+		esports_weapons.toggle_ads(user, "esports_weapons:sniper_rifle")
 		return itemstack
 	end,
 	on_place = function(itemstack, user, _pointed_thing)
-		esports_weapons.toggle_scope(user)
+		esports_weapons.toggle_ads(user, "esports_weapons:sniper_rifle")
 		return itemstack
 	end,
 	on_use = function(itemstack, user, pointed_thing)
@@ -897,6 +991,17 @@ core.register_tool("esports_weapons:smg", {
 	inventory_image = "esports_weapons_smg.png",
 	wield_image = "esports_weapons_smg_wield.png",
 	wield_scale = {x=1.3, y=1.3, z=1.3},
+	on_secondary_use = function(itemstack, user)
+		esports_weapons.toggle_ads(user, "esports_weapons:smg")
+		return itemstack
+	end,
+	on_place = function(itemstack, user, pointed_thing)
+		if esports_weapons.handle_interaction(user, pointed_thing) then
+			return itemstack
+		end
+		esports_weapons.toggle_ads(user, "esports_weapons:smg")
+		return itemstack
+	end,
 	on_use = function(itemstack, user, pointed_thing)
 		if esports_weapons.handle_interaction(user, pointed_thing) then
 			return itemstack

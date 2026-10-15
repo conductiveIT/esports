@@ -80,6 +80,13 @@ function esports_core.sprint.get_base_speed(player, pname)
 		return class_flag_speed
 	end
 
+	-- Weapon ADS speed modifier
+	if esports_weapons and esports_weapons.scoped_players and esports_weapons.scoped_players[pname] then
+		local sdata = esports_weapons.scoped_players[pname]
+		local speed_mult = (type(sdata) == "table" and sdata.speed) or 0.65
+		return class_base * speed_mult
+	end
+
 	return class_base
 end
 
@@ -329,6 +336,11 @@ core.register_globalstep(function(dtime)
 				local can_sprint = wants_sprint and not pdata.exhausted and pdata.stamina > 0
 				local state_changed = (pdata.is_sprinting ~= can_sprint)
 				pdata.is_sprinting = can_sprint
+
+				-- Sprinting breaks ADS
+				if can_sprint and esports_weapons and esports_weapons.scoped_players and esports_weapons.scoped_players[pname] then
+					esports_weapons.unscope(player)
+				end
 
 				if can_sprint then
 					local drain = drain_rate * dt
