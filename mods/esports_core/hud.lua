@@ -1166,6 +1166,9 @@ core.register_chatcommand("scoreboard", {
 	func = function(name)
 		local player = core.get_player_by_name(name)
 		if player and esports_core.lobby and esports_core.lobby.get_live_scoreboard_formspec then
+			if esports_core.lobby.player_settings and esports_core.lobby.player_settings[name] then
+				esports_core.lobby.player_settings[name].spectator_view = nil
+			end
 			core.show_formspec(name, "esports_core:lobby", esports_core.lobby.get_live_scoreboard_formspec(name))
 			return true
 		end

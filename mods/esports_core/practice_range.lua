@@ -10,9 +10,29 @@ function esports_core.practice.leave(name)
 	local player = core.get_player_by_name(name)
 	if player then
 		esports_core.practice.players[name] = nil
-		player:set_pos({x = 0, y = 1.5, z = 0})
-		esports_core.reset_to_lobby(player)
-		esports_core.lobby.show(player)
+		local match_active = esports_core.match and (esports_core.match.state == "active" or esports_core.match.state == "countdown")
+		local side = esports_core.match and esports_core.match.get_player_match_side and esports_core.match.get_player_match_side(name)
+
+		if match_active and side then
+			-- Match is currently underway and player belongs to a team: deploy them straight to battle
+			esports_core.reset_player(player, esports_core.match.is_debug)
+			local safe_pos = esports_core.get_safe_spawn_pos(side, true)
+			player:set_pos(safe_pos)
+
+			if esports_core.match.state == "countdown" or esports_core.match.paused then
+				player:set_physics_override({speed = 0, jump = 0, gravity = 0})
+			else
+				if esports_core.sprint then
+					esports_core.sprint.reset_player(player)
+				end
+			end
+			esports_core.hud.init_hud(player)
+			core.chat_send_player(name, ">> Deployed from practice into active match!")
+		else
+			player:set_pos({x = 0, y = 1.5, z = 0})
+			esports_core.reset_to_lobby(player)
+			esports_core.lobby.show(player)
+		end
 	end
 end
 
@@ -205,6 +225,12 @@ end)
 function esports_core.practice.enter(name)
 	local player = core.get_player_by_name(name)
 	if not player then return false, "Player not found." end
+
+	local match_in_progress = esports_core.match and (esports_core.match.state == "countdown" or esports_core.match.state == "active")
+	if match_in_progress then
+		core.chat_send_player(name, ">> Cannot enter practice: A match is currently starting or in progress!")
+		return false, "A match is currently starting or in progress."
+	end
 
 	-- 1. Register practice session immediately so is_in_lobby returns false
 	esports_core.practice.players[name] = {hits = 0, shots = 0, start_time = os.time()}

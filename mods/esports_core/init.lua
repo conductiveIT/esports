@@ -1,6 +1,6 @@
 esports_core = {}
 esports_core.version = "0.9.2"
-esports_core.build = 13
+esports_core.build = 16
 core.log("action", "====================================================")
 core.log("action", "[TDM Core] Starting Luanti Deathmatch Core v" .. esports_core.version .. " (build " .. esports_core.build .. ")")
 core.log("action", "====================================================")

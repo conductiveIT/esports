@@ -252,7 +252,8 @@ core.register_globalstep(function(dtime)
 		local b_name = esports_core.match.active_teams.blue
 
 		for _, p in ipairs(players) do
-			if not esports_core.is_spectator(p:get_player_name()) then
+			local pname = p:get_player_name()
+			if esports_core.match.get_player_match_side(pname) then
 				esports_core.hud.show_intro(p, esports_core.match.timer, r_name, b_name)
 			end
 		end
@@ -270,9 +271,15 @@ core.register_globalstep(function(dtime)
 					local class_spd = cdef and cdef.base_speed or 1.2
 					p:set_hp(class_hp)
 
-					-- Verify player position: if still near lobby spawn or in void, deploy them to safe spawn!
+					-- Verify player position: if still near lobby spawn, in void, or stranded in practice range, deploy them to safe spawn!
 					local pos = p:get_pos()
-					if not pos or (math.abs(pos.x) < 2 and math.abs(pos.z) < 2) or pos.y < 0 then
+					local in_practice = (esports_core.practice and esports_core.practice.players and esports_core.practice.players[pname]) or (pos and pos.x > 1000)
+					if not pos or (math.abs(pos.x) < 2 and math.abs(pos.z) < 2) or pos.y < 0 or in_practice then
+						if in_practice and esports_core.practice and esports_core.practice.players then
+							esports_core.practice.players[pname] = nil
+							-- Also ensure their weapons/inventory are set for the match
+							esports_core.reset_player(p, esports_core.match.is_debug)
+						end
 						local safe_pos = esports_core.get_safe_spawn_pos(is_participant, true)
 						p:set_pos(safe_pos)
 					end
@@ -302,10 +309,12 @@ core.register_globalstep(function(dtime)
 						p:set_physics_override({speed = class_spd, jump = 1.1, gravity = 1.0, sneak = true})
 					end
 				elseif core.check_player_privs(pname, {server = true}) and not esports_core.is_spectator(pname) then
-					if esports_core.sprint then
-						esports_core.sprint.reset_player(p)
-					else
-						p:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1.0, sneak = true})
+					if esports_core.lobby and esports_core.lobby.admin_free and esports_core.lobby.admin_free[pname] then
+						if esports_core.sprint then
+							esports_core.sprint.reset_player(p)
+						else
+							p:set_physics_override({speed = 1.2, jump = 1.1, gravity = 1.0, sneak = true})
+						end
 					end
 				end
 				esports_core.hud.hide_intro(p)
@@ -1853,7 +1862,6 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 	esports_core.match.spleef_top_floor_y = 5 + (spleef_lvls - 1) * 4
 
 	-- Force exit practice mode for any player currently in it before freezing and generating/resetting the map
-	local had_practice_players = false
 	if esports_core.practice and esports_core.practice.players then
 		for pname, _ in pairs(esports_core.practice.players) do
 			local p = core.get_player_by_name(pname)
@@ -1861,18 +1869,26 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 				esports_core.practice.players[pname] = nil
 				p:set_pos({x=0, y=1.5, z=0})
 				esports_core.reset_to_lobby(p)
-				had_practice_players = true
 			end
+		end
+		esports_core.practice.players = {}
+	end
+
+	-- Also check any connected player who might physically be at the practice range (> 1000)
+	for _, p in ipairs(core.get_connected_players()) do
+		local pos = p:get_pos()
+		if pos and pos.x > 1000 then
+			p:set_pos({x=0, y=1.5, z=0})
+			esports_core.reset_to_lobby(p)
 		end
 	end
 
-	if had_practice_players then
-		local arena_pos = {x = 2000, y = 100, z = 2000}
-		for _, obj in ipairs(core.get_objects_inside_radius(arena_pos, 30)) do
-			local ent = obj:get_luaentity()
-			if ent and ent.name == "esports_core:practice_target" then
-				obj:remove()
-			end
+	-- Always purge any active practice targets
+	local arena_pos = {x = 2000, y = 100, z = 2000}
+	for _, obj in ipairs(core.get_objects_inside_radius(arena_pos, 100)) do
+		local ent = obj:get_luaentity()
+		if ent and ent.name == "esports_core:practice_target" then
+			obj:remove()
 		end
 	end
 
@@ -2000,11 +2016,14 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 			end
 		end
 	elseif is_pve then
-		-- PVE: Team 1 is human players, Team 2 is Bots
+		-- PVE: Team 1 is human players of team t1, Team 2 is Bots
 		for _, p in ipairs(players) do
 			local pname = p:get_player_name()
 			if not esports_core.is_spectator(pname) then
-				table.insert(t1_online, p)
+				local pteam = esports_league.player_to_team[pname]
+				if pteam == t1 then
+					table.insert(t1_online, p)
+				end
 			end
 		end
 	else
@@ -2027,7 +2046,7 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 		return false, "Each team needs at least 1 player online. (Found: " .. t1 .. ": " .. #t1_online .. ", " .. t2 .. ": " .. #t2_online .. ")"
 	end
 	if is_pve and #t1_online < 1 then
-		return false, "Need at least 1 player online to start PVE practice."
+		return false, "Need at least 1 player from " .. (t1 or "the team") .. " online to start PVE practice."
 	end
 
 	-- Start match (with countdown)
@@ -2124,13 +2143,16 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 			local pname = p:get_player_name()
 			local my_team = esports_league.get_team(pname)
 
-			if is_pve and not esports_core.is_spectator(pname) then
+			if is_pve and not esports_core.is_spectator(pname) and my_team == t1 then
 				local side = "blue"
 				esports_core.match.player_sides[pname] = side
 				esports_core.teams.players[pname] = side
 				esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0}
 
 				-- Full Match Setup (Inventory, Physics, HUD, Sprint)
+				if esports_core.practice and esports_core.practice.players then
+					esports_core.practice.players[pname] = nil
+				end
 				esports_core.reset_player(p, esports_core.match.is_debug)
 				
 				-- Teleport directly to safe spawn position
@@ -2157,6 +2179,9 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 				esports_core.match.player_sides[pname] = "ffa"
 				esports_core.teams.players[pname] = "ffa"
 				esports_core.match.player_stats[pname] = {kills = 0, deaths = 0, captures = 0}
+				if esports_core.practice and esports_core.practice.players then
+					esports_core.practice.players[pname] = nil
+				end
 				esports_core.reset_player(p, esports_core.match.is_debug)
 				
 				-- Teleport directly to safe spawn position
@@ -2184,6 +2209,9 @@ function esports_core.match.start(t1, t2, dur_secs, pve_mode, time_mode, bot_cou
 				esports_core.match.player_sides[pname] = side
 
 				-- Full Match Setup (Inventory, Physics, HUD)
+				if esports_core.practice and esports_core.practice.players then
+					esports_core.practice.players[pname] = nil
+				end
 				esports_core.reset_player(p, esports_core.match.is_debug)
 				
 				-- Teleport directly to safe spawn position

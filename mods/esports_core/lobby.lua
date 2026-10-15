@@ -32,6 +32,7 @@ end
 -- Store player current tab and settings
 local player_tabs = {}  -- name -> tab_id
 local player_settings = {}  -- name -> {bot_count=x, bot_diff=y, ...}
+esports_core.lobby.player_settings = player_settings
 
 local function get_team_online_count(tname)
 	if not tname or tname == "" or tname == "No teams registered" then return 0 end
@@ -1160,6 +1161,11 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 
 	-- Practice Range transition
 	if fields.btn_practice then
+		local match_in_progress = esports_core.match and (esports_core.match.state == "countdown" or esports_core.match.state == "active")
+		if match_in_progress then
+			core.chat_send_player(name, "LOBBY: Cannot enter practice mode while a match is starting or in progress!")
+			return
+		end
 		esports_core.lobby.blackout_hide(player)
 		core.close_formspec(name, "esports_core:lobby")
 		esports_core.practice.enter(name)
@@ -1201,6 +1207,11 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			end
 			return
 		else
+			if is_admin and esports_core.is_spectator(name) then
+				if player_settings[name] then
+					player_settings[name].spectator_view = true
+				end
+			end
 			esports_core.lobby.blackout_hide(player)
 		end
 	end
@@ -1299,12 +1310,6 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local tod = "day"
 			local mode = "tdm"
 			local map_size = "Small"
-
-			local my_team = esports_league.get_team(name)
-			if my_team ~= red and my_team ~= blue then
-				local cmd = core.registered_chatcommands["spectate"]
-				if cmd and not esports_core.is_spectator(name) then cmd.func(name, "") end
-			end
 
 			esports_core.match.scheduled_context = {
 				type = "regular_season",
@@ -1716,19 +1721,6 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local tod = (player_settings[name].match_tod or "Day"):lower()
 			local mode = (player_settings[name].match_mode or "TDM"):lower()
 
-			-- Auto-spectate only if admin is not in the team and other team members are online
-			if esports_league.get_team(name) ~= p_team then
-				if get_team_online_count(p_team) > 0 then
-					local cmd = core.registered_chatcommands["spectate"]
-					if cmd and not esports_core.is_spectator(name) then cmd.func(name, "") end
-				elseif esports_league.teams[p_team] then
-					table.insert(esports_league.teams[p_team].members, name)
-					esports_league.player_to_team[name] = p_team
-					esports_league.update_player_nametag(name)
-					esports_league.save()
-				end
-			end
-
 			local map_size = player_settings[name].map_size or "Small"
 			local map_layout = player_settings[name].map_layout or "Random"
 
@@ -1783,13 +1775,6 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				local dur = tonumber(dur_str:match("%d+")) * 60
 				local tod = (player_settings[name].match_tod or "Day"):lower()
 				local mode = (player_settings[name].match_mode or "TDM"):lower()
-
-				-- Auto-spectate if admin is not in either team
-				local my_team = esports_league.get_team(name)
-				if my_team ~= red and my_team ~= blue then
-					local cmd = core.registered_chatcommands["spectate"]
-					if cmd and not esports_core.is_spectator(name) then cmd.func(name, "") end
-				end
 
 				local map_size = player_settings[name].map_size or "Small"
 				local map_layout = player_settings[name].map_layout or "Random"
@@ -2067,12 +2052,21 @@ core.register_globalstep(function(dtime)
 				-- Close lobby formspec and hide blackout for active match participants
 				esports_core.lobby.blackout_hide(player)
 				core.close_formspec(name, "esports_core:lobby")
-			elseif match_active and (is_spec or in_practice) then
+			elseif match_active and in_practice then
 				esports_core.lobby.blackout_hide(player)
 				core.close_formspec(name, "esports_core:lobby")
-			elseif match_active and is_admin and not side and not is_spectator_view and not in_practice and not (esports_core.lobby.admin_free and esports_core.lobby.admin_free[name]) and not is_spec then
-				-- Force live scoreboard refresh/stay open for non-participating admins who are not in 3D spectate view
-				esports_core.lobby.show(player)
+			elseif match_active and is_admin and not side and not (esports_core.lobby.admin_free and esports_core.lobby.admin_free[name]) then
+				if is_spectator_view then
+					-- Admin is actively flying in 3D spectator mode
+					esports_core.lobby.blackout_hide(player)
+					core.close_formspec(name, "esports_core:lobby")
+				else
+					-- Admin is viewing live scoreboard / lobby control screen
+					esports_core.lobby.show(player)
+				end
+			elseif match_active and is_spec then
+				esports_core.lobby.blackout_hide(player)
+				core.close_formspec(name, "esports_core:lobby")
 			end
 		end
 
@@ -2165,7 +2159,7 @@ core.register_chatcommand("lobby", {
 			-- If an admin is spectating an ongoing match, let them open the scoreboard/lobby menu without removing spectator mode or teleporting them
 			if match_active and is_spec then
 				if player_settings[name] then
-					player_settings[name].spectator_view = true
+					player_settings[name].spectator_view = nil
 				end
 				esports_core.lobby.show(player)
 				return
@@ -2208,9 +2202,10 @@ function esports_core.lobby.refresh_admins()
 		for _, player in ipairs(core.get_connected_players()) do
 			local pname = player:get_player_name()
 			if core.check_player_privs(pname, {server = true}) then
-				-- Only refresh if the admin is NOT actively playing the match (not on a side)
+				-- Only refresh if the admin is NOT actively playing the match (not on a side) and not in 3D spectator view
 				local side = esports_core.match.get_player_match_side(pname)
-				if not side and not (esports_core.lobby.admin_free and esports_core.lobby.admin_free[pname]) then
+				local is_spec_view = player_settings[pname] and player_settings[pname].spectator_view
+				if not side and not (esports_core.lobby.admin_free and esports_core.lobby.admin_free[pname]) and not is_spec_view then
 					esports_core.lobby.show(player)
 				end
 			end
